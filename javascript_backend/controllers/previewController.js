@@ -30,13 +30,43 @@ exports.getImagePreview = async (req, res) => {
     });
 
     // 4. Send the anonymized image data back to the React frontend
-    // We must set the content-type header to match the image
-    res.set('Content-Type', response.headers['content-type']);
+    // Determine content type from response or file mimetype
+    const contentType = response.headers['content-type'] || 
+                       response.headers['Content-Type'] || 
+                       req.file.mimetype || 
+                       'image/jpeg'; // Default fallback
+    
+    res.set('Content-Type', contentType);
     res.send(response.data);
 
   } catch (error) {
     console.error('Error in image preview proxy:', error.message);
-    res.status(500).json({ message: 'Error generating image preview.' });
+    console.error('Full error:', error);
+    
+    // Provide more detailed error information
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      console.error('Response status:', error.response.status);
+      console.error('Response data:', error.response.data);
+      res.status(error.response.status || 500).json({ 
+        message: 'Error generating image preview.',
+        detail: error.response.data || error.message 
+      });
+    } else if (error.request) {
+      // The request was made but no response was received
+      console.error('No response received from Python backend');
+      res.status(503).json({ 
+        message: 'Python backend is not responding. Please check if it is running.',
+        detail: error.message 
+      });
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      res.status(500).json({ 
+        message: 'Error generating image preview.',
+        detail: error.message 
+      });
+    }
   }
 };
 

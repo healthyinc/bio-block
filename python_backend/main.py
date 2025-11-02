@@ -462,14 +462,32 @@ async def simple_preview(file: UploadFile = File(...)):
     without any anonymization. This is to test the pipeline.
     """
     print("✅ --- simple_preview endpoint was called! --- ✅")
+    print(f"File received: {file.filename}, Content-Type: {file.content_type}")
 
     # Read the file contents
     file_contents = await file.read()
 
+    # Determine media type - default to image/jpeg if not provided
+    media_type = file.content_type
+    if not media_type:
+        # Try to determine from filename extension
+        if file.filename:
+            ext = file.filename.lower().split('.')[-1]
+            if ext in ['jpg', 'jpeg']:
+                media_type = 'image/jpeg'
+            elif ext == 'png':
+                media_type = 'image/png'
+            else:
+                media_type = 'image/jpeg'  # Default fallback
+        else:
+            media_type = 'image/jpeg'  # Default fallback
+
+    print(f"Sending response with media_type: {media_type}")
+
     # Return the file as a streaming response
     return StreamingResponse(
         io.BytesIO(file_contents), 
-        media_type=file.content_type
+        media_type=media_type
     )
 
 # --- END: SIMPLE PREVIEW ENDPOINT ---

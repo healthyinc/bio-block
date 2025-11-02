@@ -226,7 +226,11 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
 
     } catch (error) {
       console.error('Error generating preview:', error);
-      // Optionally set an error state here
+      // Show error to user
+      alert(`Preview generation failed: ${error.message}. Please check console for details.`);
+      setPreviewUrl(null);
+      setPreviewType(null);
+      setPreviewData(null);
     } finally {
       setIsGeneratingPreview(false);
     }
