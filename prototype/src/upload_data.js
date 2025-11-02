@@ -15,16 +15,27 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
   const [price, setPrice] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewType, setPreviewType] = useState(null); // 'image', 'spreadsheet', 'pdf', 'dicom'
+  const [previewData, setPreviewData] = useState(null); // For spreadsheet data
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
 
+  // Cleanup preview URL when it changes or component unmounts
   useEffect(() => {
-  // This is the "cleanup" function
-  return () => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
-  };
-}, [previewUrl]);
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  // Cleanup preview data when component unmounts
+  useEffect(() => {
+    return () => {
+      setPreviewUrl(null);
+      setPreviewType(null);
+      setPreviewData(null);
+    };
+  }, []);
 
   const diseaseOptions = [
     'Cancer',
@@ -110,6 +121,10 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       setPreviewUrl(null);
     }
     
+    // Reset preview state
+    setPreviewType(null);
+    setPreviewData(null);
+    
     // Set the selected file for the upload form
     setSelectedFile(file);
 
@@ -117,15 +132,22 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       return; // No file selected
     }
 
-    // --- 2. Check File Type for Preview ---
-    if (file.type.startsWith('image/')) {
-      // It's an image. Call our new backend endpoint.
-      setIsGeneratingPreview(true);
-      try {
-        const formData = new FormData();
-        formData.append('file', file); // The field name 'file' must match the backend
+    const jsBackendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
+    setIsGeneratingPreview(true);
 
-        const jsBackendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
+    try {
+      // --- 2. Check File Type for Preview ---
+      const fileExtension = file.name.split('.').pop()?.toLowerCase();
+      const isSpreadsheet = file.type.includes('spreadsheet') || 
+                          file.type.includes('csv') || 
+                          ['xlsx', 'xls', 'csv', 'ods', 'tsv', 'xlsm', 'xlsb'].includes(fileExtension);
+      const isPdf = file.type === 'application/pdf' || fileExtension === 'pdf';
+      const isDicom = fileExtension === 'dcm' || fileExtension === 'dicom';
+
+      if (file.type.startsWith('image/')) {
+        // Image preview
+        const formData = new FormData();
+        formData.append('file', file);
 
         const response = await fetch(`${jsBackendUrl}/api/preview/image`, {
           method: 'POST',
@@ -139,21 +161,74 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
         const imageBlob = await response.blob();
         const objectUrl = URL.createObjectURL(imageBlob);
         setPreviewUrl(objectUrl);
+        setPreviewType('image');
 
-      } catch (error) {
-        console.error('Error generating image preview:', error);
-        // You could set an error state here
-      } finally {
-        setIsGeneratingPreview(false);
+      } else if (isSpreadsheet) {
+        // Spreadsheet preview
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${jsBackendUrl}/api/preview/spreadsheet`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error('Preview generation failed');
+        }
+
+        const spreadsheetData = await response.json();
+        setPreviewData(spreadsheetData);
+        setPreviewType('spreadsheet');
+
+      } else if (isPdf) {
+        // PDF preview
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${jsBackendUrl}/api/preview/pdf`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error('Preview generation failed');
+        }
+
+        const pdfBlob = await response.blob();
+        const objectUrl = URL.createObjectURL(pdfBlob);
+        setPreviewUrl(objectUrl);
+        setPreviewType('pdf');
+
+      } else if (isDicom) {
+        // DICOM preview
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${jsBackendUrl}/api/preview/dicom`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error('Preview generation failed');
+        }
+
+        const imageBlob = await response.blob();
+        const objectUrl = URL.createObjectURL(imageBlob);
+        setPreviewUrl(objectUrl);
+        setPreviewType('dicom');
+
+      } else {
+        // Unsupported file type
+        console.log("File type not supported for preview:", file.type);
       }
-    } else if (file.type.includes('spreadsheet') || file.type.includes('csv')) {
-      // --- 3. Handle Existing Spreadsheet Logic ---
-      // This is where spreadsheet preview logic would go if it existed
-      console.log("Spreadsheet selected, preview not yet supported.");
-      // If there was old preview logic, you'd call it here.
-    } else {
-      // Other file types (PDF, DICOM) - do nothing for now
-      console.log("File type not supported for preview yet.");
+
+    } catch (error) {
+      console.error('Error generating preview:', error);
+      // Optionally set an error state here
+    } finally {
+      setIsGeneratingPreview(false);
     }
   };
 
@@ -364,7 +439,14 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       
       // Step 2: Anonymizing (if Excel or Image) and extracting preview
       updateStep(1); // Mark as in progress
-      if (selectedFile.name.match(/\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i) || selectedFile.type.startsWith('image/')) {
+      const fileExtension = selectedFile.name.split('.').pop()?.toLowerCase();
+      const isSpreadsheet = selectedFile.name.match(/\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i);
+      const isImage = selectedFile.type.startsWith('image/');
+      const isPdf = selectedFile.type === 'application/pdf' || fileExtension === 'pdf';
+      const isDicom = fileExtension === 'dcm' || fileExtension === 'dicom';
+      
+      if (isSpreadsheet || isImage) {
+        // Anonymize spreadsheets and images
         try {
           const result = await anonymizeFile(selectedFile);
           fileToUpload = result.mainFile;
@@ -375,10 +457,16 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
           setError(`Anonymization failed: ${error.message}`);
           return;
         }
+      } else if (isPdf || isDicom) {
+        // PDF and DICOM files: Skip anonymization for now (can be added in future)
+        // Use file as-is for upload
+        fileToUpload = selectedFile;
+        previewFile = null;
+        updateStep(1, true, false); // Mark as completed (skipped anonymization)
       } else {
         // File type not supported - this should not happen due to file input restrictions
         updateStep(1, false, true); // Mark as error
-        setError('File type not supported for upload. Only Excel and spreadsheet files (.xlsx, .xls, .csv, .ods, .tsv, .xlsm, .xlsb) and image files are accepted.');
+        setError('File type not supported for upload. Please select a supported file type.');
         return;
       }
       
@@ -615,7 +703,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                     onChange={handleFileChange}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     id="file-upload"
-                    accept=".xlsx,.xls,.csv,.ods,.tsv,.xlsm,.xlsb,.jpg,.jpeg,.png"
+                    accept=".xlsx,.xls,.csv,.ods,.tsv,.xlsm,.xlsb,.jpg,.jpeg,.png,.pdf,.dcm,.dicom"
                     disabled={!isWalletConnected}
                   />
                   
@@ -624,7 +712,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                       {selectedFile ? selectedFile.name : 'Choose a file or drag and drop'}
                     </p>
                     <p className={`${isWalletConnected ? 'text-gray-500' : 'text-gray-400'} text-sm`}>
-                      Spreadsheets and Images (JPG, JPEG, PNG) only
+                      Spreadsheets, Images (JPG, JPEG, PNG), PDFs, and DICOM files
                     </p>
                   </div>
                 </div>
@@ -650,18 +738,87 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
           <div className="mb-4">
             {isGeneratingPreview && (
               <div className="text-center p-4">
-                <p className="text-gray-400">Generating anonymized preview...</p>
+                <p className="text-gray-400">Generating preview...</p>
               </div>
             )}
             
-            {previewUrl && !isGeneratingPreview && (
-              <div>
-                <h4 className="text-lg font-semibold text-white mb-2">
-                  Anonymized Preview:
+            {previewType === 'image' && previewUrl && !isGeneratingPreview && (
+              <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-gray-700">
+                <h4 className="text-lg font-semibold text-gray-200 mb-2">
+                  Preview:
                 </h4>
                 <img 
                   src={previewUrl} 
-                  alt="Anonymized data preview" 
+                  alt="Preview" 
+                  className="w-full max-w-md rounded-lg border-2 border-gray-600"
+                />
+              </div>
+            )}
+
+            {previewType === 'spreadsheet' && previewData && !isGeneratingPreview && (
+              <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-gray-700">
+                <h4 className="text-lg font-semibold text-gray-200 mb-2">
+                  Preview: {previewData.fileName}
+                </h4>
+                {previewData.message && (
+                  <p className="text-sm text-gray-400 mb-3">{previewData.message}</p>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="min-w-full bg-white text-gray-800 rounded-lg border border-gray-300">
+                    <thead className="bg-gray-100">
+                      <tr>
+                        {previewData.headers && previewData.headers.map((header, idx) => (
+                          <th key={idx} className="px-4 py-2 text-left border-b border-gray-300 font-semibold">
+                            {header || `Column ${idx + 1}`}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewData.data && previewData.data.map((row, rowIdx) => (
+                        <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          {previewData.headers && previewData.headers.map((_, colIdx) => (
+                            <td key={colIdx} className="px-4 py-2 border-b border-gray-200">
+                              {row[colIdx] !== undefined && row[colIdx] !== null ? String(row[colIdx]) : ''}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {previewData.totalRows > previewData.previewRows && (
+                  <p className="text-xs text-gray-400 mt-2">
+                    Showing {previewData.previewRows} of {previewData.totalRows} rows
+                  </p>
+                )}
+              </div>
+            )}
+
+            {previewType === 'pdf' && previewUrl && !isGeneratingPreview && (
+              <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-gray-700">
+                <h4 className="text-lg font-semibold text-gray-200 mb-2">
+                  Preview:
+                </h4>
+                <div className="w-full border-2 border-gray-600 rounded-lg overflow-hidden" style={{ maxHeight: '600px' }}>
+                  <iframe
+                    src={previewUrl}
+                    title="PDF Preview"
+                    className="w-full h-full"
+                    style={{ minHeight: '500px', border: 'none' }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {previewType === 'dicom' && previewUrl && !isGeneratingPreview && (
+              <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-gray-700">
+                <h4 className="text-lg font-semibold text-gray-200 mb-2">
+                  Preview:
+                </h4>
+                <img 
+                  src={previewUrl} 
+                  alt="DICOM Preview" 
                   className="w-full max-w-md rounded-lg border-2 border-gray-600"
                 />
               </div>

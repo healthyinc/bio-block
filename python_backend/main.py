@@ -14,6 +14,17 @@ import numpy as np
 from PIL import Image
 import io
 
+# DICOM imports
+try:
+    import pydicom
+    from pydicom.errors import InvalidDicomError
+    pydicom_available = True
+    print("pydicom library loaded successfully")
+except ImportError:
+    pydicom_available = False
+    print("Warning: pydicom library not found. DICOM preview will not work.")
+    print("Install with: pip install pydicom")
+
 # Presidio imports for advanced image anonymization
 try:
     from presidio_image_redactor import ImageRedactorEngine
@@ -463,7 +474,88 @@ async def simple_preview(file: UploadFile = File(...)):
 
 # --- END: SIMPLE PREVIEW ENDPOINT ---
 
-
+@app.post("/preview_dicom", include_in_schema=False)
+async def preview_dicom(file: UploadFile = File(...)):
+    """
+    Convert DICOM file to PNG/JPEG image for preview.
+    Works on both Mac and Windows.
+    """
+    if not pydicom_available:
+        raise HTTPException(
+            status_code=503,
+            detail="pydicom not available. Install with: pip install pydicom"
+        )
+    
+    try:
+        # Validate file type
+        file_extension = file.filename.lower().split('.')[-1] if file.filename else ''
+        if file_extension not in ['dcm', 'dicom']:
+            # Check content type as fallback
+            if not (file.content_type and 'dicom' in file.content_type.lower()):
+                raise HTTPException(status_code=400, detail="File must be a DICOM file (.dcm or .dicom)")
+        
+        # Read the file contents
+        file_contents = await file.read()
+        
+        try:
+            # Read DICOM file from bytes
+            dicom_dataset = pydicom.dcmread(io.BytesIO(file_contents))
+            
+            # Check if pixel data exists
+            if 'PixelData' not in dicom_dataset:
+                raise HTTPException(status_code=400, detail="DICOM file does not contain pixel data")
+            
+            # Get pixel array
+            pixel_array = dicom_dataset.pixel_array
+            
+            # Normalize pixel values to 0-255 range
+            pixel_min = pixel_array.min()
+            pixel_max = pixel_array.max()
+            
+            if pixel_max > 255:
+                # Normalize if values are outside 0-255 range
+                if pixel_max == pixel_min:
+                    # Uniform image (all pixels same value) - set to middle gray
+                    pixel_array = np.full_like(pixel_array, 128, dtype=np.uint8)
+                else:
+                    pixel_array = ((pixel_array - pixel_min) / 
+                                 (pixel_max - pixel_min) * 255).astype(np.uint8)
+            else:
+                pixel_array = pixel_array.astype(np.uint8)
+            
+            # Handle grayscale and RGB images
+            if len(pixel_array.shape) == 2:
+                # Grayscale image
+                pil_image = Image.fromarray(pixel_array, mode='L')
+            elif len(pixel_array.shape) == 3:
+                # RGB or color image
+                pil_image = Image.fromarray(pixel_array, mode='RGB')
+            else:
+                raise HTTPException(status_code=400, detail="Unsupported DICOM image format")
+            
+            # Convert to RGB if grayscale for better compatibility
+            if pil_image.mode == 'L':
+                pil_image = pil_image.convert('RGB')
+            
+            # Save to bytes buffer as PNG
+            img_buffer = io.BytesIO()
+            pil_image.save(img_buffer, format='PNG')
+            img_buffer.seek(0)
+            
+            return StreamingResponse(
+                io.BytesIO(img_buffer.read()),
+                media_type="image/png"
+            )
+            
+        except InvalidDicomError:
+            raise HTTPException(status_code=400, detail="Invalid DICOM file format")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Error processing DICOM file: {str(e)}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to convert DICOM to image: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

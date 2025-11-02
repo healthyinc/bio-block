@@ -31,7 +31,11 @@ app.get('/', (req, res) => {
         endpoints: [
             '/api/health',
             '/api/anonymize',
-            '/api/ipfs/upload'
+            '/api/ipfs/upload',
+            '/api/preview/image',
+            '/api/preview/spreadsheet',
+            '/api/preview/pdf',
+            '/api/preview/dicom'
         ]
     });
 });

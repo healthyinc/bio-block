@@ -7,8 +7,12 @@ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1
 numpy
 Pillow
 python-multipart
+pytesseract
 
 # Presidio libraries for advanced image anonymization
 presidio-analyzer
 presidio-anonymizer
 presidio-image-redactor
+
+# DICOM file support for medical image preview
+pydicom
