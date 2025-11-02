@@ -439,9 +439,34 @@ async def search_with_filter(request: Dict[str, Any]):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to search with filter: {str(e)}")
+    
+    # --- START: SIMPLE PREVIEW ENDPOINT ---
+# (Pasted BEFORE the __name__ == "__main__" block)
+
+@app.post("//simple_preview") # Catches the bad URL
+@app.post("/simple_preview", include_in_schema=False)
+async def simple_preview(file: UploadFile = File(...)):
+    """
+    A simple endpoint that just returns the uploaded image
+    without any anonymization. This is to test the pipeline.
+    """
+    print("✅ --- simple_preview endpoint was called! --- ✅")
+
+    # Read the file contents
+    file_contents = await file.read()
+
+    # Return the file as a streaming response
+    return StreamingResponse(
+        io.BytesIO(file_contents), 
+        media_type=file.content_type
+    )
+
+# --- END: SIMPLE PREVIEW ENDPOINT ---
 
 
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=3002)
+
+   

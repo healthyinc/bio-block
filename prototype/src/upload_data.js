@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, Wallet, ArrowLeft, Shield, Database, CheckCircle, X, Clock, Check } from 'lucide-react';
 import { storeDocumentHash } from './contractService';
 import { encryptFile } from './encryptionUtils.js';
@@ -14,6 +14,17 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
   const [dataSource, setDataSource] = useState('');
   const [price, setPrice] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+
+  useEffect(() => {
+  // This is the "cleanup" function
+  return () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+  };
+}, [previewUrl]);
 
   const diseaseOptions = [
     'Cancer',
@@ -88,9 +99,62 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
     errorMessage: ''
   });
 
-  const handleFileChange = (event) => {
+  // Find your existing file change handler and REPLACE it with this:
+  const handleFileChange = async (event) => {
     const file = event.target.files[0];
+    
+    // --- 1. Memory Leak Prevention ---
+    // If a preview URL already exists, revoke it before creating a new one
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+    
+    // Set the selected file for the upload form
     setSelectedFile(file);
+
+    if (!file) {
+      return; // No file selected
+    }
+
+    // --- 2. Check File Type for Preview ---
+    if (file.type.startsWith('image/')) {
+      // It's an image. Call our new backend endpoint.
+      setIsGeneratingPreview(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file); // The field name 'file' must match the backend
+
+        const jsBackendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
+
+        const response = await fetch(`${jsBackendUrl}/api/preview/image`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error('Preview generation failed');
+        }
+
+        const imageBlob = await response.blob();
+        const objectUrl = URL.createObjectURL(imageBlob);
+        setPreviewUrl(objectUrl);
+
+      } catch (error) {
+        console.error('Error generating image preview:', error);
+        // You could set an error state here
+      } finally {
+        setIsGeneratingPreview(false);
+      }
+    } else if (file.type.includes('spreadsheet') || file.type.includes('csv')) {
+      // --- 3. Handle Existing Spreadsheet Logic ---
+      // This is where spreadsheet preview logic would go if it existed
+      console.log("Spreadsheet selected, preview not yet supported.");
+      // If there was old preview logic, you'd call it here.
+    } else {
+      // Other file types (PDF, DICOM) - do nothing for now
+      console.log("File type not supported for preview yet.");
+    }
   };
 
   const handleSummaryChange = (event) => {
@@ -581,6 +645,29 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                   </div>
                 )}
               </div>
+
+              {/* --- START: PREVIEW BLOCK --- */}
+          <div className="mb-4">
+            {isGeneratingPreview && (
+              <div className="text-center p-4">
+                <p className="text-gray-400">Generating anonymized preview...</p>
+              </div>
+            )}
+            
+            {previewUrl && !isGeneratingPreview && (
+              <div>
+                <h4 className="text-lg font-semibold text-white mb-2">
+                  Anonymized Preview:
+                </h4>
+                <img 
+                  src={previewUrl} 
+                  alt="Anonymized data preview" 
+                  className="w-full max-w-md rounded-lg border-2 border-gray-600"
+                />
+              </div>
+            )}
+          </div>
+          {/* --- END: PREVIEW BLOCK --- */}
 
               {/* Form Fields Grid */}
               <div className="grid md:grid-cols-2 gap-6 mb-8">
