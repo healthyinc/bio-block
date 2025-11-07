@@ -1,0 +1,41 @@
+name: Frontend lint & format (prototype)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'prototype/**'
+  pull_request:
+    paths:
+      - 'prototype/**'
+
+jobs:
+  lint-format:
+    name: ESLint + Prettier checks (prototype)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        working-directory: prototype
+        run: npm ci
+
+      - name: ESLint — lint JS/JSX files
+        working-directory: prototype
+        run: |
+          # fail CI on any lint warnings or errors
+          npx --yes eslint "src/**/*.{js,jsx}" --max-warnings=0
+
+      - name: Prettier — format check
+        working-directory: prototype
+        run: |
+          npx --yes prettier --check "src/**/*.{js,jsx,css,md,json,html}"
+
