@@ -21,6 +21,8 @@ jobs:
       # ------------------- JavaScript Backend Coverage -------------------
       - name: Install JS backend dependencies
         working-directory: javascript_backend
+        env:
+          HUSKY: 0
         run: |
           npm install
           npm install --save-dev nyc

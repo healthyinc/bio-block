@@ -25,6 +25,8 @@ jobs:
       # ---------- JavaScript backend audit ----------
       - name: Install JS backend dependencies
         working-directory: javascript_backend
+        env:
+          HUSKY: 0
         run: npm install
 
       - name: Run npm audit (JavaScript backend)
@@ -34,6 +36,8 @@ jobs:
       # ---------- Frontend audit ----------
       - name: Install prototype dependencies
         working-directory: prototype
+        env:
+          HUSKY: 0
         run: npm install
 
       - name: Run npm audit (Prototype)
