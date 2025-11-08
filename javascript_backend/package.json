@@ -8,6 +8,7 @@
     "dev": "nodemon server.js",
     "vercel-build": "echo 'Building for Vercel'",
     "test": "mocha tests/api.test.js --timeout 10000",
+    "lint": "eslint . --ext .js",
     "prepare": "husky install"
   },
   "engines": {
