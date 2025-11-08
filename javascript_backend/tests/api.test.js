@@ -1,8 +1,9 @@
 const request = require('supertest');
 const expect = require('chai').expect;
+const path = require('path');
 
-// Create a proper supertest instance pointing to the server URL
-const app = 'http://localhost:3001';
+// Use the exported Express app so tests run without needing a separately started server
+const app = require('../server');
 
 describe('API Endpoints', function() {
   it('GET / should return API info', async function() {
@@ -17,11 +18,13 @@ describe('API Endpoints', function() {
   });
 
   it('POST /api/anonymize should anonymize Excel file', async function() {
-    // Using the test.xlsx file we created in the tests directory
+    // Resolve the test file path relative to this test file
+    const testFilePath = path.join(__dirname, 'test.xlsx');
     const res = await request(app)
       .post('/api/anonymize')
-      .attach('file', './tests/test.xlsx')
+      .attach('file', testFilePath)
       .field('generatePreview', 'true');
+    // Helpful logs for troubleshooting in CI
     console.log('Response status:', res.status);
     console.log('Response body:', res.body);
     expect(res.status).to.equal(200);
