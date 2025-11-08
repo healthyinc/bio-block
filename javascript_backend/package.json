@@ -7,7 +7,8 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "vercel-build": "echo 'Building for Vercel'",
-    "test": "mocha tests/api.test.js --timeout 10000"
+    "test": "mocha tests/api.test.js --timeout 10000",
+    "prepare": "husky install"
   },
   "engines": {
     "node": ">=18.x"
@@ -37,6 +38,21 @@
     "chai": "^5.3.1",
     "mocha": "^11.7.1",
     "nodemon": "^3.0.1",
-    "supertest": "^7.1.4"
+    "supertest": "^7.1.4",
+    "husky": "^8.0.0",
+    "lint-staged": "^13.0.0",
+    "prettier": "^2.8.0",
+    "eslint": "^8.0.0"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "prettier --write",
+      "eslint --fix",
+      "git add"
+    ],
+    "*.{json,md,css,html}": [
+      "prettier --write",
+      "git add"
+    ]
   }
 }
