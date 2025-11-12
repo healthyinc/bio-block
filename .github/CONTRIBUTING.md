@@ -81,7 +81,7 @@ PR checklist (fill before requesting review)
 - [ ] Code formatted and linted
 
 When opening the PR
-- Reference any related issues with `Closes #N` (this will auto-close the issue once merged).
+- Reference any related issues with `Fixes #N` (this will auto-close the issue once merged).
 - Add screenshots or logs for UI or runtime changes when helpful.
 - Add maintainers or reviewers using GitHub reviewers and mention them in the description when needed.
 
@@ -134,12 +134,8 @@ Pull requests should pass automated checks (tests/lint/format) before merging. I
 
 ## 7) Security and sensitive data
 - Never commit secrets, API keys, or credentials. Use environment variables, GitHub Secrets, or a secure provider.
-- If you accidentally commit a secret, rotate it immediately and open an issue describing remediation steps.
 
 ## 8) Communication and support
 - For onboarding questions, open an issue and tag maintainers. Provide OS and tool versions when asking setup questions.
 
 Thanks for contributing — we appreciate your help in making this project better!
-
----
-Small note: If something in the commands above doesn't match the actual entrypoint or test runner, please open an issue and we will update this guide.
