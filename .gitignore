@@ -174,3 +174,6 @@ chroma.sqlite3-shm
 .env.local
 .env.production
 .env.staging
+
+# Node.js
+node_modules/

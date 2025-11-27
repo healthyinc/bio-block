@@ -6,6 +6,7 @@ const cors = require('cors');
 const anonymizeRoutes = require('./routes/anonymize');
 const healthRoutes = require('./routes/health');
 const ipfsRoutes = require('./routes/ipfs');
+const previewRoutes = require('./routes/preview');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -19,6 +20,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/anonymize', anonymizeRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/ipfs', ipfsRoutes);
+app.use('/api/preview', previewRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -29,7 +31,11 @@ app.get('/', (req, res) => {
         endpoints: [
             '/api/health',
             '/api/anonymize',
-            '/api/ipfs/upload'
+            '/api/ipfs/upload',
+            '/api/preview/image',
+            '/api/preview/spreadsheet',
+            '/api/preview/pdf',
+            '/api/preview/dicom'
         ]
     });
 });

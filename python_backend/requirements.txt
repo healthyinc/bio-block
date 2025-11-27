@@ -2,14 +2,17 @@ fastapi
 uvicorn[standard]
 chromadb
 opencv-python
-pytesseract
 spacy
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 numpy
 Pillow
 python-multipart
+pytesseract
 
 # Presidio libraries for advanced image anonymization
 presidio-analyzer
 presidio-anonymizer
 presidio-image-redactor
+
+# DICOM file support for medical image preview
+pydicom
