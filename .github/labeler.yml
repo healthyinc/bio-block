@@ -1,0 +1,11 @@
+frontend:
+  - "prototype/**"
+
+backend-js:
+  - "javascript_backend/**"
+
+backend-python:
+  - "python_backend/**"
+
+docs:
+  - "**/*.md"
