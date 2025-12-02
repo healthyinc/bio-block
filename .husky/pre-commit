@@ -1,5 +1,4 @@
 #!/bin/sh
-. "$(dirname "$0")/_/husky.sh"
-
-# Run lint-staged to format files and fix lint issues before commit
-npx --no-install lint-staged
+# Root pre-commit hook removed in this branch.
+# Use `javascript_backend/.husky/pre-commit` for backend hooks.
+exit 0
