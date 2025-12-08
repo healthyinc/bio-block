@@ -1,0 +1,4 @@
+#!/bin/sh
+# Root pre-commit hook removed in this branch.
+# Use `javascript_backend/.husky/pre-commit` for backend hooks.
+exit 0
