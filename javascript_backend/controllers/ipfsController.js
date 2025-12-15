@@ -22,11 +22,6 @@ const uploadToIPFS = async (req, res) => {
         const { fileName } = req.body;
         const encryptedBuffer = req.file.buffer;
 
-        console.log('Uploading to IPFS:', { 
-            fileName, 
-            fileSize: encryptedBuffer.length 
-        });
-
         // Create form data for Pinata
         const formData = new FormData();
         formData.append('file', encryptedBuffer, {
@@ -65,8 +60,6 @@ const uploadToIPFS = async (req, res) => {
         );
 
         const ipfsHash = pinataResponse.data.IpfsHash;
-        
-        console.log('IPFS upload successful:', { ipfsHash, fileName });
 
         res.json({
             success: true,
@@ -76,8 +69,6 @@ const uploadToIPFS = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('IPFS upload error:', error.response?.data || error.message);
-        
         if (error.response?.status === 401) {
             return res.status(401).json({ 
                 error: 'Invalid Pinata API credentials' 

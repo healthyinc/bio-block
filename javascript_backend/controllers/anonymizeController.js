@@ -63,15 +63,6 @@ const anonymizeFile = async (req, res) => {
         const generatePreview = req.body.generatePreview === 'true';
         const isPersonalData = !!walletAddress;
 
-        console.log('Processing anonymization:', { 
-            isPersonalData, 
-            generatePreview,
-            fileName: req.file.originalname,
-            fileSize: req.file.size,
-            mimeType: req.file.mimetype,
-            walletAddress: walletAddress ? `${walletAddress.substring(0, 6)}...` : 'N/A' 
-        });
-
         // Parse the file using XLSX library which supports multiple formats
         let workbook;
         try {
@@ -83,34 +74,43 @@ const anonymizeFile = async (req, res) => {
                 cellText: false
             });
         } catch (parseError) {
-            console.error('File parsing error:', parseError);
             return res.status(400).json({ 
                 error: 'Failed to parse spreadsheet file. Please ensure the file is not corrupted and is in a supported format.' 
             });
         }
         const allIdentifiers = new Set();
         const sheetColumnRefs = {};
+        const sheetDataCache = {}; // Cache parsed sheet data to avoid re-parsing
 
+        // First pass: Parse sheets once and cache data
         workbook.SheetNames.forEach(sheetName => {
             const worksheet = workbook.Sheets[sheetName];
             const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
             
-            if (jsonData.length === 0) return;
+            if (jsonData.length === 0) {
+                sheetDataCache[sheetName] = { jsonData, headers: [] };
+                return;
+            }
             
             const headers = jsonData[0] || [];
+            sheetDataCache[sheetName] = { jsonData, headers };
+            
             let patientIdCol = null;
 
-            headers.forEach((header, index) => {
+            // Cache header checks
+            for (let index = 0; index < headers.length; index++) {
+                const header = headers[index];
                 if (header && typeof header === 'string') {
                     const headerLower = header.toLowerCase();
                     if (headerLower.includes('patient') && headerLower.includes('id')) {
                         patientIdCol = index;
+                        break; // Stop after finding first patient ID column
                     }
                 }
-            });
+            }
 
             if (patientIdCol !== null) {
-            
+                // Batch process rows for patient IDs
                 for (let i = 1; i < jsonData.length; i++) {
                     const row = jsonData[i];
                     if (row && row[patientIdCol]) {
@@ -120,15 +120,17 @@ const anonymizeFile = async (req, res) => {
                 }
                 sheetColumnRefs[sheetName] = { patientIdCol };
             } else {
-             
+                // Count non-empty rows only
+                let nonEmptyRowCount = 0;
                 for (let i = 1; i < jsonData.length; i++) {
                     const row = jsonData[i];
                     if (row && row.some(cell => cell !== undefined && cell !== null && cell !== '')) {
+                        nonEmptyRowCount++;
                         const uuid = generateUUID();
                         allIdentifiers.add(uuid);
                     }
                 }
-                sheetColumnRefs[sheetName] = { useUUID: true };
+                sheetColumnRefs[sheetName] = { useUUID: true, nonEmptyRowCount };
             }
         });
 
@@ -147,81 +149,102 @@ const anonymizeFile = async (req, res) => {
 
         const cleanedWorkbook = XLSX.utils.book_new();
 
+        // Pre-process PHI keywords for faster matching
+        const normalizedPhiKeywords = phiKeywords.map(k => k.toLowerCase().replace(/\s+/g, ''));
+
         workbook.SheetNames.forEach(sheetName => {
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            // Use cached data instead of re-parsing
+            const cachedData = sheetDataCache[sheetName];
+            const jsonData = cachedData.jsonData;
             
             if (jsonData.length === 0) {
+                const worksheet = workbook.Sheets[sheetName];
                 XLSX.utils.book_append_sheet(cleanedWorkbook, worksheet, sheetName);
                 return;
             }
 
-            const headers = jsonData[0] || [];
-            const cleanedData = jsonData.map(row => [...row]);
+            const headers = cachedData.headers;
+            // Avoid deep copy - modify in place for better performance
+            const cleanedData = jsonData;
 
             if (sheetColumnRefs[sheetName]) {
                 const sheetRefs = sheetColumnRefs[sheetName];
 
-               
+                // Pre-compute columns to mask (do this once per sheet)
                 const columnsToMask = [];
-                headers.forEach((header, index) => {
+                for (let index = 0; index < headers.length; index++) {
+                    const header = headers[index];
                     if (header && typeof header === 'string') {
                         const headerLower = header.toLowerCase();
+                        const headerNoSpace = headerLower.replace(/\s+/g, '');
                         const isPatientIdColumn = index === sheetRefs.patientIdCol;
-                        const isPhiColumn = phiKeywords.some(keyword => {
-                            return headerLower.includes(keyword) || 
-                                   headerLower.replace(/\s+/g, '').includes(keyword.replace(/\s+/g, ''));
+                        
+                        // Use pre-normalized keywords for faster comparison
+                        const isPhiColumn = normalizedPhiKeywords.some(keyword => {
+                            return headerNoSpace.includes(keyword);
                         });
                         
                         if (isPatientIdColumn || isPhiColumn) {
                             columnsToMask.push(index);
                         }
                     }
-                });
+                }
 
                 if (sheetRefs.useUUID) {
                     // Handle sheets without patient ID column
                     // Case 2: Personal + No Patient ID - Use wallet address
                     // Case 4: Institution + No Patient ID - Use UUID for each row
+                    
+                    // Pre-compute wallet ID if personal data (same for all rows)
+                    const precomputedWalletId = (isPersonalData && walletAddress) 
+                        ? generateAnonymizedId(walletAddress, 1) 
+                        : null;
+                    
                     for (let i = 1; i < cleanedData.length; i++) {
                         const row = cleanedData[i];
                         if (row && row.some(cell => cell !== undefined && cell !== null && cell !== '')) {
                             let id;
-                            if (isPersonalData && walletAddress) {
-                                // Case 2: Personal data without Patient ID - use wallet address
-                                id = generateAnonymizedId(walletAddress, 1);
+                            if (precomputedWalletId) {
+                                // Case 2: Personal data without Patient ID - use pre-computed wallet ID
+                                id = precomputedWalletId;
                             } else {
                                 // Case 4: Institution data without Patient ID - use UUID
                                 const uuid = generateUUID();
                                 id = generateAnonymizedId(uuid, i);
                             }
                             
-                            columnsToMask.forEach(colIndex => {
+                            // Direct assignment is faster than forEach for small arrays
+                            for (let j = 0; j < columnsToMask.length; j++) {
+                                const colIndex = columnsToMask[j];
                                 if (row[colIndex] !== undefined) {
                                     row[colIndex] = id;
                                 }
-                            });
+                            }
                         }
                     }
                 } else {
                     // Handle sheets with patient ID column
                     // Case 1: Personal + Patient ID exists - Hash each patient ID individually
                     // Case 3: Institution + Patient ID exists - Hash each patient ID individually
+                    const patientIdCol = sheetRefs.patientIdCol;
+                    
                     for (let i = 1; i < cleanedData.length; i++) {
                         const row = cleanedData[i];
                         let id = null;
 
-                        if (sheetRefs.patientIdCol !== undefined && row && row[sheetRefs.patientIdCol]) {
-                            const patientId = String(row[sheetRefs.patientIdCol]).toLowerCase().trim();
+                        if (patientIdCol !== undefined && row && row[patientIdCol]) {
+                            const patientId = String(row[patientIdCol]).toLowerCase().trim();
                             id = identifierToId[patientId];
                         }
 
                         if (id) {
-                            columnsToMask.forEach(colIndex => {
+                            // Direct for loop is faster than forEach
+                            for (let j = 0; j < columnsToMask.length; j++) {
+                                const colIndex = columnsToMask[j];
                                 if (row[colIndex] !== undefined) {
                                     row[colIndex] = id;
                                 }
-                            });
+                            }
                         }
                     }
                 }
@@ -279,10 +302,12 @@ const anonymizeFile = async (req, res) => {
             const previewWorkbook = XLSX.utils.book_new();
             
             cleanedWorkbook.SheetNames.forEach(sheetName => {
-                const worksheet = cleanedWorkbook.Sheets[sheetName];
-                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                // Use cached data for preview instead of re-parsing
+                const cachedData = sheetDataCache[sheetName];
+                const jsonData = cachedData ? cachedData.jsonData : [];
                 
                 if (jsonData.length === 0) {
+                    const worksheet = cleanedWorkbook.Sheets[sheetName];
                     XLSX.utils.book_append_sheet(previewWorkbook, worksheet, sheetName);
                     return;
                 }
@@ -333,9 +358,7 @@ const anonymizeFile = async (req, res) => {
         res.send(outputBuffer);
 
     } catch (error) {
-        console.error('Error processing file:', error);
-        
-        if (error.message.includes('Only')) {
+        if (error.message && error.message.includes('Only')) {
             return res.status(400).json({ 
                 error: 'Invalid file type. Please upload a supported spreadsheet file (.xlsx, .xls, .csv, .ods, .tsv, .xlsm, .xlsb).' 
             });

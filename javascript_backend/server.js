@@ -36,7 +36,6 @@ app.get('/', (req, res) => {
 
 // Error handling middleware
 app.use((error, req, res, next) => {
-    console.error('Unhandled error:', error);
     res.status(500).json({ 
         error: 'Internal server error' 
     });
@@ -45,9 +44,7 @@ app.use((error, req, res, next) => {
 // Start server (for local development)
 if (require.main === module) {
     app.listen(PORT, () => {
-        console.log(`Server running on http://localhost:${PORT}`);
-        console.log(`Health check: http://localhost:${PORT}/api/health`);
-        console.log(`Anonymize endpoint: http://localhost:${PORT}/api/anonymize`);
+        // Server started successfully
     });
 }
 

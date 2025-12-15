@@ -292,9 +292,7 @@ app.post('/anonymize', upload.single('file'), async (req, res) => {
         res.send(outputBuffer);
 
     } catch (error) {
-        console.error('Error processing file:', error);
-        
-        if (error.message.includes('Only Excel files')) {
+        if (error.message && error.message.includes('Only Excel files')) {
             return res.status(400).json({ 
                 error: 'Invalid file type. Please upload an Excel file (.xlsx or .xls).' 
             });
@@ -323,7 +321,6 @@ app.use((error, req, res, next) => {
         }
     }
     
-    console.error('Unhandled error:', error);
     res.status(500).json({ 
         error: 'Internal server error' 
     });
