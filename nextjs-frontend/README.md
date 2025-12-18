@@ -32,6 +32,7 @@ npm run dev
 ```
 
 Generate encryption key:
+
 ```bash
 openssl rand -hex 32
 ```

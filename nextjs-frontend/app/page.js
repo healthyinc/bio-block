@@ -9,7 +9,11 @@ export default function Home() {
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState("");
   const [error, setError] = useState("");
-  const [backendStatus, setBackendStatus] = useState({ checked: false, connected: false, message: "" });
+  const [backendStatus, setBackendStatus] = useState({
+    checked: false,
+    connected: false,
+    message: "",
+  });
 
   // Check backend connectivity on mount
   useEffect(() => {
@@ -79,8 +83,10 @@ export default function Home() {
 
       {backendStatus.checked && (
         <div className="container mx-auto px-4 pt-4">
-          <div className={`border-l-4 p-4 rounded ${backendStatus.connected ? 'bg-green-50 border-green-500' : 'bg-yellow-50 border-yellow-500'}`}>
-            <p className={backendStatus.connected ? 'text-green-700' : 'text-yellow-700'}>
+          <div
+            className={`border-l-4 p-4 rounded ${backendStatus.connected ? "bg-green-50 border-green-500" : "bg-yellow-50 border-yellow-500"}`}
+          >
+            <p className={backendStatus.connected ? "text-green-700" : "text-yellow-700"}>
               <strong>Backend Status:</strong> {backendStatus.message}
             </p>
           </div>

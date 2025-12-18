@@ -2,12 +2,7 @@
 
 import { Shield, Wallet } from "lucide-react";
 
-export default function Header({ 
-  isWalletConnected, 
-  walletAddress, 
-  onConnect, 
-  onDisconnect 
-}) {
+export default function Header({ isWalletConnected, walletAddress, onConnect, onDisconnect }) {
   return (
     <header className="bg-white shadow-md">
       <div className="container mx-auto px-4 py-4 flex justify-between items-center">
@@ -29,10 +24,7 @@ export default function Header({
             <div className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-mono text-sm">
               {walletAddress}
             </div>
-            <button
-              onClick={onDisconnect}
-              className="text-red-600 hover:text-red-800 font-medium"
-            >
+            <button onClick={onDisconnect} className="text-red-600 hover:text-red-800 font-medium">
               Disconnect
             </button>
           </div>

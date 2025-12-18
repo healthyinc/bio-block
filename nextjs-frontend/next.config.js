@@ -10,9 +10,9 @@ const nextConfig = {
   webpack: (config) => {
     config.resolve.fallback = {
       ...config.resolve.fallback,
-      fs: false,      // File system access not available in browser
-      net: false,     // Network protocols handled by browser APIs
-      tls: false,     // TLS/SSL handled by browser
+      fs: false, // File system access not available in browser
+      net: false, // Network protocols handled by browser APIs
+      tls: false, // TLS/SSL handled by browser
     };
     return config;
   },
