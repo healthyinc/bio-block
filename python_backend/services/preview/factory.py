@@ -8,6 +8,18 @@ from .base import PreviewGenerator
 from .image_generator import ImagePreviewGenerator
 from .dicom_generator import DicomPreviewGenerator
 
+# Try to import WSI generator (may fail if OpenSlide not available)
+try:
+    from .wsi_generator import WsiPreviewGenerator
+    wsi_available = True
+except ImportError:
+    wsi_available = False
+    WsiPreviewGenerator = None
+except Exception:
+    # Handle other import errors (e.g., DLL loading issues)
+    wsi_available = False
+    WsiPreviewGenerator = None
+
 
 class PreviewFactory:
     """
@@ -18,10 +30,19 @@ class PreviewFactory:
     """
     
     # Registry of available generators (ordered by priority)
+    # WSI generator checked first for specific extensions (.svs, .ndpi, etc.)
+    # Then DICOM, then standard images
     _generators: List[Type[PreviewGenerator]] = [
         DicomPreviewGenerator,
         ImagePreviewGenerator,
     ]
+    
+    # Initialize generators list with WSI if available
+    if wsi_available and WsiPreviewGenerator is not None:
+        # Insert WSI generator at the beginning (highest priority)
+        # This ensures .svs, .ndpi, etc. are handled by WSI generator
+        # before falling back to other generators
+        _generators.insert(0, WsiPreviewGenerator)
     
     @classmethod
     def create_generator(cls, filename: str = None, content_type: str = None) -> PreviewGenerator:
