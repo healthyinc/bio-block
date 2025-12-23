@@ -16,3 +16,6 @@ presidio-image-redactor
 
 # DICOM file support for medical image preview
 pydicom
+
+# WSI (Whole Slide Image) support for pathology images
+openslide-python
