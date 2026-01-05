@@ -15,7 +15,7 @@ interface BackendHealthResponse {
  */
 export const checkBackendHealth = async (): Promise<BackendHealthResponse> => {
   try {
-    const response = await fetch(`${BACKEND_URL}/health`, {
+    const response = await fetch(`${BACKEND_URL}/api/health`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
