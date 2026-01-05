@@ -1,38 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Wallet, Search, Upload, User, ChevronDown, Shield, Database, Globe, Zap, BarChart3 } from "lucide-react";
+import SearchData from "../components/SearchData";
+import UploadData from "../components/UploadData";
+import Dashboard from "../components/Dashboard";
 import Header from "../components/Header";
 import HeroSection from "../components/HeroSection";
-import { checkBackendHealth } from "../lib/api";
-import { Search, Upload, BarChart3 } from "lucide-react";
 
 export default function Home() {
-  const router = useRouter();
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState("");
-  const [error, setError] = useState("");
-  const [backendStatus, setBackendStatus] = useState({
-    checked: false,
-    connected: false,
-    message: "",
-  });
-
-  // Check backend connectivity on mount
-  useEffect(() => {
-    const verifyBackend = async () => {
-      const result = await checkBackendHealth();
-      setBackendStatus({
-        checked: true,
-        connected: result.success,
-        message: result.message,
-      });
-    };
-    verifyBackend();
-  }, []);
+  const [fullWalletAddress, setFullWalletAddress] = useState("");
+  const [currentView, setCurrentView] = useState("main");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const handleWalletConnect = async () => {
-    setError("");
     try {
       if (typeof window.ethereum !== "undefined") {
         await window.ethereum.request({
@@ -47,16 +30,15 @@ export default function Home() {
         const address = accounts[0];
         const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
         setWalletAddress(shortAddress);
+        setFullWalletAddress(address);
         setIsWalletConnected(true);
       } else {
-        setError("Please install MetaMask or another Web3 wallet");
+        alert("Please install MetaMask or another Web3 wallet");
       }
     } catch (error) {
       console.error("Wallet connection failed:", error);
       if (error.code === 4001) {
-        setError("Connection rejected by user");
-      } else {
-        setError("Failed to connect wallet. Please try again.");
+        alert("Connection rejected by user");
       }
     }
   };
@@ -64,8 +46,52 @@ export default function Home() {
   const handleDisconnect = () => {
     setIsWalletConnected(false);
     setWalletAddress("");
-    setError("");
+    setFullWalletAddress("");
+    setIsDropdownOpen(false);
+    setCurrentView("main");
   };
+
+  const handleSearch = () => {
+    setCurrentView("search");
+  };
+
+  const handleUpload = () => {
+    setCurrentView("upload");
+  };
+
+  const handleDashboard = () => {
+    setCurrentView("dashboard");
+    setIsDropdownOpen(false);
+  };
+
+  const handleBackToMain = () => {
+    setCurrentView("main");
+  };
+
+  if (currentView === "search") {
+    return <SearchData onBack={handleBackToMain} />;
+  }
+
+  if (currentView === "upload") {
+    return (
+      <UploadData
+        onBack={handleBackToMain}
+        isWalletConnected={isWalletConnected}
+        walletAddress={fullWalletAddress}
+        onWalletConnect={handleWalletConnect}
+      />
+    );
+  }
+
+  if (currentView === "dashboard") {
+    return (
+      <Dashboard
+        onBack={handleBackToMain}
+        isWalletConnected={isWalletConnected}
+        walletAddress={fullWalletAddress}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
