@@ -1,35 +1,21 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { Wallet, Search, Upload, User, ChevronDown, Shield, Database, Globe, Zap, BarChart3 } from "lucide-react";
+import SearchData from "../components/SearchData";
+import UploadData from "../components/UploadData";
+import Dashboard from "../components/Dashboard";
 import Header from "../components/Header";
 import HeroSection from "../components/HeroSection";
-import { checkBackendHealth } from "../lib/api";
 
 export default function Home() {
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState("");
-  const [error, setError] = useState("");
-  const [backendStatus, setBackendStatus] = useState({
-    checked: false,
-    connected: false,
-    message: "",
-  });
-
-  // Check backend connectivity on mount
-  useEffect(() => {
-    const verifyBackend = async () => {
-      const result = await checkBackendHealth();
-      setBackendStatus({
-        checked: true,
-        connected: result.success,
-        message: result.message,
-      });
-    };
-    verifyBackend();
-  }, []);
+  const [fullWalletAddress, setFullWalletAddress] = useState("");
+  const [currentView, setCurrentView] = useState("main");
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const handleWalletConnect = async () => {
-    setError("");
     try {
       if (typeof window.ethereum !== "undefined") {
         await window.ethereum.request({
@@ -44,16 +30,15 @@ export default function Home() {
         const address = accounts[0];
         const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
         setWalletAddress(shortAddress);
+        setFullWalletAddress(address);
         setIsWalletConnected(true);
       } else {
-        setError("Please install MetaMask or another Web3 wallet");
+        alert("Please install MetaMask or another Web3 wallet");
       }
     } catch (error) {
       console.error("Wallet connection failed:", error);
       if (error.code === 4001) {
-        setError("Connection rejected by user");
-      } else {
-        setError("Failed to connect wallet. Please try again.");
+        alert("Connection rejected by user");
       }
     }
   };
@@ -61,8 +46,52 @@ export default function Home() {
   const handleDisconnect = () => {
     setIsWalletConnected(false);
     setWalletAddress("");
-    setError("");
+    setFullWalletAddress("");
+    setIsDropdownOpen(false);
+    setCurrentView("main");
   };
+
+  const handleSearch = () => {
+    setCurrentView("search");
+  };
+
+  const handleUpload = () => {
+    setCurrentView("upload");
+  };
+
+  const handleDashboard = () => {
+    setCurrentView("dashboard");
+    setIsDropdownOpen(false);
+  };
+
+  const handleBackToMain = () => {
+    setCurrentView("main");
+  };
+
+  if (currentView === "search") {
+    return <SearchData onBack={handleBackToMain} />;
+  }
+
+  if (currentView === "upload") {
+    return (
+      <UploadData
+        onBack={handleBackToMain}
+        isWalletConnected={isWalletConnected}
+        walletAddress={fullWalletAddress}
+        onWalletConnect={handleWalletConnect}
+      />
+    );
+  }
+
+  if (currentView === "dashboard") {
+    return (
+      <Dashboard
+        onBack={handleBackToMain}
+        isWalletConnected={isWalletConnected}
+        walletAddress={fullWalletAddress}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -97,21 +126,99 @@ export default function Home() {
         {!isWalletConnected ? (
           <HeroSection />
         ) : (
-          <div className="max-w-4xl mx-auto">
-            <div className="bg-white rounded-xl shadow-lg p-8">
-              <h2 className="text-3xl font-bold text-gray-800 mb-6">
-                Welcome to Bio-Block Dashboard
+          <div className="max-w-6xl mx-auto">
+            <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+              <h2 className="text-3xl font-bold text-gray-800 mb-4">
+                Welcome to Bio-Block Platform
               </h2>
-              <p className="text-gray-600 mb-4">
-                Your wallet is connected. Next PR will add full upload/download functionality.
+              <p className="text-gray-600 mb-6">
+                Your wallet is connected. Choose an action below to get started.
               </p>
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-blue-800">
-                  <strong>✓ Phase 1 Complete:</strong> Next.js 15 setup with wallet connection
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Search Documents */}
+              <button
+                onClick={() => router.push("/search")}
+                className="bg-white rounded-xl shadow-lg p-8 hover:shadow-xl transition-all hover:-translate-y-1 text-left"
+              >
+                <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+                  <Search size={32} className="text-blue-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-800 mb-3">Search</h3>
+                <p className="text-gray-600 mb-4">
+                  Search and purchase medical datasets with advanced filters
                 </p>
-                <p className="text-blue-700 mt-2">
-                  <strong>Next:</strong> Full feature migration in PR #2
+                <span className="text-blue-600 font-medium inline-flex items-center gap-2">
+                  Browse Documents →
+                </span>
+              </button>
+
+              {/* Upload Data */}
+              <button
+                onClick={() => router.push("/upload")}
+                className="bg-white rounded-xl shadow-lg p-8 hover:shadow-xl transition-all hover:-translate-y-1 text-left"
+              >
+                <div className="bg-green-100 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+                  <Upload size={32} className="text-green-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-800 mb-3">Upload</h3>
+                <p className="text-gray-600 mb-4">
+                  Upload your medical data securely with end-to-end encryption
                 </p>
+                <span className="text-green-600 font-medium inline-flex items-center gap-2">
+                  Upload Document →
+                </span>
+              </button>
+
+              {/* Dashboard */}
+              <button
+                onClick={() => router.push("/dashboard")}
+                className="bg-white rounded-xl shadow-lg p-8 hover:shadow-xl transition-all hover:-translate-y-1 text-left"
+              >
+                <div className="bg-purple-100 w-16 h-16 rounded-full flex items-center justify-center mb-4">
+                  <BarChart3 size={32} className="text-purple-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-800 mb-3">Dashboard</h3>
+                <p className="text-gray-600 mb-4">
+                  View your earnings, documents, and manage your data
+                </p>
+                <span className="text-purple-600 font-medium inline-flex items-center gap-2">
+                  View Dashboard →
+                </span>
+              </button>
+            </div>
+
+            {/* Features Info */}
+            <div className="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                Phase 2 Features Completed ✓
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div className="flex items-start gap-2">
+                  <span className="text-green-600 font-bold">✓</span>
+                  <span className="text-gray-700">Full TypeScript migration</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-green-600 font-bold">✓</span>
+                  <span className="text-gray-700">Dashboard component</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-green-600 font-bold">✓</span>
+                  <span className="text-gray-700">Upload component</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-green-600 font-bold">✓</span>
+                  <span className="text-gray-700">Search component</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-green-600 font-bold">✓</span>
+                  <span className="text-gray-700">App Router setup</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="text-green-600 font-bold">✓</span>
+                  <span className="text-gray-700">Client/Server separation</span>
+                </div>
               </div>
             </div>
           </div>
