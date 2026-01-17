@@ -4,53 +4,64 @@
 
 Phase 2 implementation adds support for Whole Slide Images (WSI) used in pathology, including formats like `.svs`, `.ndpi`, `.scn`, etc.
 
-## Setup Steps
+## Recommended Installation Method (Cross-Platform)
 
-### Step 1: Download OpenSlide Binaries
+### Using Conda (Recommended)
 
-Run the PowerShell setup script to automatically download and extract OpenSlide binaries:
+The easiest and most reliable way to install OpenSlide with cross-platform support:
+
+```bash
+conda install -c conda-forge openslide-python
+```
+
+This command installs:
+- The native libopenslide library (`.dll` on Windows, `.so` on Linux, `.dylib` on macOS)
+- The Python bindings (openslide-python)
+- All necessary dependencies
+
+**Works on:** Windows, macOS, and Linux ✅
+
+## Alternative Installation Methods
+
+### Using pip (Linux/macOS)
+
+On Linux or macOS, you can use pip with system packages:
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt-get install openslide-tools python3-openslide
+pip install openslide-python
+```
+
+**macOS:**
+```bash
+brew install openslide
+pip install openslide-python
+```
+
+### Windows Fallback (Manual Setup)
+
+If you're on Windows and can't use conda, you can use the PowerShell setup script:
 
 ```powershell
 cd python_backend
 .\setup_openslide.ps1
-```
-
-This script will:
-- Download OpenSlide Windows binaries from GitHub releases
-- Extract them to `python_backend/openslide_binaries/`
-- Clean up temporary files
-
-**Note:** If the script asks about overwriting existing binaries, choose `y` to re-download or `n` to use existing.
-
-### Step 2: Install Python Package
-
-Install the openslide-python package:
-
-```powershell
-# Make sure your virtual environment is activated
-.\venv\Scripts\Activate.ps1
-
-# Install openslide-python
 pip install openslide-python
 ```
 
-Or install all requirements (including openslide-python):
+**Note:** The setup script is Windows-only and downloads binaries manually. The conda method is preferred.
 
-```powershell
-pip install -r requirements.txt
-```
+## How It Works
 
-### Step 3: Verify Setup
+The WSI generator automatically:
 
-The WSI generator will automatically:
-- Detect the OpenSlide binaries in `python_backend/openslide_binaries/bin/`
-- Load the DLLs dynamically
-- Register them for use with the openslide-python library
+1. **First tries to import openslide directly** - Works if installed via conda or pip with system libraries
+2. **Falls back to Windows DLL loading** - Only on Windows, only if direct import failed
+3. **Gracefully degrades** - If OpenSlide isn't available, WSI preview is disabled but everything else works
 
 ## Supported File Formats
 
-The WsiPreviewGenerator supports the following WSI formats:
-
+The WsiPreviewGenerator supports these formats:
 - `.svs` - Aperio ScanScope
 - `.ndpi` - Hamamatsu NanoZoomer
 - `.scn` - Leica ScanScope
@@ -80,53 +91,6 @@ Make sure existing generators still work:
 - **Image Preview (JPG/PNG)**: Should still work exactly as before
 - **DICOM Preview**: Should still work exactly as before
 
-## File Structure
-
-After setup, your directory structure should look like:
-
-```
-python_backend/
-├── openslide_binaries/          # OpenSlide binaries (created by setup script)
-│   ├── bin/                     # DLLs (automatically loaded)
-│   ├── lib/
-│   └── ...
-├── services/
-│   └── preview/
-│       ├── base.py
-│       ├── image_generator.py   # Existing - unchanged
-│       ├── dicom_generator.py   # Existing - unchanged
-│       ├── wsi_generator.py     # New - WSI support
-│       └── factory.py           # Updated - includes WSI generator
-└── setup_openslide.ps1          # Setup script
-```
-
-## How It Works
-
-1. **Factory Pattern**: The `PreviewFactory` automatically detects WSI files by extension
-2. **Dynamic DLL Loading**: `WsiPreviewGenerator` automatically finds and loads OpenSlide DLLs
-3. **Thumbnail Generation**: Creates 1024x1024 PNG thumbnails from large WSI files
-4. **Temporary File Handling**: Safely handles temporary files for OpenSlide processing
-
-## Troubleshooting
-
-### "OpenSlide not available" error
-
-- Make sure you ran `setup_openslide.ps1`
-- Verify `python_backend/openslide_binaries/bin/` exists
-- Make sure `openslide-python` is installed: `pip install openslide-python`
-
-### DLL loading errors
-
-- Check that OpenSlide binaries are in the correct location
-- Try re-running the setup script to re-download binaries
-- Verify you're using a compatible Python version (3.7+)
-
-### "Could not open WSI file" error
-
-- File may be corrupted
-- File format may not be supported by OpenSlide
-- Check that the file is a valid WSI format
-
 ## Backward Compatibility
 
 ✅ **All existing functionality is preserved:**
@@ -134,6 +98,6 @@ python_backend/
 - DICOM preview works exactly as before
 - API endpoints remain unchanged
 - No breaking changes to frontend
+- Windows PowerShell script still works as fallback
 
 The WSI support is purely additive and does not affect existing features.
-

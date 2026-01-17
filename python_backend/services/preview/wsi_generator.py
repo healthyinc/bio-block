@@ -4,18 +4,47 @@ Supports formats like .svs, .ndpi, .scn using OpenSlide library.
 """
 import os
 import io
+import sys
 import tempfile
+import platform
 from typing import Tuple
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from PIL import Image
 
-# Dynamic DLL loading for OpenSlide on Windows
-def _setup_openslide_dll_path():
+# Try to import openslide - works if installed via conda-forge or pip with system libs
+openslide_available = False
+openslide = None
+
+def _try_import_openslide():
     """
-    Configure DLL path for OpenSlide on Windows.
-    Looks for openslide_binaries in the python_backend directory.
+    Try to import openslide. This works if:
+    - Installed via conda: conda install -c conda-forge openslide-python
+    - Installed via pip with system libraries available (Linux/macOS)
+    - DLLs/.so/.dylib are in system paths
     """
+    global openslide, openslide_available
+    try:
+        import openslide
+        openslide_available = True
+        return True
+    except ImportError:
+        return False
+    except Exception as e:
+        # Handle runtime errors (e.g., missing native library)
+        print(f"Warning: openslide import failed: {str(e)}")
+        return False
+
+
+def _setup_openslide_windows_fallback():
+    """
+    Windows fallback: Try to load DLLs from local openslide_binaries folder.
+    This is only used if conda/pip installation didn't work and we're on Windows.
+    Maintains backward compatibility with the PowerShell setup script.
+    """
+    if platform.system() != 'Windows':
+        return False
+    
     try:
         # Get the directory where this file is located (services/preview/)
         current_file_dir = os.path.dirname(os.path.abspath(__file__))
@@ -34,32 +63,29 @@ def _setup_openslide_dll_path():
             current_path = os.environ.get('PATH', '')
             if openslide_bin_path not in current_path:
                 os.environ['PATH'] = openslide_bin_path + os.pathsep + current_path
-                
-            return True
-        else:
-            return False
+            
+            # Try importing again after adding DLL path
+            return _try_import_openslide()
+        
+        return False
     except Exception:
         return False
 
-# Try to setup DLL path and import openslide
-openslide_available = False
-openslide = None
 
-if _setup_openslide_dll_path():
-    try:
-        import openslide
-        openslide_available = True
-    except ImportError:
-        openslide_available = False
-        print("Warning: openslide-python library not found. WSI preview will not work.")
-        print("Install with: pip install openslide-python")
-    except Exception as e:
-        openslide_available = False
-        print(f"Warning: Could not load OpenSlide library: {str(e)}")
-        print("Make sure openslide_binaries are properly set up.")
-else:
-    print("Warning: OpenSlide binaries not found. WSI preview will not work.")
-    print("Run setup_openslide.ps1 to download and set up the binaries.")
+# Try to import openslide (prioritize conda/pip installation)
+if not _try_import_openslide():
+    # If direct import failed, try Windows fallback (for backward compatibility)
+    if platform.system() == 'Windows':
+        if not _setup_openslide_windows_fallback():
+            print("Warning: OpenSlide not available. WSI preview will not work.")
+            print("Recommended: Install via conda: conda install -c conda-forge openslide-python")
+            print("Alternative: Use pip with system libraries, or run setup_openslide.ps1 on Windows")
+    else:
+        # On macOS/Linux, suggest conda or system package installation
+        print("Warning: OpenSlide not available. WSI preview will not work.")
+        print("Recommended: Install via conda: conda install -c conda-forge openslide-python")
+        print("Alternative on Linux: sudo apt-get install openslide-tools python3-openslide")
+        print("Alternative on macOS: brew install openslide")
 
 from .base import PreviewGenerator
 
@@ -83,7 +109,7 @@ class WsiPreviewGenerator(PreviewGenerator):
         """Initialize the WSI generator."""
         if not openslide_available:
             print("Warning: OpenSlide not available. WSI preview will not work.")
-            print("Install openslide-python and run setup_openslide.ps1")
+            print("Recommended: conda install -c conda-forge openslide-python")
     
     def can_handle(self, filename: str = None, content_type: str = None) -> bool:
         """
@@ -113,7 +139,7 @@ class WsiPreviewGenerator(PreviewGenerator):
         if not openslide_available or openslide is None:
             raise HTTPException(
                 status_code=503,
-                detail="OpenSlide not available. Install openslide-python and run setup_openslide.ps1 to download binaries."
+                detail="OpenSlide not available. Install via: conda install -c conda-forge openslide-python"
             )
         
         # Create temporary file to store the WSI file
@@ -180,4 +206,3 @@ class WsiPreviewGenerator(PreviewGenerator):
                 except Exception as e:
                     # Log but don't fail if cleanup fails
                     print(f"Warning: Could not delete temporary file {temp_file}: {str(e)}")
-
