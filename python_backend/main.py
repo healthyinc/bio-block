@@ -13,6 +13,8 @@ from pytesseract import Output
 import numpy as np
 from PIL import Image
 import io
+import shutil
+import os
 
 # Preview factory imports
 from services.preview.factory import PreviewFactory
@@ -53,8 +55,32 @@ app.add_middleware(
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_or_create_collection(name="new_user_data")
 
-# Tesseract path for macOS (installed via Homebrew)
-pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+# 1. Cross-platform Tesseract detection
+tesseract_cmd = os.getenv('TESSERACT_CMD') or shutil.which('tesseract')
+
+if not tesseract_cmd:
+    common_paths = [
+        '/opt/homebrew/bin/tesseract',
+        '/usr/local/bin/tesseract',
+        '/usr/bin/tesseract',
+        r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+    ]
+    for path in common_paths:
+        if os.path.isfile(path):
+            tesseract_cmd = path
+            break
+
+tesseract_available = False
+if tesseract_cmd:
+    try:
+        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+        pytesseract.get_tesseract_version()
+        tesseract_available = True
+        print(f"Tesseract verified: {tesseract_cmd}")
+    except Exception:
+        print(f"Tesseract found at {tesseract_cmd} but failed to execute.")
+else:
+    print("Tesseract not found. Image anonymization will not work.")
 
 try:
     nlp = spacy.load("en_core_web_lg")  # Updated to use large model for better accuracy
@@ -80,14 +106,6 @@ if presidio_available:
     except Exception as e:
         print(f"Warning: Failed to initialize Presidio engines: {str(e)}")
         presidio_available = False
-
-
-try:
-    pytesseract.get_tesseract_version()
-    tesseract_available = True
-except Exception:
-    print("Warning: Tesseract OCR not found. Image anonymization will not work.")
-    tesseract_available = False
 
 PHI_LABELS = {"PERSON", "ORG", "GPE", "DATE", "LOC", "FAC", "NORP"}
 
