@@ -303,6 +303,12 @@ const anonymizeFile = async (req, res) => {
                 type: 'buffer' 
             });
 
+            const extractedContent = await extractFileContent(
+                cleanedWorkbook,
+                req.file.originalname,
+                req.body.datasetTitle || ''
+            );
+
             // Return both files as JSON response
             const timestamp = Date.now();
             return res.json({
@@ -319,7 +325,9 @@ const anonymizeFile = async (req, res) => {
                         filename: `preview_${originalFileName}`,
                         contentType: outputMimeType
                     }
-                }
+                },
+                extractedContent: extractedContent,  // Add this line
+                extractionStatus: "success"
             });
         }
 
@@ -344,6 +352,24 @@ const anonymizeFile = async (req, res) => {
         res.status(500).json({ 
             error: 'Internal server error occurred while processing the file.' 
         });
+    }
+};
+
+const extractFileContent = async (workbook, originalFileName, datasetTitle = "") => {
+    /**
+     * Extract content from anonymized file for enhanced search
+     * Returns extracted content as text
+     */
+    try {
+        const ContentExtractor = require('./contentExtractorController');
+        const extractedContent = ContentExtractor.extractSpreadsheetContent(
+            workbook,
+            datasetTitle
+        );
+        return extractedContent;
+    } catch (error) {
+        console.error('Error extracting content:', error);
+        return ""; // Return empty string on error, don't fail the upload
     }
 };
 
