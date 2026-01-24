@@ -104,19 +104,7 @@ def anonymize_pdf(
             # redactor.redact returns a new PIL Image
             redacted_image = redactor.redact(image, fill="black")
 
-            # Convert PIL image to bytes for img2pdf
-            # We need to save it to a temporary buffer or file?
-            # img2pdf mostly works with files or raw bytes.
-            # Let's save to a temporary file path to be safe and compatible
-            # with img2pdf
-
-            # Actually, img2pdf can take a list of PIL images if we convert
-            # them?
-            # No, img2pdf library documentation says it takes filenames or
-            # file-like objects.
-            # However, passing PIL objects directly isn't supported by standard
-            # img2pdf.
-            # We need to save them or convert to bytes.
+            # img2pdf requires binary data or file paths; it does not accept PIL Image objects directly.
 
             temp_img_path = f"{output_path}_temp_page_{i}.jpg"
             redacted_image.save(temp_img_path, format="JPEG")
