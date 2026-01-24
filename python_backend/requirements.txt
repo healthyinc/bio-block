@@ -16,3 +16,14 @@ presidio-image-redactor
 
 # DICOM file support for medical image preview
 pydicom
+
+# PDF Support
+pdf2image
+img2pdf
+reportlab
+
+# Dev/Test
+pytest
+black
+isort
+flake8
