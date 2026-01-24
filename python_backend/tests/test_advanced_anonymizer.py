@@ -11,7 +11,11 @@ from reportlab.pdfgen import canvas
 # Add parent directory to path to import advanced_anonymizer
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from advanced_anonymizer import anonymize_dicom, anonymize_pdf  # noqa: E402
+from advanced_anonymizer import (  # noqa: E402
+    anonymize_dicom,
+    anonymize_pdf,
+    generate_hash,
+)
 
 # Dynamic path resolution config
 # 1. Environment variables
@@ -90,8 +94,15 @@ def test_dicom_anonymization(test_dcm_path, tmp_path):
     assert os.path.exists(output_path)
 
     ds = pydicom.dcmread(str(output_path))
+    # PatientName should be ANONYMIZED
     assert ds.PatientName == "ANONYMIZED"
-    assert ds.PatientID == "ANONYMIZED"
+
+    # PatientID should be hashed
+    # Original ID in fixture is "123456"
+    expected_hash = generate_hash("123456")
+    assert ds.PatientID == expected_hash
+    assert len(ds.PatientID) == 16
+
     assert ds.PatientBirthDate == "ANONYMIZED"
 
 

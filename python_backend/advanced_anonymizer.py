@@ -1,3 +1,4 @@
+import hashlib
 import os
 from typing import Optional
 
@@ -7,13 +8,27 @@ from pdf2image import convert_from_path
 from presidio_image_redactor import ImageRedactorEngine
 
 
+def generate_hash(identifiers: str) -> str:
+    """
+    Generate a SHA-256 hash of the identifiers.
+
+    Args:
+        identifiers (str): The string to hash (e.g., Patient ID).
+
+    Returns:
+        str: The first 16 characters of the hexadecimal hash digest.
+    """
+    return hashlib.sha256(identifiers.encode("utf-8")).hexdigest()[:16]
+
+
 def anonymize_dicom(input_path: str, output_path: str) -> None:
     """
     Anonymize a DICOM file by redacting patient information.
 
-    This function reads a DICOM file, replaces sensitive patient attributes
-    (PatientName, PatientID, PatientBirthDate) with 'ANONYMIZED', and saves
-    the modified file to the specified output path.
+    This function reads a DICOM file, replaces sensitive patient attributes.
+    PatientID is pseudonymized using SHA-256 hashing.
+    PatientName is removed entirely.
+    PatientBirthDate is replaced with 'ANONYMIZED'.
 
     Args:
         input_path (str): The path to the input DICOM file.
@@ -26,11 +41,15 @@ def anonymize_dicom(input_path: str, output_path: str) -> None:
     try:
         ds = pydicom.dcmread(input_path)
 
-        # Redact sensitive fields if they exist
+        # Pseudonymize PatientID (maintain linkage)
+        if "PatientID" in ds and ds.PatientID:
+            ds.PatientID = generate_hash(ds.PatientID)
+
+        # Remove PatientName entirely (redact)
         if "PatientName" in ds:
             ds.PatientName = "ANONYMIZED"
-        if "PatientID" in ds:
-            ds.PatientID = "ANONYMIZED"
+
+        # Redact BirthDate
         if "PatientBirthDate" in ds:
             ds.PatientBirthDate = "ANONYMIZED"
 
