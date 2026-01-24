@@ -4,7 +4,6 @@ from typing import Optional
 import img2pdf
 import pydicom
 from pdf2image import convert_from_path
-from PIL import Image
 from presidio_image_redactor import ImageRedactorEngine
 
 
@@ -18,7 +17,8 @@ def anonymize_dicom(input_path: str, output_path: str) -> None:
 
     Args:
         input_path (str): The path to the input DICOM file.
-        output_path (str): The path where the anonymized DICOM file will be saved.
+        output_path (str): The path where the anonymized DICOM file will be
+                           saved.
 
     Returns:
         None
@@ -46,17 +46,19 @@ def anonymize_pdf(
     input_path: str, output_path: str, poppler_path: Optional[str] = None
 ) -> None:
     """
-    Anonymize a PDF file by converting it to images, redacting PII, and rebuilding the PDF.
+    Anonymize a PDF file by converting it to images, redacting PII, and
+    rebuilding the PDF.
 
     This function uses:
     1. pdf2image to convert the PDF pages into images.
-    2. presidio-image-redactor to detect and redact Personal Identifiable Information (PII)
-       from the images.
+    2. presidio-image-redactor to detect and redact Personal Identifiable
+       Information (PII) from the images.
     3. img2pdf to convert the redacted images back into a single PDF file.
 
     Args:
         input_path (str): The path to the input PDF file.
-        output_path (str): The path where the anonymized PDF file will be saved.
+        output_path (str): The path where the anonymized PDF file will be
+                           saved.
         poppler_path (Optional[str]): The path to the Poppler binary directory.
                                       Defaults to None.
 
@@ -71,8 +73,9 @@ def anonymize_pdf(
         redactor = ImageRedactorEngine()
         redacted_image_paths = []
 
-        # Temporary list to keep track of images to cleanup (optional, or rely on tempfile)
-        # For simplicity in this script, we'll save to a temp pattern or handle in memory if possible.
+        # Temp list for image cleanup (optional, or rely on tempfile)
+        # For simplicity in this script, we'll save to a temp pattern or handle
+        # in memory if possible.
         # img2pdf accepts bytes or file paths. Presidio returns a PIL Image.
 
         redacted_images_bytes = []
@@ -85,11 +88,15 @@ def anonymize_pdf(
             # Convert PIL image to bytes for img2pdf
             # We need to save it to a temporary buffer or file?
             # img2pdf mostly works with files or raw bytes.
-            # Let's save to a temporary file path to be safe and compatible with img2pdf
+            # Let's save to a temporary file path to be safe and compatible
+            # with img2pdf
 
-            # Actually, img2pdf can take a list of PIL images if we convert them?
-            # No, img2pdf library documentation says it takes filenames or file-like objects.
-            # However, passing PIL objects directly isn't supported by standard img2pdf.
+            # Actually, img2pdf can take a list of PIL images if we convert
+            # them?
+            # No, img2pdf library documentation says it takes filenames or
+            # file-like objects.
+            # However, passing PIL objects directly isn't supported by standard
+            # img2pdf.
             # We need to save them or convert to bytes.
 
             temp_img_path = f"{output_path}_temp_page_{i}.jpg"
@@ -110,7 +117,7 @@ def anonymize_pdf(
     except Exception as e:
         print(f"Error anonymizing PDF file {input_path}: {e}")
         # Build cleanup in case of error
-        if "redacted_image_paths" in locals():
+        if 'redacted_image_paths' in locals():
             for path in redacted_image_paths:
                 if os.path.exists(path):
                     os.remove(path)
