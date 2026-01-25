@@ -22,8 +22,12 @@ contract DocumentStorage {
     function withdrawEarnings() public {
         uint256 amount = earnings[msg.sender];
         require(amount > 0, "No earnings");
+
+        // Checks-Effects-Interactions
         earnings[msg.sender] = 0;
-        payable(msg.sender).transfer(amount);
+
+        (bool sent, ) = payable(msg.sender).call{value: amount}("");
+        require(sent, "Transfer failed");
     }
     
     function getDocuments(address user) public view returns (string[] memory) {
