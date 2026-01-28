@@ -15,6 +15,9 @@ from PIL import Image
 import io
 import shutil
 import os
+import json
+from typing import List, Tuple
+import re
 
 # Preview factory imports
 from services.preview.factory import PreviewFactory
@@ -121,6 +124,19 @@ class SearchRequest(BaseModel):
 class FilterRequest(BaseModel):
     filters: Dict[str, Any]
     n_results: Optional[int] = 10
+    
+# Add new request model for enhanced storage
+class StoreWithContentRequest(BaseModel):
+    summary: str
+    dataset_title: str
+    cid: str
+    metadata: Optional[Dict[str, Any]] = {}
+    extracted_content: Optional[str] = ""  # Actual file content
+    file_type: Optional[str] = "spreadsheet"  # spreadsheet, image, etc.
+
+# Create separate collection for content-based search
+content_collection = chroma_client.get_or_create_collection(name="document_content")
+metadata_collection = chroma_client.get_or_create_collection(name="document_metadata")
 
 def generate_id() -> str:
     timestamp = int(time.time() * 1000)
@@ -303,40 +319,145 @@ async def anonymize_image_presidio_only(file: UploadFile = File(...)):
 
 
 @app.post("/store")
-async def store_data(request: StoreRequest):
+async def store_data_enhanced(request: StoreWithContentRequest):
+    """
+    Enhanced storage with both metadata and content vectors
+    """
     try:
-        print(f"Received request: {request}")  
+        print(f"Received enhanced storage request: {request.dataset_title}")
         doc_id = generate_id()
-        print(f"Generated ID: {doc_id}") 
-        
+         
+        # Prepare metadata document
+        combined_metadata = f"Dataset Title: {request.dataset_title}\n{request.summary}"
+        disease_tags = request.metadata.get("disease_tags", "")
      
-        combined_document = f"Dataset Title: {request.dataset_title}\n{request.summary}"
-        
-        disease_tags = request.metadata.get("disease_tags")
         if disease_tags:
-            combined_document += f"\nDisease Tags: {disease_tags}"
+            combined_metadata += f"\nDisease Tags: {disease_tags}"
         
         metadata = {
             "cid": request.cid,
             "dataset_title": request.dataset_title,
+            "file_type": request.file_type,
             **request.metadata
         }
-        print(f"Metadata: {metadata}") 
-        print(f"Combined document: {combined_document}")
-        
-        collection.add(
+        metadata_collection.add(
             ids=[doc_id],
-            documents=[combined_document],
+            documents=[combined_metadata],
             metadatas=[metadata]
         )
         
-        return {"message": "Stored successfully", "cid": request.cid}
+     # Store content if available
+        if request.extracted_content and request.extracted_content.strip():
+            # Chunk content for better vectorization
+            extractor = ContentExtractor()
+            content_chunks = extractor.chunk_content(request.extracted_content)
+            
+            # Add each chunk with reference to original document
+            chunk_ids = []
+            chunk_docs = []
+            chunk_metas = []
+            
+            for chunk_idx, chunk in enumerate(content_chunks):
+                chunk_id = f"{doc_id}_chunk_{chunk_idx}"
+                chunk_ids.append(chunk_id)
+                chunk_docs.append(chunk)
+                chunk_metas.append({
+                    **metadata,
+                    "chunk_index": chunk_idx,
+                    "total_chunks": len(content_chunks),
+                    "parent_doc_id": doc_id
+                })
+            
+            content_collection.add(
+                ids=chunk_ids,
+                documents=chunk_docs,
+                metadatas=chunk_metas
+            )
+            
+            print(f"Stored {len(content_chunks)} content chunks for document {doc_id}")
+        
+        return {
+            "message": "Stored successfully with enhanced content indexing",
+            "cid": request.cid,
+            "doc_id": doc_id,
+            "content_chunks": len(request.extracted_content.split()) if request.extracted_content else 0
+        }   
         
     except Exception as e:
-        print(f"Error in store_data: {str(e)}") 
-        print(f"Error type: {type(e)}") 
+        print(f"Error in enhanced storage: {str(e)}")
+
         import traceback
         traceback.print_exc()  
+        raise HTTPException(status_code=500, detail=f"Failed to store data: {str(e)}")
+
+@app.post("/store_enhanced")
+async def store_data_enhanced(request: StoreWithContentRequest):
+    """
+    Enhanced storage with both metadata and content vectors
+    """
+    try:
+        print(f"Received enhanced storage request: {request.dataset_title}")
+        doc_id = generate_id()
+        
+        # Prepare metadata document
+        combined_metadata = f"Dataset Title: {request.dataset_title}\n{request.summary}"
+        disease_tags = request.metadata.get("disease_tags", "")
+        if disease_tags:
+            combined_metadata += f"\nDisease Tags: {disease_tags}"
+        
+        metadata = {
+            "cid": request.cid,
+            "dataset_title": request.dataset_title,
+            "file_type": request.file_type,
+            **request.metadata
+        }
+        
+        # Store in metadata collection
+        metadata_collection.add(
+            ids=[doc_id],
+            documents=[combined_metadata],
+            metadatas=[metadata]
+        )
+        
+        # Store content if available
+        if request.extracted_content and request.extracted_content.strip():
+            extractor = ContentExtractor()
+            content_chunks = extractor.chunk_content(request.extracted_content)
+            
+            chunk_ids = []
+            chunk_docs = []
+            chunk_metas = []
+            
+            for chunk_idx, chunk in enumerate(content_chunks):
+                chunk_id = f"{doc_id}_chunk_{chunk_idx}"
+                chunk_ids.append(chunk_id)
+                chunk_docs.append(chunk)
+                chunk_metas.append({
+                    **metadata,
+                    "chunk_index": chunk_idx,
+                    "total_chunks": len(content_chunks),
+                    "parent_doc_id": doc_id
+                })
+            
+            content_collection.add(
+                ids=chunk_ids,
+                documents=chunk_docs,
+                metadatas=chunk_metas
+            )
+            
+            print(f"Stored {len(content_chunks)} content chunks for document {doc_id}")
+        
+        return {
+            "message": "Stored successfully with enhanced content indexing",
+            "cid": request.cid,
+            "doc_id": doc_id,
+            "content_chunks": len(request.extracted_content.split()) if request.extracted_content else 0
+        }
+        
+    except Exception as e:
+        print(f"Error in enhanced storage: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to store data: {str(e)}")
 
 @app.post("/search")
@@ -443,7 +564,7 @@ async def search_with_filter(request: Dict[str, Any]):
         if filters:
          
             if len(filters) > 1:
-                and_conditions = [{key: value} for key, value in filters.items()]
+                and_conditions = [{key: value} for key, value in filters.items() if value]
                 search_kwargs["where"] = {"$and": and_conditions}
             else:
                 search_kwargs["where"] = filters
@@ -553,9 +674,253 @@ async def preview_dicom(file: UploadFile = File(...)):
             status_code=500,
             detail=f"Failed to convert DICOM to image: {str(e)}"
         )
+@app.post("/search_enhanced")
+async def search_data_enhanced(request: Dict[str, Any]):
+    """
+    Enhanced search combining content and metadata with intelligent ranking
+    
+    Request body:
+    {
+        "query": "search query",
+        "content_weight": 0.6,  # Weight for content search (default 0.6)
+        "metadata_weight": 0.4,  # Weight for metadata search (default 0.4)
+        "n_results": 5,
+        "filters": {} (optional)
+    }
+    """
+    try:
+        query = request.get("query")
+        content_weight = float(request.get("content_weight", 0.6))
+        metadata_weight = float(request.get("metadata_weight", 0.4))
+        n_results = request.get("n_results", 5)
+        filters = request.get("filters", {})
+        
+        if not query:
+            raise HTTPException(status_code=400, detail="Query is required")
+        
+        # Normalize weights
+        total_weight = content_weight + metadata_weight
+        content_weight = content_weight / total_weight
+        metadata_weight = metadata_weight / total_weight
+        
+        # Search in content collection
+        content_results = {}
+        try:
+            content_search = content_collection.query(
+                query_texts=[query],
+                n_results=n_results * 2,  # Get more results to account for chunking
+                include=["documents", "metadatas", "distances"]
+            )
+            
+            # Group chunks by parent document
+            seen_docs = set()
+            for i, doc_id in enumerate(content_search["ids"][0]):
+                metadata = content_search["metadatas"][0][i]
+                parent_id = metadata.get("parent_doc_id", doc_id)
+                
+                if parent_id not in seen_docs:
+                    distance = content_search["distances"][0][i]
+                    score = 1 / (1 + distance)
+                    content_results[parent_id] = {
+                        "score": score,
+                        "distance": distance,
+                        "source": "content",
+                        "metadata": metadata
+                    }
+                    seen_docs.add(parent_id)
+        except Exception as e:
+            print(f"Content search error: {e}")
+            content_results = {}
+        
+        # Search in metadata collection
+        metadata_results = {}
+        search_kwargs = {
+            "query_texts": [query],
+            "n_results": n_results,
+            "include": ["documents", "metadatas", "distances"]
+        }
+        
+        if filters and any(filters.values()):
+            if len(filters) > 1:
+                and_conditions = [{key: value} for key, value in filters.items() if value]
+                search_kwargs["where"] = {"$and": and_conditions}
+            else:
+                search_kwargs["where"] = filters
+        
+        metadata_search = metadata_collection.query(**search_kwargs)
+        
+        for i, doc_id in enumerate(metadata_search["ids"][0]):
+            distance = metadata_search["distances"][0][i]
+            score = 1 / (1 + distance)
+            metadata_results[doc_id] = {
+                "score": score,
+                "distance": distance,
+                "source": "metadata",
+                "metadata": metadata_search["metadatas"][0][i],
+                "summary": metadata_search["documents"][0][i]
+            }
+        
+        # Combine results with weighted scoring
+        combined_results = {}
+        
+        for doc_id, content_data in content_results.items():
+            if doc_id not in combined_results:
+                combined_results[doc_id] = {
+                    "content_score": 0,
+                    "metadata_score": 0,
+                    "metadata": content_data["metadata"]
+                }
+            combined_results[doc_id]["content_score"] = content_data["score"]
+        
+        for doc_id, metadata_data in metadata_results.items():
+            if doc_id not in combined_results:
+                combined_results[doc_id] = {
+                    "content_score": 0,
+                    "metadata_score": 0,
+                    "metadata": metadata_data["metadata"],
+                    "summary": metadata_data["summary"]
+                }
+            else:
+                combined_results[doc_id]["summary"] = metadata_data["summary"]
+            combined_results[doc_id]["metadata_score"] = metadata_data["score"]
+        
+        # Calculate final scores and sort
+        results = []
+        for doc_id, scores in combined_results.items():
+            final_score = (scores["content_score"] * content_weight + 
+                          scores["metadata_score"] * metadata_weight)
+            results.append({
+                "id": doc_id,
+                "cid": scores["metadata"].get("cid", ""),
+                "score": final_score,
+                "content_score": scores["content_score"],
+                "metadata_score": scores["metadata_score"],
+                "summary": scores.get("summary", ""),
+                "metadata": scores["metadata"]
+            })
+        
+        # Sort by final score
+        results.sort(key=lambda x: x["score"], reverse=True)
+        results = results[:n_results]
+        
+        return {
+            "results": results,
+            "search_config": {
+                "content_weight": content_weight,
+                "metadata_weight": metadata_weight
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Enhanced search error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Enhanced search failed: {str(e)}")
 
+# Content Extraction Module for Enhanced Retrieval
+class ContentExtractor:
+    """
+    Extracts and processes content from various file formats for semantic search
+    """
+    
+    @staticmethod
+    def extract_spreadsheet_content(data: List[List[str]], title: str = "") -> str:
+        """
+        Extract meaningful content from spreadsheet data
+        - data: 2D array of spreadsheet cells
+        - title: dataset title for context
+        Returns: formatted text for vectorization
+        """
+        if not data or not data[0]:
+            return ""
+        
+        headers = data[0]
+        content_parts = []
+        
+        # Add title context
+        if title:
+            content_parts.append(f"Dataset: {title}")
+        
+        # Add headers as schema info
+        content_parts.append(f"Columns: {', '.join(str(h) for h in headers if h)}")
+        
+        # Add sample data patterns (first 10 rows for content understanding)
+        sample_rows = data[1:min(11, len(data))]
+        
+        for row_idx, row in enumerate(sample_rows):
+            row_content = []
+            for col_idx, cell in enumerate(row):
+                if cell and col_idx < len(headers):
+                    header = headers[col_idx]
+                    # Skip anonymized IDs
+                    if not (isinstance(cell, str) and cell.startswith('WID_')):
+                        row_content.append(f"{header}: {cell}")
+            
+            if row_content:
+                content_parts.append(f"Row {row_idx + 1}: {'; '.join(row_content)}")
+        
+        return "\n".join(content_parts)
+    
+    @staticmethod
+    def extract_csv_content(csv_text: str, title: str = "") -> str:
+        """
+        Extract content from CSV text
+        """
+        lines = csv_text.strip().split('\n')
+        if not lines:
+            return ""
+        
+        headers = lines[0].split(',')
+        content_parts = []
+        
+        if title:
+            content_parts.append(f"Dataset: {title}")
+        
+        content_parts.append(f"Columns: {', '.join(headers)}")
+        
+        # Process sample rows
+        for line_idx, line in enumerate(lines[1:min(11, len(lines))]):
+            values = line.split(',')
+            row_content = []
+            for col_idx, value in enumerate(values):
+                if value.strip() and col_idx < len(headers):
+                    if not value.startswith('WID_'):
+                        row_content.append(f"{headers[col_idx]}: {value}")
+            
+            if row_content:
+                content_parts.append(f"Row {line_idx + 1}: {'; '.join(row_content)}")
+        
+        return "\n".join(content_parts)
+    
+    @staticmethod
+    def chunk_content(content: str, chunk_size: int = 500) -> List[str]:
+        """
+        Split large content into chunks for better vectorization
+        Returns list of content chunks
+        """
+        if len(content) <= chunk_size:
+            return [content]
+        
+        chunks = []
+        sentences = re.split(r'(?<=[.!?])\s+', content)
+        
+        current_chunk = ""
+        for sentence in sentences:
+            if len(current_chunk) + len(sentence) <= chunk_size:
+                current_chunk += " " + sentence
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = sentence
+        
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+        
+        return chunks if chunks else [content]
+    
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=3002)
 
-   
