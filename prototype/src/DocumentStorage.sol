@@ -23,7 +23,9 @@ contract DocumentStorage {
         uint256 amount = earnings[msg.sender];
         require(amount > 0, "No earnings");
         earnings[msg.sender] = 0;
-        payable(msg.sender).transfer(amount);
+         // Interaction after state update
+        (bool sent, ) = payable(msg.sender).call{value: amount}("");
+        require(sent, "Transfer failed");
     }
     
     function getDocuments(address user) public view returns (string[] memory) {
