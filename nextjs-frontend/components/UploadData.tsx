@@ -373,7 +373,7 @@ export default function UploadData({
     } else if (file.name.match(/\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i)) {
       backendUrl =
         process.env.NEXT_PUBLIC_JS_BACKEND_URL || 'http://localhost:3001';
-      endpoint = '/anonymize';
+      endpoint = '/api/anonymize';
     } else {
       throw new Error(
         'File type not supported for anonymization. Only Excel and image files are supported.'
@@ -445,7 +445,7 @@ export default function UploadData({
     const backendUrl =
       process.env.NEXT_PUBLIC_JS_BACKEND_URL || 'http://localhost:3001';
 
-    const response = await fetch(`${backendUrl}/ipfs/upload`, {
+    const response = await fetch(`${backendUrl}/api/ipfs/upload`, {
       method: 'POST',
       body: formData,
     });

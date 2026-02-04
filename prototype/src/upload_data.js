@@ -326,7 +326,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       endpoint = '/anonymize_image';
     } else if (file.name.match(/\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i)) {
       backendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
-      endpoint = '/anonymize';
+      endpoint = '/api/anonymize';
     } else {
       throw new Error('File type not supported for anonymization. Only Excel (.xlsx, .xls, .csv, .ods, .tsv, .xlsm, .xlsb) and image files (.jpg, .jpeg, .png) are supported.');
     }
@@ -374,7 +374,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
 
     const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
     
-    const response = await fetch(`${backendUrl}/ipfs/upload`, {
+    const response = await fetch(`${backendUrl}/api/ipfs/upload`, {
       method: 'POST',
       body: formData
     });
