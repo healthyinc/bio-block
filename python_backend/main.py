@@ -94,7 +94,10 @@ class UpdateRequest(BaseModel):
     summary: Optional[str] = None
     dataset_title: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
-    owner_address: str  # Ethereum address for ownership verification
+    owner_address: str
+
+class DeleteRequest(BaseModel):
+    owner_address: str
 
 def generate_id() -> str:
     timestamp = int(time.time() * 1000)
@@ -518,7 +521,7 @@ async def update_document(doc_id: str, request: UpdateRequest):
         raise HTTPException(status_code=500, detail=f"Failed to update document: {str(e)}")
 
 @app.delete("/documents/{doc_id}")
-async def delete_document(doc_id: str, owner_address: str):
+async def delete_document(doc_id: str, request: DeleteRequest):
     try:
         existing = collection.get(
             ids=[doc_id],
@@ -529,7 +532,7 @@ async def delete_document(doc_id: str, owner_address: str):
             raise HTTPException(status_code=404, detail="Document not found")
         
         stored_owner = existing["metadatas"][0].get("owner_address", "")
-        if stored_owner.lower() != owner_address.lower():
+        if stored_owner.lower() != request.owner_address.lower():
             raise HTTPException(status_code=403, detail="Unauthorized: not document owner")
         
         collection.delete(ids=[doc_id])
