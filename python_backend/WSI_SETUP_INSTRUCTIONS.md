@@ -15,6 +15,7 @@ conda install -c conda-forge openslide-python
 ```
 
 This command installs:
+
 - The native libopenslide library (`.dll` on Windows, `.so` on Linux, `.dylib` on macOS)
 - The Python bindings (openslide-python)
 - All necessary dependencies
@@ -28,12 +29,14 @@ This command installs:
 On Linux or macOS, you can use pip with system packages:
 
 **Linux (Ubuntu/Debian):**
+
 ```bash
 sudo apt-get install openslide-tools python3-openslide
 pip install openslide-python
 ```
 
 **macOS:**
+
 ```bash
 brew install openslide
 pip install openslide-python
@@ -62,6 +65,7 @@ The WSI generator automatically:
 ## Supported File Formats
 
 The WsiPreviewGenerator supports these formats:
+
 - `.svs` - Aperio ScanScope
 - `.ndpi` - Hamamatsu NanoZoomer
 - `.scn` - Leica ScanScope
@@ -94,6 +98,7 @@ Make sure existing generators still work:
 ## Backward Compatibility
 
 ✅ **All existing functionality is preserved:**
+
 - Image preview (JPG/PNG) works exactly as before
 - DICOM preview works exactly as before
 - API endpoints remain unchanged
