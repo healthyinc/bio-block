@@ -7,6 +7,8 @@ contract DocumentStorage {
     event MetadataUpdated(address indexed owner, string ipfsHash, uint256 newPrice, string newMetadata);
     event DocumentPurchased(address indexed buyer, address indexed seller, string ipfsHash, uint256 amount);
 
+    event WithdrawalSuccess(address indexed user, uint256 amount);
+    
     mapping(address => string[]) private userDocuments;
     mapping(string => uint256) public documentPrices;
     mapping(string => string) public documentMetadata;
@@ -50,7 +52,10 @@ contract DocumentStorage {
         uint256 amount = earnings[msg.sender];
         require(amount > 0, "No earnings");
         earnings[msg.sender] = 0;
-        payable(msg.sender).transfer(amount);
+         // Interaction after state update
+        (bool sent, ) = payable(msg.sender).call{value: amount}("");
+        require(sent, "Transfer failed");
+        emit WithdrawalSuccess(msg.sender, amount);
     }
     
      function getMetadata(string memory ipfsHash) public view returns (string memory) {
