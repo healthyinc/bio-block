@@ -2,6 +2,8 @@
 pragma solidity ^0.8.0;
 
 contract DocumentStorage {
+    event WithdrawalSuccess(address indexed user, uint256 amount);
+    
     mapping(address => string[]) private userDocuments;
     mapping(string => uint256) public documentPrices;
     mapping(string => address) public documentOwners;
@@ -23,7 +25,10 @@ contract DocumentStorage {
         uint256 amount = earnings[msg.sender];
         require(amount > 0, "No earnings");
         earnings[msg.sender] = 0;
-        payable(msg.sender).transfer(amount);
+         // Interaction after state update
+        (bool sent, ) = payable(msg.sender).call{value: amount}("");
+        require(sent, "Transfer failed");
+        emit WithdrawalSuccess(msg.sender, amount);
     }
     
     function getDocuments(address user) public view returns (string[] memory) {
