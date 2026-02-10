@@ -5,7 +5,15 @@ export const metadata: Metadata = {
   title: "Bio-Block - Decentralized Medical Records",
   description:
     "Secure, encrypted, and decentralized medical record storage using blockchain and IPFS",
-  keywords: ["blockchain", "medical records", "IPFS", "encryption", "healthcare", "PHI", "decentralized"],
+  keywords: [
+    "blockchain",
+    "medical records",
+    "IPFS",
+    "encryption",
+    "healthcare",
+    "PHI",
+    "decentralized",
+  ],
   authors: [{ name: "Bio-Block Team" }],
   openGraph: {
     title: "Bio-Block - Secure Medical Records on Blockchain",
