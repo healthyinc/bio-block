@@ -16,11 +16,11 @@ describe("API Endpoints", function () {
 
   it("POST /api/anonymize should anonymize Excel file", async function () {
     // Using the test.xlsx file we created in the tests directory
-    // Note: ensure test.xlsx actually exists or mock it if possible, 
+    // Note: ensure test.xlsx actually exists or mock it if possible,
     // but for now we follow the existing pattern.
-    const path = require('path');
-    const fs = require('fs');
-    const testFilePath = path.join(__dirname, 'test.xlsx');
+    const path = require("path");
+    const fs = require("fs");
+    const testFilePath = path.join(__dirname, "test.xlsx");
 
     // Create a dummy file if it doesn't exist to prevent test failure
     if (!fs.existsSync(testFilePath)) {
