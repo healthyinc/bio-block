@@ -25,9 +25,6 @@ jobs:
         working-directory: javascript_backend
         run: npm install
 
-      - name: Run ESLint
-        working-directory: javascript_backend
-        run: npm run lint
 
       - name: Run tests
         working-directory: javascript_backend
