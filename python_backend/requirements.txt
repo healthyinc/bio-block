@@ -32,3 +32,4 @@ flake8
 #   conda install -c conda-forge openslide-python
 # This installs both the native libopenslide library and Python bindings
 openslide-python
+httpx

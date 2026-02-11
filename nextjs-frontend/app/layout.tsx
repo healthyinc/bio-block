@@ -1,6 +1,7 @@
 import "./globals.css";
+import { Metadata } from "next";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Bio-Block - Decentralized Medical Records",
   description:
     "Secure, encrypted, and decentralized medical record storage using blockchain and IPFS",
@@ -27,10 +28,14 @@ export const metadata = {
   },
 };
 
-export default function RootLayout({ children }) {
+interface RootLayoutProps {
+  children: React.ReactNode;
+}
+
+export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="m-0 p-0">{children}</body>
     </html>
   );
 }
