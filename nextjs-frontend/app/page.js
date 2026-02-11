@@ -1,7 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { Wallet, Search, Upload, User, ChevronDown, Shield, Database, Globe, Zap, BarChart3 } from "lucide-react";
+import {
+  Wallet,
+  Search,
+  Upload,
+  User,
+  ChevronDown,
+  Shield,
+  Database,
+  Globe,
+  Zap,
+  BarChart3,
+} from "lucide-react";
 import SearchData from "../components/SearchData";
 import UploadData from "../components/UploadData";
 import Dashboard from "../components/Dashboard";

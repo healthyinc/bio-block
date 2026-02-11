@@ -12,7 +12,7 @@ on:
       - "python_backend/**"
       - "prototype/**"
   schedule:
-    - cron: "0 0 * * 0"   # Weekly run (every Sunday at midnight)
+    - cron: "0 0 * * 0" # Weekly run (every Sunday at midnight)
 
 jobs:
   security_audit:
