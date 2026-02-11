@@ -2,14 +2,33 @@ fastapi
 uvicorn[standard]
 chromadb
 opencv-python
-pytesseract
 spacy
 https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
 numpy
 Pillow
 python-multipart
+pytesseract
 
 # Presidio libraries for advanced image anonymization
 presidio-analyzer
 presidio-anonymizer
 presidio-image-redactor
+
+# DICOM file support for medical image preview
+pydicom
+
+# PDF Support
+pdf2image
+img2pdf
+reportlab
+
+# Dev/Test
+pytest
+black
+isort
+flake8
+# WSI (Whole Slide Image) support for pathology images
+# Recommended: Install via conda for cross-platform support:
+#   conda install -c conda-forge openslide-python
+# This installs both the native libopenslide library and Python bindings
+openslide-python

@@ -1,0 +1,54 @@
+name: Security Audit
+
+on:
+  push:
+    paths:
+      - "javascript_backend/**"
+      - "python_backend/**"
+      - "prototype/**"
+  pull_request:
+    paths:
+      - "javascript_backend/**"
+      - "python_backend/**"
+      - "prototype/**"
+  schedule:
+    - cron: "0 0 * * 0" # Weekly run (every Sunday at midnight)
+
+jobs:
+  security_audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ---------- JavaScript backend audit ----------
+      - name: Install JS backend dependencies
+        working-directory: javascript_backend
+        run: npm install
+
+      - name: Run npm audit (JavaScript backend)
+        working-directory: javascript_backend
+        run: npm audit --audit-level=high
+
+      # ---------- Frontend audit ----------
+      - name: Install prototype dependencies
+        working-directory: prototype
+        run: npm install
+
+      - name: Run npm audit (Prototype)
+        working-directory: prototype
+        run: npm audit --audit-level=high
+
+      # ---------- Python backend audit ----------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Run pip-audit (Python backend)
+        working-directory: python_backend
+        run: pip-audit --strict

@@ -13,6 +13,22 @@ from pytesseract import Output
 import numpy as np
 from PIL import Image
 import io
+import shutil
+import os
+
+# Preview factory imports
+from services.preview.factory import PreviewFactory
+
+# DICOM imports
+try:
+    import pydicom
+    from pydicom.errors import InvalidDicomError
+    pydicom_available = True
+    print("pydicom library loaded successfully")
+except ImportError:
+    pydicom_available = False
+    print("Warning: pydicom library not found. DICOM preview will not work.")
+    print("Install with: pip install pydicom")
 
 # Presidio imports for advanced image anonymization
 try:
@@ -39,8 +55,32 @@ app.add_middleware(
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_or_create_collection(name="new_user_data")
 
-# Tesseract path for macOS (installed via Homebrew)
-pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+# 1. Cross-platform Tesseract detection
+tesseract_cmd = os.getenv('TESSERACT_CMD') or shutil.which('tesseract')
+
+if not tesseract_cmd:
+    common_paths = [
+        '/opt/homebrew/bin/tesseract',
+        '/usr/local/bin/tesseract',
+        '/usr/bin/tesseract',
+        r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+    ]
+    for path in common_paths:
+        if os.path.isfile(path):
+            tesseract_cmd = path
+            break
+
+tesseract_available = False
+if tesseract_cmd:
+    try:
+        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+        pytesseract.get_tesseract_version()
+        tesseract_available = True
+        print(f"Tesseract verified: {tesseract_cmd}")
+    except Exception:
+        print(f"Tesseract found at {tesseract_cmd} but failed to execute.")
+else:
+    print("Tesseract not found. Image anonymization will not work.")
 
 try:
     nlp = spacy.load("en_core_web_lg")  # Updated to use large model for better accuracy
@@ -67,14 +107,6 @@ if presidio_available:
         print(f"Warning: Failed to initialize Presidio engines: {str(e)}")
         presidio_available = False
 
-
-try:
-    pytesseract.get_tesseract_version()
-    tesseract_available = True
-except Exception:
-    print("Warning: Tesseract OCR not found. Image anonymization will not work.")
-    tesseract_available = False
-
 PHI_LABELS = {"PERSON", "ORG", "GPE", "DATE", "LOC", "FAC", "NORP"}
 
 class StoreRequest(BaseModel):
@@ -89,6 +121,15 @@ class SearchRequest(BaseModel):
 class FilterRequest(BaseModel):
     filters: Dict[str, Any]
     n_results: Optional[int] = 10
+
+class UpdateRequest(BaseModel):
+    summary: Optional[str] = None
+    dataset_title: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    owner_address: str
+
+class DeleteRequest(BaseModel):
+    owner_address: str
 
 def generate_id() -> str:
     timestamp = int(time.time() * 1000)
@@ -155,6 +196,7 @@ async def root():
             "/search": "Search documents", 
             "/filter": "Filter documents by metadata",
             "/search_with_filter": "Combined search and filter",
+            "/documents/{doc_id}": "GET: Retrieve document by ID, PUT: Update document metadata, DELETE: Remove document",
             "/anonymize_image": "Anonymize PHI in images (Presidio + Legacy fallback)",
             "/anonymize_image_presidio": "Anonymize PHI in images (Presidio only, advanced)"
         },
@@ -439,9 +481,187 @@ async def search_with_filter(request: Dict[str, Any]):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to search with filter: {str(e)}")
+    
+@app.get("/documents/{doc_id}")
+async def get_document(doc_id: str):
+    try:
+        result = collection.get(
+            ids=[doc_id],
+            include=["documents", "metadatas"]
+        )
+        
+        if not result["ids"]:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        return {
+            "id": result["ids"][0],
+            "cid": result["metadatas"][0].get("cid", ""),
+            "summary": result["documents"][0],
+            "metadata": result["metadatas"][0]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get document: {str(e)}")
+
+@app.put("/documents/{doc_id}")
+async def update_document(doc_id: str, request: UpdateRequest):
+    try:
+        existing = collection.get(
+            ids=[doc_id],
+            include=["documents", "metadatas"]
+        )
+        
+        if not existing["ids"]:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        old_metadata = existing["metadatas"][0]
+        stored_owner = old_metadata.get("owner_address", "")
+        if stored_owner.lower() != request.owner_address.lower():
+            raise HTTPException(status_code=403, detail="Unauthorized: not document owner")
+        
+        new_dataset_title = request.dataset_title if request.dataset_title else old_metadata.get("dataset_title", "")
+        new_summary = request.summary if request.summary else existing["documents"][0]
+        
+        updated_metadata = {**old_metadata}
+        if request.metadata:
+            updated_metadata.update(request.metadata)
+        updated_metadata["dataset_title"] = new_dataset_title
+        updated_metadata["owner_address"] = request.owner_address
+        
+        new_doc_id = generate_id()
+        combined_document = f"Dataset Title: {new_dataset_title}\n{new_summary}"
+        
+        disease_tags = updated_metadata.get("disease_tags")
+        if disease_tags:
+            combined_document += f"\nDisease Tags: {disease_tags}"
+        
+        collection.add(
+            ids=[new_doc_id],
+            documents=[combined_document],
+            metadatas=[updated_metadata]
+        )
+        
+        print(f"Document updated: {doc_id} -> {new_doc_id}")
+        
+        return {"message": "Document updated", "old_id": doc_id, "new_id": new_doc_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update document: {str(e)}")
+
+@app.delete("/documents/{doc_id}")
+async def delete_document(doc_id: str, request: DeleteRequest):
+    try:
+        existing = collection.get(
+            ids=[doc_id],
+            include=["metadatas"]
+        )
+        
+        if not existing["ids"]:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        stored_owner = existing["metadatas"][0].get("owner_address", "")
+        if stored_owner.lower() != request.owner_address.lower():
+            raise HTTPException(status_code=403, detail="Unauthorized: not document owner")
+        
+        collection.delete(ids=[doc_id])
+        
+        print(f"Document {doc_id} deleted")
+        
+        return {"message": "Document deleted", "deleted_id": doc_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")
 
 
+# --- START: SIMPLE PREVIEW ENDPOINT ---
+
+@app.post("//simple_preview") # Catches the bad URL
+@app.post("/simple_preview", include_in_schema=False)
+async def simple_preview(file: UploadFile = File(...)):
+    """
+    A simple endpoint that just returns the uploaded image
+    without any anonymization. This is to test the pipeline.
+    
+    Now uses the PreviewFactory to support multiple file types including DICOM.
+    Maintains backward compatibility with existing frontend.
+    """
+    print("✅ --- simple_preview endpoint was called! --- ✅")
+    print(f"File received: {file.filename}, Content-Type: {file.content_type}")
+
+    try:
+        # Read the file contents
+        file_contents = await file.read()
+
+        # Use factory to get the appropriate generator
+        generator = PreviewFactory.create_generator(
+            filename=file.filename,
+            content_type=file.content_type
+        )
+
+        # Generate preview using the factory-selected generator
+        response, media_type = generator.generate_preview(
+            file_contents=file_contents,
+            filename=file.filename,
+            content_type=file.content_type
+        )
+
+        print(f"Sending response with media_type: {media_type}")
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate preview: {str(e)}"
+        )
+
+# --- END: SIMPLE PREVIEW ENDPOINT ---
+
+@app.post("/preview_dicom", include_in_schema=False)
+async def preview_dicom(file: UploadFile = File(...)):
+    """
+    Convert DICOM file to PNG/JPEG image for preview.
+    Works on both Mac and Windows.
+    
+    Now uses the PreviewFactory for consistency.
+    Maintains backward compatibility with existing frontend.
+    """
+    try:
+        # Read the file contents
+        file_contents = await file.read()
+
+        # Use factory to get the DICOM generator (factory will validate file type)
+        generator = PreviewFactory.create_generator(
+            filename=file.filename,
+            content_type=file.content_type
+        )
+
+        # Generate preview using the factory-selected generator
+        response, media_type = generator.generate_preview(
+            file_contents=file_contents,
+            filename=file.filename,
+            content_type=file.content_type
+        )
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to convert DICOM to image: {str(e)}"
+        )
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=3002)
+
+   
