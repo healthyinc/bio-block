@@ -64,6 +64,13 @@ const phiKeywords = [
   "name",
 ];
 
+const phiKeywordsLower = phiKeywords.map((keyword) => keyword.toLowerCase());
+const phiKeywordsNormalized = phiKeywordsLower.map((keyword) => keyword.replace(/\s+/g, ""));
+
+function normalizeHeaderValue(value) {
+  return value.toLowerCase().replace(/\s+/g, "");
+}
+
 function generateAnonymizedId(input, index) {
   const hash = crypto.createHash("sha256").update(input).digest("hex");
   const shortHash = hash.substring(0, 8);
@@ -112,147 +119,123 @@ const anonymizeFile = async (req, res) => {
           "Failed to parse spreadsheet file. Please ensure the file is not corrupted and is in a supported format.",
       });
     }
-    const allIdentifiers = new Set();
     const sheetColumnRefs = {};
+    const sheetDataByName = {};
+    const startTime = Date.now();
 
     workbook.SheetNames.forEach((sheetName) => {
       const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-      if (jsonData.length === 0) return;
-
-      const headers = jsonData[0] || [];
-      let patientIdCol = null;
-
-      headers.forEach((header, index) => {
-        if (header && typeof header === "string") {
-          const headerLower = header.toLowerCase();
-          if (headerLower.includes("patient") && headerLower.includes("id")) {
-            patientIdCol = index;
-          }
-        }
-      });
-
-      if (patientIdCol !== null) {
-        for (let i = 1; i < jsonData.length; i++) {
-          const row = jsonData[i];
-          if (row && row[patientIdCol]) {
-            const patientId = String(row[patientIdCol]).toLowerCase().trim();
-            allIdentifiers.add(patientId);
-          }
-        }
-        sheetColumnRefs[sheetName] = { patientIdCol };
-      } else {
-        for (let i = 1; i < jsonData.length; i++) {
-          const row = jsonData[i];
-          if (row && row.some((cell) => cell !== undefined && cell !== null && cell !== "")) {
-            const uuid = generateUUID();
-            allIdentifiers.add(uuid);
-          }
-        }
-        sheetColumnRefs[sheetName] = { useUUID: true };
-      }
-    });
-
-    const sortedIdentifiers = Array.from(allIdentifiers).sort();
-    const identifierToId = {};
-
-    // Handle all 4 cases:
-    // 1. Personal + Patient ID exists: Hash each patient ID individually
-    // 2. Personal + No Patient ID: Use wallet address for all rows
-    // 3. Institution + Patient ID exists: Hash each patient ID individually
-    // 4. Institution + No Patient ID: Use UUID for each row
-
-    sortedIdentifiers.forEach((identifier, index) => {
-      identifierToId[identifier] = generateAnonymizedId(identifier, index + 1);
-    });
-
-    const cleanedWorkbook = XLSX.utils.book_new();
-
-    workbook.SheetNames.forEach((sheetName) => {
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false });
+      sheetDataByName[sheetName] = jsonData;
 
       if (jsonData.length === 0) {
-        XLSX.utils.book_append_sheet(cleanedWorkbook, worksheet, sheetName);
-        return;
+      sheetColumnRefs[sheetName] = {};
+      return;
+    }
+
+    const headers = jsonData[0] || [];
+    let patientIdCol = null;
+
+    for (let index = 0; index < headers.length; index++) {
+     const header = headers[index];
+     if (header && typeof header === "string") {
+      const headerLower = header.toLowerCase();
+      if (headerLower.includes("patient") && headerLower.includes("id")) {
+        patientIdCol = index;
+        break;
       }
+    }
+  }
 
-      const headers = jsonData[0] || [];
-      const cleanedData = jsonData.map((row) => [...row]);
+  if (patientIdCol !== null) {
+    sheetColumnRefs[sheetName] = { patientIdCol };
+  } else {
+    sheetColumnRefs[sheetName] = { useUUID: true };
+  }
+});
 
-      if (sheetColumnRefs[sheetName]) {
-        const sheetRefs = sheetColumnRefs[sheetName];
+const cleanedWorkbook = XLSX.utils.book_new();
+const cleanedSheetData = {};
 
-        const columnsToMask = [];
-        headers.forEach((header, index) => {
-          if (header && typeof header === "string") {
-            const headerLower = header.toLowerCase();
-            const isPatientIdColumn = index === sheetRefs.patientIdCol;
-            const isPhiColumn = phiKeywords.some((keyword) => {
-              return (
-                headerLower.includes(keyword) ||
-                headerLower.replace(/\s+/g, "").includes(keyword.replace(/\s+/g, ""))
-              );
-            });
+    workbook.SheetNames.forEach((sheetName) => {
+  const jsonData = sheetDataByName[sheetName] || [];
 
-            if (isPatientIdColumn || isPhiColumn) {
-              columnsToMask.push(index);
-            }
-          }
-        });
+  if (jsonData.length === 0) {
+    const worksheet = workbook.Sheets[sheetName];
+    XLSX.utils.book_append_sheet(cleanedWorkbook, worksheet, sheetName);
+    cleanedSheetData[sheetName] = jsonData;
+    return;
+  }
 
-        if (sheetRefs.useUUID) {
-          // Handle sheets without patient ID column
-          // Case 2: Personal + No Patient ID - Use wallet address
-          // Case 4: Institution + No Patient ID - Use UUID for each row
-          for (let i = 1; i < cleanedData.length; i++) {
-            const row = cleanedData[i];
-            if (row && row.some((cell) => cell !== undefined && cell !== null && cell !== "")) {
-              let id;
-              if (isPersonalData && walletAddress) {
-                // Case 2: Personal data without Patient ID - use wallet address
-                id = generateAnonymizedId(walletAddress, 1);
-              } else {
-                // Case 4: Institution data without Patient ID - use UUID
-                const uuid = generateUUID();
-                id = generateAnonymizedId(uuid, i);
-              }
+  const headers = jsonData[0] || [];
+  const cleanedData = jsonData;
+  cleanedSheetData[sheetName] = cleanedData;
 
-              columnsToMask.forEach((colIndex) => {
-                if (row[colIndex] !== undefined) {
-                  row[colIndex] = id;
-                }
-              });
-            }
-          }
-        } else {
-          // Handle sheets with patient ID column
-          // Case 1: Personal + Patient ID exists - Hash each patient ID individually
-          // Case 3: Institution + Patient ID exists - Hash each patient ID individually
-          for (let i = 1; i < cleanedData.length; i++) {
-            const row = cleanedData[i];
-            let id = null;
+  const sheetRefs = sheetColumnRefs[sheetName] || {};
+  const columnsToMask = [];
 
-            if (sheetRefs.patientIdCol !== undefined && row && row[sheetRefs.patientIdCol]) {
-              const patientId = String(row[sheetRefs.patientIdCol]).toLowerCase().trim();
-              id = identifierToId[patientId];
-            }
+  for (let index = 0; index < headers.length; index++) {
+    const header = headers[index];
+    if (header && typeof header === "string") {
+      const headerLower = header.toLowerCase();
+      const headerNormalized = normalizeHeaderValue(headerLower);
+      const isPatientIdColumn = index === sheetRefs.patientIdCol;
 
-            if (id) {
-              columnsToMask.forEach((colIndex) => {
-                if (row[colIndex] !== undefined) {
-                  row[colIndex] = id;
-                }
-              });
-            }
-          }
+      let isPhiColumn = false;
+      for (let k = 0; k < phiKeywordsLower.length; k++) {
+        if (
+          headerLower.includes(phiKeywordsLower[k]) ||
+          headerNormalized.includes(phiKeywordsNormalized[k])
+        ) {
+          isPhiColumn = true;
+          break;
         }
       }
 
-      const newWorksheet = XLSX.utils.aoa_to_sheet(cleanedData);
-      XLSX.utils.book_append_sheet(cleanedWorkbook, newWorksheet, sheetName);
-    });
+      if (isPatientIdColumn || isPhiColumn) {
+        columnsToMask.push(index);
+      }
+    }
+  }
+
+  if (sheetRefs.useUUID) {
+    const sharedPersonalId =
+      isPersonalData && walletAddress ? generateAnonymizedId(walletAddress, 1) : null;
+
+    for (let i = 1; i < cleanedData.length; i++) {
+      const row = cleanedData[i];
+      if (row && row.some((cell) => cell !== undefined && cell !== null && cell !== "")) {
+        const id = sharedPersonalId || generateAnonymizedId(generateUUID(), i);
+
+        for (let c = 0; c < columnsToMask.length; c++) {
+          const colIndex = columnsToMask[c];
+          if (row[colIndex] !== undefined) {
+            row[colIndex] = id;
+          }
+        }
+      }
+    }
+  } else {
+    for (let i = 1; i < cleanedData.length; i++) {
+      const row = cleanedData[i];
+
+      if (sheetRefs.patientIdCol !== undefined && row && row[sheetRefs.patientIdCol]) {
+        const patientId = String(row[sheetRefs.patientIdCol]).toLowerCase().trim();
+        const id = generateAnonymizedId(patientId, i);
+
+        for (let c = 0; c < columnsToMask.length; c++) {
+          const colIndex = columnsToMask[c];
+          if (row[colIndex] !== undefined) {
+            row[colIndex] = id;
+          }
+        }
+      }
+    }
+  }
+
+  const newWorksheet = XLSX.utils.aoa_to_sheet(cleanedData);
+  XLSX.utils.book_append_sheet(cleanedWorkbook, newWorksheet, sheetName);
+});
 
     // Determine output format based on input file extension
     const originalFileName = req.file.originalname;
@@ -297,51 +280,22 @@ const anonymizeFile = async (req, res) => {
       type: "buffer",
     });
 
-             const extractedContent = await extractFileContent(
-                cleanedWorkbook,
-                req.file.originalname,
-                req.body.datasetTitle || ''
-            );
-
-            // Return both files as JSON response
-            const timestamp = Date.now();
-            return res.json({
-                success: true,
-                message: 'File anonymized successfully with preview',
-                files: {
-                    main: {
-                        data: outputBuffer.toString('base64'),
-                        filename: `anonymized_${originalFileName}`,
-                        contentType: outputMimeType
-                    },
-                    preview: {
-                        data: previewBuffer.toString('base64'),
-                        filename: `preview_${originalFileName}`,
-                        contentType: outputMimeType
-                    }
-                },
-                extractedContent: extractedContent,  // Add this line
-                extractionStatus: "success"
-            });
-        }
+             
     // Generate preview if requested
-    if (generatePreview) {
+        if (generatePreview) {
       const previewWorkbook = XLSX.utils.book_new();
 
       cleanedWorkbook.SheetNames.forEach((sheetName) => {
-        const worksheet = cleanedWorkbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+        const jsonData = cleanedSheetData[sheetName] || [];
 
         if (jsonData.length === 0) {
+          const worksheet = cleanedWorkbook.Sheets[sheetName];
           XLSX.utils.book_append_sheet(previewWorkbook, worksheet, sheetName);
           return;
         }
 
-        // Calculate 5% of rows (minimum 5 rows, maximum 50 rows)
         const totalRows = jsonData.length;
         const previewRows = Math.max(5, Math.min(50, Math.ceil(totalRows * 0.05)));
-
-        // Extract first 5% of anonymized data including headers
         const previewData = jsonData.slice(0, previewRows);
 
         const previewWorksheet = XLSX.utils.aoa_to_sheet(previewData);
@@ -353,8 +307,14 @@ const anonymizeFile = async (req, res) => {
         type: "buffer",
       });
 
-      // Return both files as JSON response
-      const timestamp = Date.now();
+      const extractedContent = await extractFileContent(
+        cleanedWorkbook,
+        req.file.originalname,
+        req.body.datasetTitle || ""
+      );
+
+      console.log(`✅ Anonymization completed in ${Date.now() - startTime}ms`);
+
       return res.json({
         success: true,
         message: "File anonymized successfully with preview",
@@ -370,6 +330,8 @@ const anonymizeFile = async (req, res) => {
             contentType: outputMimeType,
           },
         },
+        extractedContent: extractedContent,
+        extractionStatus: "success",
       });
     }
 
