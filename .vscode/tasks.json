@@ -1,34 +1,29 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "Start Python Backend",
-			"type": "shell",
-			"command": "/Users/karthiksathish/Projects/healthy/.venv/bin/python",
-			"args": [
-				"python_backend/main.py"
-			],
-			"group": "build",
-			"isBackground": true,
-			"problemMatcher": [],
-			"options": {
-				"cwd": "/Users/karthiksathish/Projects/healthy"
-			}
-		},
-		{
-			"label": "Start JavaScript Backend",
-			"type": "shell",
-			"command": "npm",
-			"args": [
-				"run",
-				"dev"
-			],
-			"group": "build",
-			"isBackground": true,
-			"problemMatcher": [],
-			"options": {
-				"cwd": "/Users/karthiksathish/Projects/healthy/javascript_backend"
-			}
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Python Backend",
+      "type": "shell",
+      "command": "/Users/karthiksathish/Projects/healthy/.venv/bin/python",
+      "args": ["python_backend/main.py"],
+      "group": "build",
+      "isBackground": true,
+      "problemMatcher": [],
+      "options": {
+        "cwd": "/Users/karthiksathish/Projects/healthy"
+      }
+    },
+    {
+      "label": "Start JavaScript Backend",
+      "type": "shell",
+      "command": "npm",
+      "args": ["run", "dev"],
+      "group": "build",
+      "isBackground": true,
+      "problemMatcher": [],
+      "options": {
+        "cwd": "/Users/karthiksathish/Projects/healthy/javascript_backend"
+      }
+    }
+  ]
 }

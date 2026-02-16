@@ -1,0 +1,63 @@
+name: Test Coverage
+
+on:
+  push:
+    paths:
+      - "javascript_backend/**"
+      - "python_backend/**"
+  pull_request:
+    paths:
+      - "javascript_backend/**"
+      - "python_backend/**"
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ------------------- JavaScript Backend Coverage -------------------
+      - name: Install JS backend dependencies
+        working-directory: javascript_backend
+        run: |
+          npm install
+          npm install --save-dev nyc
+
+      - name: Run JS backend tests with coverage
+        working-directory: javascript_backend
+        run: |
+          npx nyc --reporter=lcov --reporter=text npm test
+        continue-on-error: false
+
+      - name: Upload JS coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: js-backend-coverage
+          path: javascript_backend/coverage
+
+      # ------------------- Python Backend Coverage -------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install Python dependencies
+        working-directory: python_backend
+        run: |
+          pip install -r requirements.txt
+          pip install coverage pytest
+
+      - name: Run Python tests with coverage
+        working-directory: python_backend
+        run: |
+          coverage run -m pytest
+          coverage xml
+        continue-on-error: false
+
+      - name: Upload Python coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-backend-coverage
+          path: python_backend/coverage.xml
