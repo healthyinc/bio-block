@@ -1,0 +1,54 @@
+name: CI Tests
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'javascript_backend/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'javascript_backend/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: javascript_backend/package-lock.json
+
+    - name: Install dependencies
+      working-directory: ./javascript_backend
+      run: npm ci
+
+    - name: Run tests with coverage
+      working-directory: ./javascript_backend
+      run: npm run test:coverage
+
+    - name: Upload coverage reports to Codecov
+      if: matrix.node-version == '20.x'
+      uses: codecov/codecov-action@v4
+      with:
+        directory: ./javascript_backend/coverage
+        flags: javascript-backend
+        fail_ci_if_error: false
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+    - name: Coverage Summary
+      if: matrix.node-version == '20.x'
+      working-directory: ./javascript_backend
+      run: |
+        echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
+        npx nyc report --reporter=text >> $GITHUB_STEP_SUMMARY
