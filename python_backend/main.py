@@ -4,6 +4,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, List
 import chromadb
+import os
+import shutil
 import time
 import uuid
 import cv2
@@ -39,8 +41,24 @@ app.add_middleware(
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_or_create_collection(name="new_user_data")
 
-# Tesseract path for macOS (installed via Homebrew)
-pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+# Tesseract path configuration (cross-platform)
+# Priority: TESSERACT_CMD env var > auto-detect via PATH > common install locations
+
+
+_tesseract_cmd = os.environ.get("TESSERACT_CMD") or shutil.which("tesseract")
+if _tesseract_cmd:
+    pytesseract.pytesseract.tesseract_cmd = _tesseract_cmd
+else:
+    # Fallback to common install locations
+    _common_paths = [
+        '/opt/homebrew/bin/tesseract',   # macOS ARM (Homebrew)
+        '/usr/local/bin/tesseract',      # macOS Intel (Homebrew)
+        '/usr/bin/tesseract',            # Linux (apt/yum)
+    ]
+    for path in _common_paths:
+        if os.path.isfile(path):
+            pytesseract.pytesseract.tesseract_cmd = path
+            break
 
 try:
     nlp = spacy.load("en_core_web_lg")  # Updated to use large model for better accuracy
