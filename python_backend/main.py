@@ -165,69 +165,69 @@ async def root():
         }
     }
 
-# @app.post("/anonymize_image")
-# async def anonymize_image(file: UploadFile = File(...)):
-#     """
-#     Anonymize PHI in JPEG/JPG/PNG images using Presidio (preferred) or legacy OCR+spaCy
-#     """
-#     try:
-#         # Validate file type
-#         if not file.content_type or not file.content_type.startswith('image/'):
-#             raise HTTPException(status_code=400, detail="File must be an image")
-        
-#         if file.content_type not in ['image/jpeg', 'image/jpg', 'image/png']:
-#             raise HTTPException(status_code=400, detail="Only JPEG, JPG, and PNG images are supported")
-        
-#         # Read and convert image
-#         contents = await file.read()
-#         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
-        
-#         # Try Presidio first (preferred method)
-#         if presidio_available and presidio_image_redactor is not None:
-#             try:
-#                 print("Using Presidio advanced image redaction")
-#                 redacted_image_pil = mask_phi_in_image_presidio(pil_image)
-                
-#                 # Save redacted image
-#                 img_buffer = io.BytesIO()
-#                 redacted_image_pil.save(img_buffer, format='JPEG', quality=95)
-#                 img_buffer.seek(0)
-                
-#                 return StreamingResponse(
-#                     io.BytesIO(img_buffer.read()),
-#                     media_type="image/jpeg",
-#                     headers={"Content-Disposition": f"attachment; filename=presidio_anonymized_{file.filename}"}
-#                 )
-                
-#             except Exception as e:
-#                 print(f"Presidio failed, falling back to legacy method: {str(e)}")
-        
-#         # Fallback to legacy OCR + spaCy method
-#         print("Using legacy OCR + spaCy image redaction")
-#         image_cv = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-#         masked_image_cv = mask_phi_in_image_legacy(image_cv)
-        
-#         # Convert back to PIL and save
-#         masked_image_rgb = cv2.cvtColor(masked_image_cv, cv2.COLOR_BGR2RGB)
-#         masked_pil = Image.fromarray(masked_image_rgb)
-        
-#         img_buffer = io.BytesIO()
-#         masked_pil.save(img_buffer, format='JPEG', quality=95)
-#         img_buffer.seek(0)
-
-#         return StreamingResponse(
-#             io.BytesIO(img_buffer.read()),
-#             media_type="image/jpeg",
-#             headers={"Content-Disposition": f"attachment; filename=legacy_anonymized_{file.filename}"}
-#         )
-        
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Failed to anonymize image: {str(e)}")
-
-
 @app.post("/anonymize_image")
+async def anonymize_image(file: UploadFile = File(...)):
+    """
+    Anonymize PHI in JPEG/JPG/PNG images using Presidio (preferred) or legacy OCR+spaCy
+    """
+    try:
+        # Validate file type
+        if not file.content_type or not file.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="File must be an image")
+        
+        if file.content_type not in ['image/jpeg', 'image/jpg', 'image/png']:
+            raise HTTPException(status_code=400, detail="Only JPEG, JPG, and PNG images are supported")
+        
+        # Read and convert image
+        contents = await file.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+        
+        # Try Presidio first (preferred method)
+        if presidio_available and presidio_image_redactor is not None:
+            try:
+                print("Using Presidio advanced image redaction")
+                redacted_image_pil = mask_phi_in_image_presidio(pil_image)
+                
+                # Save redacted image
+                img_buffer = io.BytesIO()
+                redacted_image_pil.save(img_buffer, format='JPEG', quality=95)
+                img_buffer.seek(0)
+                
+                return StreamingResponse(
+                    io.BytesIO(img_buffer.read()),
+                    media_type="image/jpeg",
+                    headers={"Content-Disposition": f"attachment; filename=presidio_anonymized_{file.filename}"}
+                )
+                
+            except Exception as e:
+                print(f"Presidio failed, falling back to legacy method: {str(e)}")
+        
+        # Fallback to legacy OCR + spaCy method
+        print("Using legacy OCR + spaCy image redaction")
+        image_cv = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+        masked_image_cv = mask_phi_in_image_legacy(image_cv)
+        
+        # Convert back to PIL and save
+        masked_image_rgb = cv2.cvtColor(masked_image_cv, cv2.COLOR_BGR2RGB)
+        masked_pil = Image.fromarray(masked_image_rgb)
+        
+        img_buffer = io.BytesIO()
+        masked_pil.save(img_buffer, format='JPEG', quality=95)
+        img_buffer.seek(0)
+
+        return StreamingResponse(
+            io.BytesIO(img_buffer.read()),
+            media_type="image/jpeg",
+            headers={"Content-Disposition": f"attachment; filename=legacy_anonymized_{file.filename}"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to anonymize image: {str(e)}")
+
+
+@app.post("/anonymize_image_presidio")
 async def anonymize_image_presidio_only(file: UploadFile = File(...)):
     """
     Anonymize PHI in images using ONLY Presidio (force advanced method)
