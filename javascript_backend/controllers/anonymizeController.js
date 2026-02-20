@@ -330,7 +330,7 @@ const anonymizeFile = async (req, res) => {
       const extractedContent = await extractFileContent(
         cleanedWorkbook,
         req.file.originalname,
-        req.body.datasetTitle || ''
+        req.body.datasetTitle || ""
       );
 
       // Return both files as JSON response
@@ -351,7 +351,7 @@ const anonymizeFile = async (req, res) => {
           },
         },
         extractedContent: extractedContent,
-        extractionStatus: "success"
+        extractionStatus: "success",
       });
     }
 
@@ -380,21 +380,18 @@ const anonymizeFile = async (req, res) => {
 };
 
 const extractFileContent = async (workbook, originalFileName, datasetTitle = "") => {
-    /**
-     * Extract content from anonymized file for enhanced search
-     * Returns extracted content as text
-     */
-    try {
-        const ContentExtractor = require('./contentExtractorController');
-        const extractedContent = ContentExtractor.extractSpreadsheetContent(
-            workbook,
-            datasetTitle
-        );
-        return extractedContent;
-    } catch (error) {
-        console.error('Error extracting content:', error);
-        return ""; // Return empty string on error, don't fail the upload
-    }
+  /**
+   * Extract content from anonymized file for enhanced search
+   * Returns extracted content as text
+   */
+  try {
+    const ContentExtractor = require("./contentExtractorController");
+    const extractedContent = ContentExtractor.extractSpreadsheetContent(workbook, datasetTitle);
+    return extractedContent;
+  } catch (error) {
+    console.error("Error extracting content:", error);
+    return ""; // Return empty string on error, don't fail the upload
+  }
 };
 
 module.exports = {
