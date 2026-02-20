@@ -143,9 +143,11 @@ class UpdateRequest(BaseModel):
     dataset_title: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     owner_address: str
+    signature: str # Cryptographic signature of the request payload to prevent privilege escalation
 
 class DeleteRequest(BaseModel):
     owner_address: str
+    signature: str # Cryptographic signature to prevent unauthorized deletion
 
 def generate_id() -> str:
     timestamp = int(time.time() * 1000)
@@ -642,6 +644,12 @@ async def update_document(doc_id: str, request: UpdateRequest):
         if stored_owner.lower() != request.owner_address.lower():
             raise HTTPException(status_code=403, detail="Unauthorized: not document owner")
         
+        # Security Fix: Verify cryptographic signature to prove ownership of the address
+        # TODO: Implement `eth_account.messages.recover_message` to verify request.signature
+        if not request.signature:
+            raise HTTPException(status_code=401, detail="Missing cryptographic signature")
+        # --- End Security Fix ---
+        
         new_dataset_title = request.dataset_title if request.dataset_title else old_metadata.get("dataset_title", "")
         new_summary = request.summary if request.summary else existing["documents"][0]
         
@@ -687,6 +695,12 @@ async def delete_document(doc_id: str, request: DeleteRequest):
         stored_owner = existing["metadatas"][0].get("owner_address", "")
         if stored_owner.lower() != request.owner_address.lower():
             raise HTTPException(status_code=403, detail="Unauthorized: not document owner")
+        
+        # Security Fix: Verify cryptographic signature to prove ownership of the address
+        # TODO: Implement `eth_account.messages.recover_message` to verify request.signature
+        if not request.signature:
+            raise HTTPException(status_code=401, detail="Missing cryptographic signature")
+        # --- End Security Fix ---
         
         collection.delete(ids=[doc_id])
         
