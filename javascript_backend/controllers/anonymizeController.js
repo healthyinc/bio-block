@@ -297,33 +297,6 @@ const anonymizeFile = async (req, res) => {
       type: "buffer",
     });
 
-             const extractedContent = await extractFileContent(
-                cleanedWorkbook,
-                req.file.originalname,
-                req.body.datasetTitle || ''
-            );
-
-            // Return both files as JSON response
-            const timestamp = Date.now();
-            return res.json({
-                success: true,
-                message: 'File anonymized successfully with preview',
-                files: {
-                    main: {
-                        data: outputBuffer.toString('base64'),
-                        filename: `anonymized_${originalFileName}`,
-                        contentType: outputMimeType
-                    },
-                    preview: {
-                        data: previewBuffer.toString('base64'),
-                        filename: `preview_${originalFileName}`,
-                        contentType: outputMimeType
-                    }
-                },
-                extractedContent: extractedContent,  // Add this line
-                extractionStatus: "success"
-            });
-        }
     // Generate preview if requested
     if (generatePreview) {
       const previewWorkbook = XLSX.utils.book_new();
@@ -353,6 +326,13 @@ const anonymizeFile = async (req, res) => {
         type: "buffer",
       });
 
+      // Extract file content for vector search
+      const extractedContent = await extractFileContent(
+        cleanedWorkbook,
+        req.file.originalname,
+        req.body.datasetTitle || ''
+      );
+
       // Return both files as JSON response
       const timestamp = Date.now();
       return res.json({
@@ -370,6 +350,8 @@ const anonymizeFile = async (req, res) => {
             contentType: outputMimeType,
           },
         },
+        extractedContent: extractedContent,
+        extractionStatus: "success"
       });
     }
 
