@@ -329,9 +329,9 @@ async def anonymize_image_presidio_only(file: UploadFile = File(...)):
 
 
 @app.post("/store")
-async def store_data_enhanced(request: StoreWithContentRequest):
+async def store_data(request: StoreWithContentRequest):
     """
-    Enhanced storage with both metadata and content vectors
+    Store document data with metadata and content vectors
     """
     try:
         print(f"Received enhanced storage request: {request.dataset_title}")
@@ -473,7 +473,7 @@ async def store_data_enhanced(request: StoreWithContentRequest):
 @app.post("/search")
 async def search_data(request: SearchRequest):
     try:
-        search_results = collection.query(
+        search_results = metadata_collection.query(
             query_texts=[request.query],
             n_results=5,
             include=["documents", "metadatas", "distances"]
@@ -518,7 +518,7 @@ async def filter_data(request: FilterRequest):
         print(f"Where clause: {where_clause}")  
         
        
-        search_results = collection.get(
+        search_results = metadata_collection.get(
             where=where_clause,
             include=["documents", "metadatas"]
         )
@@ -579,7 +579,7 @@ async def search_with_filter(request: Dict[str, Any]):
             else:
                 search_kwargs["where"] = filters
         
-        search_results = collection.query(**search_kwargs)
+        search_results = metadata_collection.query(**search_kwargs)
         
         results = []
         if search_results["ids"][0]:
@@ -606,7 +606,7 @@ async def search_with_filter(request: Dict[str, Any]):
 @app.get("/documents/{doc_id}")
 async def get_document(doc_id: str):
     try:
-        result = collection.get(
+        result = metadata_collection.get(
             ids=[doc_id],
             include=["documents", "metadatas"]
         )
@@ -629,7 +629,7 @@ async def get_document(doc_id: str):
 @app.put("/documents/{doc_id}")
 async def update_document(doc_id: str, request: UpdateRequest):
     try:
-        existing = collection.get(
+        existing = metadata_collection.get(
             ids=[doc_id],
             include=["documents", "metadatas"]
         )
@@ -658,7 +658,7 @@ async def update_document(doc_id: str, request: UpdateRequest):
         if disease_tags:
             combined_document += f"\nDisease Tags: {disease_tags}"
         
-        collection.add(
+        metadata_collection.add(
             ids=[new_doc_id],
             documents=[combined_document],
             metadatas=[updated_metadata]
@@ -676,7 +676,7 @@ async def update_document(doc_id: str, request: UpdateRequest):
 @app.delete("/documents/{doc_id}")
 async def delete_document(doc_id: str, request: DeleteRequest):
     try:
-        existing = collection.get(
+        existing = metadata_collection.get(
             ids=[doc_id],
             include=["metadatas"]
         )
@@ -688,7 +688,7 @@ async def delete_document(doc_id: str, request: DeleteRequest):
         if stored_owner.lower() != request.owner_address.lower():
             raise HTTPException(status_code=403, detail="Unauthorized: not document owner")
         
-        collection.delete(ids=[doc_id])
+        metadata_collection.delete(ids=[doc_id])
         
         print(f"Document {doc_id} deleted")
         
