@@ -5,14 +5,14 @@ const nextConfig = {
     ignoreDuringBuilds: false,
   },
   // Suppress workspace root warning
-  outputFileTracingRoot: require('path').join(__dirname, '..'),
+  outputFileTracingRoot: require("path").join(__dirname, ".."),
   // Image optimization
   images: {
-    formats: ['image/avif', 'image/webp'],
+    formats: ["image/avif", "image/webp"],
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: '**',
+        protocol: "https",
+        hostname: "**",
       },
     ],
   },
@@ -37,13 +37,13 @@ const nextConfig = {
         splitChunks: {
           ...config.optimization?.splitChunks,
           cacheGroups: {
-            ...(typeof config.optimization?.splitChunks === 'object' 
-              ? config.optimization.splitChunks.cacheGroups 
+            ...(typeof config.optimization?.splitChunks === "object"
+              ? config.optimization.splitChunks.cacheGroups
               : {}),
             vendor: {
               test: /[\\/]node_modules[\\/]/,
-              name: 'vendors',
-              chunks: 'all',
+              name: "vendors",
+              chunks: "all",
             },
           },
         },
