@@ -65,7 +65,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
     'Substance Abuse',
     'Other'
   ];
-  
+
   // Modal and progress states
   const [showModal, setShowModal] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
@@ -124,11 +124,11 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
   const updateStep = (stepIndex, completed = false, error = false) => {
     setUploadProgress(prev => ({
       ...prev,
-      steps: prev.steps.map((step, index) => 
+      steps: prev.steps.map((step, index) =>
         index === stepIndex ? { ...step, completed, error } : step
       )
     }));
-    
+
     if (!completed && !error) {
       // This step is now active/in progress
       setCurrentStep(stepIndex);
@@ -165,7 +165,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
   const anonymizeFile = async (file) => {
     const formData = new FormData();
     formData.append('file', file);
-    
+
     if (dataType === 'Personal') {
       formData.append('walletAddress', walletAddress);
     }
@@ -177,13 +177,13 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
     }
 
     let backendUrl, endpoint;
-    
+
     if (file.type.startsWith('image/')) {
       backendUrl = process.env.REACT_APP_PYTHON_BACKEND_URL || 'http://localhost:3002';
       endpoint = '/anonymize_image';
     } else if (file.name.match(/\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i)) {
       backendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
-      endpoint = '/anonymize';
+      endpoint = '/api/anonymize';
     } else {
       throw new Error('File type not supported for anonymization. Only Excel (.xlsx, .xls, .csv, .ods, .tsv, .xlsm, .xlsb) and image files (.jpg, .jpeg, .png) are supported.');
     }
@@ -202,16 +202,16 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
     if (shouldGeneratePreview && response.headers.get('content-type')?.includes('application/json')) {
       // Response contains both main file and preview
       const jsonResponse = await response.json();
-      
+
       // Convert base64 back to File objects
       const mainFileBuffer = Uint8Array.from(atob(jsonResponse.files.main.buffer), c => c.charCodeAt(0));
-      const mainFile = new File([mainFileBuffer], jsonResponse.files.main.filename, { 
-        type: jsonResponse.files.main.contentType 
+      const mainFile = new File([mainFileBuffer], jsonResponse.files.main.filename, {
+        type: jsonResponse.files.main.contentType
       });
 
       const previewFileBuffer = Uint8Array.from(atob(jsonResponse.files.preview.buffer), c => c.charCodeAt(0));
-      const previewFile = new File([previewFileBuffer], jsonResponse.files.preview.filename, { 
-        type: jsonResponse.files.preview.contentType 
+      const previewFile = new File([previewFileBuffer], jsonResponse.files.preview.filename, {
+        type: jsonResponse.files.preview.contentType
       });
 
       return { mainFile, previewFile };
@@ -230,8 +230,8 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
     formData.append('fileName', fileName);
 
     const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
-    
-    const response = await fetch(`${backendUrl}/ipfs/upload`, {
+
+    const response = await fetch(`${backendUrl}/api/ipfs/upload`, {
       method: 'POST',
       body: formData
     });
@@ -250,7 +250,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       alert('Please connect your wallet first');
       return;
     }
-    
+
     if (!selectedFile) {
       alert('Please select a file first');
       return;
@@ -285,11 +285,11 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       alert('Please enter a valid price in ETH');
       return;
     }
-    
+
     setIsUploading(true);
     setShowModal(true);
     resetProgress();
-    
+
     try {
       // Step 1: Preparing file
       updateStep(0); // Mark as in progress
@@ -297,7 +297,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       let fileToUpload = selectedFile;
       let previewFile = null;
       updateStep(0, true); // Mark as completed
-      
+
       // Step 2: Anonymizing (if Excel or Image) and extracting preview
       updateStep(1); // Mark as in progress
       if (selectedFile.name.match(/\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i) || selectedFile.type.startsWith('image/')) {
@@ -317,29 +317,29 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
         setError('File type not supported for upload. Only Excel and spreadsheet files (.xlsx, .xls, .csv, .ods, .tsv, .xlsm, .xlsb) and image files are accepted.');
         return;
       }
-      
+
       // Step 3: Encrypting file (with streaming for large files)
       updateStep(2); // Mark as in progress
       try {
         const streamer = new StreamingEncryption();
-        
+
         console.log(`=== ENCRYPTION DECISION ===`);
-        console.log(`Original file: ${selectedFile.name}, size: ${selectedFile.size} bytes (${(selectedFile.size / (1024*1024)).toFixed(2)}MB)`);
-        console.log(`Anonymized file: ${fileToUpload.name}, size: ${fileToUpload.size} bytes (${(fileToUpload.size / (1024*1024)).toFixed(2)}MB)`);
-        
+        console.log(`Original file: ${selectedFile.name}, size: ${selectedFile.size} bytes (${(selectedFile.size / (1024 * 1024)).toFixed(2)}MB)`);
+        console.log(`Anonymized file: ${fileToUpload.name}, size: ${fileToUpload.size} bytes (${(fileToUpload.size / (1024 * 1024)).toFixed(2)}MB)`);
+
         const shouldUseStreaming = streamer.shouldUseStreaming(fileToUpload.size);
-        
+
         console.log(`Final decision: streaming = ${shouldUseStreaming}`);
         console.log(`=== END ENCRYPTION DECISION ===`);
-        
+
         let encryptedFile;
-        
+
         if (shouldUseStreaming) {
           // Use streaming encryption for large files
-          console.log(`🔄 Using STREAMING encryption for large file (${(fileToUpload.size / (1024*1024)).toFixed(2)}MB)`);
+          console.log(`🔄 Using STREAMING encryption for large file (${(fileToUpload.size / (1024 * 1024)).toFixed(2)}MB)`);
           setIsStreamingEncryption(true);
           setEncryptionProgress(0);
-          
+
           encryptedFile = await streamer.encryptFileStream(
             fileToUpload,
             (progress) => {
@@ -347,19 +347,19 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
               console.log(`Encryption progress: ${progress.toFixed(1)}%`);
             }
           );
-          
+
           setIsStreamingEncryption(false);
           console.log(`✅ Streaming encryption completed`);
         } else {
           // Use traditional encryption for small files
-          console.log(`⚡ Using TRADITIONAL encryption for small file (${(fileToUpload.size / (1024*1024)).toFixed(2)}MB)`);
+          console.log(`⚡ Using TRADITIONAL encryption for small file (${(fileToUpload.size / (1024 * 1024)).toFixed(2)}MB)`);
           const fileBuffer = await fileToUpload.arrayBuffer();
           encryptedFile = encryptFile(new Uint8Array(fileBuffer));
           console.log(`✅ Traditional encryption completed`);
         }
-        
+
         updateStep(2, true, false); // Mark as completed
-        
+
         // Step 4: Uploading to IPFS via backend
         updateStep(3); // Mark as in progress
         const result = await uploadToIPFSViaBackend(encryptedFile, fileToUpload.name);
@@ -369,35 +369,35 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
           return;
         }
         updateStep(3, true, false); // Mark as completed
-        
+
         // Update progress with IPFS hash
         setUploadProgress(prev => ({
           ...prev,
           ipfsHash: result.ipfsHash
         }));
-        
-        updateStep(4); 
+
+        updateStep(4);
         const txHash = await storeDocumentHash(result.ipfsHash, price);
-        updateStep(4, true, false); 
-        
+        updateStep(4, true, false);
+
         setUploadProgress(prev => ({
           ...prev,
           transactionHash: txHash,
           price: price
         }));
-        
+
         // Step 6: Saving metadata
         updateStep(5); // Mark as in progress
-        
+
         let previewHash = null;
         // Upload preview to IPFS via backend if it exists
         if (previewFile) {
           try {
             const previewStreamer = new StreamingEncryption();
             const shouldUseStreamingForPreview = previewStreamer.shouldUseStreaming(previewFile.size);
-            
+
             let encryptedPreview;
-            
+
             if (shouldUseStreamingForPreview) {
               // Use streaming for large preview files
               encryptedPreview = await previewStreamer.encryptFileStream(
@@ -409,7 +409,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
               const previewBuffer = await previewFile.arrayBuffer();
               encryptedPreview = encryptFile(new Uint8Array(previewBuffer));
             }
-            
+
             const previewResult = await uploadToIPFSViaBackend(encryptedPreview, previewFile.name);
             if (previewResult.success) {
               previewHash = previewResult.ipfsHash;
@@ -418,7 +418,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
             console.warn('Preview upload failed, continuing without preview:', error);
           }
         }
-        
+
         const metadata = {
           fileName: fileToUpload.name,
           fileSize: fileToUpload.size,
@@ -457,19 +457,19 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
 
         await storeResponse.json(); // Process response but don't need to store
         updateStep(5, true, false); // Mark as completed
-        
+
         // Mark as complete
         setUploadProgress(prev => ({
           ...prev,
           isComplete: true
         }));
-        
+
       } catch (error) {
         const currentStepIndex = currentStep;
         updateStep(currentStepIndex, false, true); // Mark current step as error
         setError(error.message);
       }
-      
+
     } catch (error) {
       console.error('Error:', error);
       setError(error.message);
@@ -482,7 +482,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
       {/* Enhanced Header with Gradient */}
       <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-blue-600 to-indigo-600 h-2"></div>
-      
+
       {/* Back Button */}
       <div className="absolute top-6 left-6">
         <button
@@ -496,7 +496,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
 
       <div className="flex items-center justify-center min-h-screen p-6">
         <div className="w-full max-w-2xl">
-          
+
           {/* Header Section */}
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-green-600 to-emerald-600 rounded-2xl mb-4 shadow-lg">
@@ -512,7 +512,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
 
           {/* Main Upload Card */}
           <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl border border-gray-100">
-            
+
             {!isWalletConnected && (
               <div className="p-8 border-b border-gray-100">
                 <div className="flex items-center gap-4 p-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl">
@@ -545,7 +545,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                   <div className={`${isWalletConnected ? 'text-gray-500' : 'text-gray-300'} mb-4`}>
                     <Upload className="mx-auto mb-4" size={48} />
                   </div>
-                  
+
                   <input
                     type="file"
                     onChange={handleFileChange}
@@ -554,7 +554,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                     accept=".xlsx,.xls,.csv,.ods,.tsv,.xlsm,.xlsb,.jpg,.jpeg,.png"
                     disabled={!isWalletConnected}
                   />
-                  
+
                   <div className="pointer-events-none">
                     <p className={`${isWalletConnected ? 'text-blue-600' : 'text-gray-400'} font-medium mb-2`}>
                       {selectedFile ? selectedFile.name : 'Choose a file or drag and drop'}
@@ -584,7 +584,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
 
               {/* Form Fields Grid */}
               <div className="grid md:grid-cols-2 gap-6 mb-8">
-                
+
                 {/* Dataset Title */}
                 <div className="md:col-span-2">
                   <label htmlFor="datasetTitle" className="block text-sm font-semibold text-gray-800 mb-2">
@@ -643,7 +643,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                       ))}
                     </select>
                   </div>
-                  
+
                   {/* Selected Tags Display */}
                   {diseaseTags.length > 0 && (
                     <div className="mt-3 p-3 bg-blue-50 rounded-xl border border-blue-200">
@@ -675,7 +675,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                       </button>
                     </div>
                   )}
-                  
+
                   <p className="text-xs text-gray-500 mt-2">
                     Select multiple disease tags that apply to your document. Click on a tag to remove it.
                   </p>
@@ -834,10 +834,10 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                 )}
               </div>
               <h3 className="text-2xl font-bold text-gray-800 mb-2">
-                {uploadProgress.isComplete 
-                  ? 'Upload Complete!' 
-                  : uploadProgress.hasError 
-                    ? 'Upload Failed' 
+                {uploadProgress.isComplete
+                  ? 'Upload Complete!'
+                  : uploadProgress.hasError
+                    ? 'Upload Failed'
                     : 'Uploading Document'}
               </h3>
               {!uploadProgress.hasError && !uploadProgress.isComplete && (
@@ -849,15 +849,14 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
             <div className="space-y-4 mb-6">
               {uploadProgress.steps.map((step, index) => (
                 <div key={index} className="flex items-center gap-3">
-                  <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
-                    step.error 
-                      ? 'bg-red-500' 
-                      : step.completed 
-                        ? 'bg-green-500' 
-                        : index === currentStep
-                          ? 'bg-blue-500'
-                          : 'bg-gray-300'
-                  }`}>
+                  <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${step.error
+                    ? 'bg-red-500'
+                    : step.completed
+                      ? 'bg-green-500'
+                      : index === currentStep
+                        ? 'bg-blue-500'
+                        : 'bg-gray-300'
+                    }`}>
                     {step.error ? (
                       <X size={14} className="text-white" />
                     ) : step.completed ? (
@@ -868,15 +867,14 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                       <Clock size={14} className="text-white" />
                     )}
                   </div>
-                  <span className={`text-sm ${
-                    step.error 
-                      ? 'text-red-600 font-medium' 
-                      : step.completed 
-                        ? 'text-green-600 font-medium' 
-                        : index === currentStep
-                          ? 'text-blue-600 font-medium'
-                          : 'text-gray-500'
-                  }`}>
+                  <span className={`text-sm ${step.error
+                    ? 'text-red-600 font-medium'
+                    : step.completed
+                      ? 'text-green-600 font-medium'
+                      : index === currentStep
+                        ? 'text-blue-600 font-medium'
+                        : 'text-gray-500'
+                    }`}>
                     {step.name}
                     {/* Show streaming encryption progress */}
                     {index === 2 && isStreamingEncryption && encryptionProgress > 0 && (
@@ -886,8 +884,8 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                           <span>{encryptionProgress.toFixed(1)}%</span>
                         </div>
                         <div className="w-full bg-blue-100 rounded-full h-1.5">
-                          <div 
-                            className="bg-blue-500 h-1.5 rounded-full transition-all duration-300" 
+                          <div
+                            className="bg-blue-500 h-1.5 rounded-full transition-all duration-300"
                             style={{ width: `${encryptionProgress}%` }}
                           ></div>
                         </div>
