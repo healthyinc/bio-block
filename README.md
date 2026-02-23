@@ -2,32 +2,34 @@
 
 Bio-Block is a decentralized document management system that leverages blockchain technology, IPFS (InterPlanetary File System), and vector databases to provide secure, verifiable, and privacy-preserving document storage and management for healthcare data.
 
-
 ## Key Features
 
 ### 🔐 Advanced Security & Privacy
+
 - **Streaming Encryption**: Memory-safe encryption for large files (>5MB) with real-time progress tracking
 - **PHI Anonymization**: Automatic anonymization of Personal Health Information in Excel and image files
 - **Blockchain Verification**: Document hashes stored on Ethereum for tamper-proof verification
 - **Decentralized Storage**: IPFS-based storage with encryption and secure access controls
 
 ### 🏥 Healthcare Data Management
+
 - **Multi-format Support**: Excel (.xlsx, .xls), CSV, ODS, TSV, and other spreadsheet formats (.xlsm, .xlsb), plus medical images (.jpg, .jpeg, .png)
 - **Smart Anonymization**: Wallet-based hashing for personal data, OCR+NLP for medical images
 - **Preview System**: Free 5% preview of Excel data for evaluation before purchase
 - **Metadata Collection**: Comprehensive tagging with disease types, demographics, and data sources
 
 ### 🔍 Intelligent Search & Discovery
+
 - **Vector Search**: Natural language queries using ChromaDB for semantic document discovery
 - **Advanced Filtering**: Filter by data type, gender, source, file type, and other metadata
 - **Combined Search**: Semantic search enhanced with metadata filters for precise results
 
 ### 💰 Marketplace & Economics
+
 - **Document Marketplace**: Set prices and earn from document sales
 - **Earnings Tracking**: Real-time earnings display and withdrawal functionality
 - **Preview Downloads**: Free evaluation of data quality before purchase
 - **Wallet Integration**: Seamless Ethereum wallet connectivity
-
 
 ## Architecture
 
@@ -78,24 +80,28 @@ healthy/
 ```
 
 ### Frontend (React)
+
 - Modern UI built with React.js and Tailwind CSS
 - Interactive progress tracking for uploads and encryption
 - Wallet integration for Ethereum connectivity
 - Document marketplace and earnings dashboard
 
 ### JavaScript Backend (Express.js - Port 3001)
+
 - Excel file processing and PHI anonymization
 - IPFS file upload handling
 - Preview generation for Excel files
 - RESTful API with MVC architecture
 
 ### Python Backend (FastAPI - Port 3002)
+
 - Vector database operations using ChromaDB
 - Image PHI anonymization using Presidio/OCR
 - Semantic search and document filtering
 - Advanced ML-based text processing
 
 ### Smart Contracts (Solidity)
+
 - Document verification on Ethereum blockchain
 - Marketplace functionality for document sales
 - Earnings tracking and withdrawal system
@@ -103,38 +109,42 @@ healthy/
 ## Quick Start
 
 ### Prerequisites
+
 - Node.js (v14+)
-- Python (v3.8+)  
+- Python (v3.8+)
 - MetaMask or Ethereum wallet
 - Git
 
 ### Installation
 
 1. **Clone and setup**
+
    ```bash
    git clone https://github.com/yourusername/bio-block.git
    cd bio-block
    ```
 
 2. **Backend setup**
+
    ```bash
    # Python backend
    cd python_backend
    pip install -r requirements.txt
    python -m spacy download en_core_web_lg
-   
+
    # JavaScript backend
    cd ../javascript_backend
    npm install
-   
+
    # Frontend
    cd ../prototype
    npm install
    ```
 
 3. **Environment configuration**
-   
+
    Create `.env` in `prototype/`:
+
    ```env
    REACT_APP_PINATA_JWT=your_pinata_jwt_key
    REACT_APP_ENCRYPTION_KEY=your_32_byte_encryption_key
@@ -143,13 +153,14 @@ healthy/
    ```
 
 4. **Run the application**
+
    ```bash
    # Terminal 1: Python backend
    cd python_backend && uvicorn main:app --reload --port 3002
-   
-   # Terminal 2: JavaScript backend  
+
+   # Terminal 2: JavaScript backend
    cd javascript_backend && node server.js
-   
+
    # Terminal 3: Frontend
    cd prototype && npm start
    ```
@@ -159,6 +170,7 @@ Access the application at `http://localhost:3000`
 ## API Endpoints
 
 ### JavaScript Backend (Express.js)
+
 **🔧 Local URL**: `http://localhost:3001`
 
 - `GET /` - Root endpoint with API information
@@ -174,6 +186,7 @@ Access the application at `http://localhost:3000`
 - Organized with MVC architecture (controllers and routes)
 
 ### Python Backend (FastAPI)
+
 **🔧 Local URL**: `http://localhost:3002`
 
 - `GET /` - Health check and API information
@@ -188,6 +201,7 @@ Access the application at `http://localhost:3000`
 - Returns similarity scores, document metadata, and summaries
 
 ### Example API Usage
+
 ```bash
 # Health check - JavaScript backend
 curl http://localhost:3001/api/health
@@ -234,6 +248,7 @@ curl -X POST http://localhost:3001/api/anonymize \
 Bio-Block includes comprehensive test suites for both backend services:
 
 ### Running Tests
+
 ```bash
 # Python backend tests (6 tests)
 cd python_backend && python tests/test_api.py
@@ -243,6 +258,7 @@ cd javascript_backend && npm test
 ```
 
 ### Test Coverage
+
 - **Python Backend**: Store, search, filter, anonymize image endpoints
 - **JavaScript Backend**: Health check, Excel anonymization, IPFS upload
 - **Automated Test Data**: Dynamic generation of test files with sample data
@@ -252,6 +268,7 @@ cd javascript_backend && npm test
 We welcome contributions! Here's how to get started:
 
 ### Development Setup
+
 1. Fork the repository
 2. Follow the [Quick Start](#quick-start) guide
 3. Create a feature branch: `git checkout -b feature/your-feature`
@@ -259,12 +276,14 @@ We welcome contributions! Here's how to get started:
 5. Submit a pull request
 
 ### Code Style
+
 - Follow existing code patterns
 - Add tests for new features
 - Update documentation as needed
 - Ensure all tests pass before submitting
 
 ### Project Structure
+
 ```
 healthy/
 ├── prototype/                 # React frontend
@@ -282,9 +301,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgements
 
 Built with these amazing technologies:
+
 - [React](https://reactjs.org/) - Frontend framework
 - [FastAPI](https://fastapi.tiangolo.com/) - Python backend
-- [Express.js](https://expressjs.com/) - JavaScript backend  
+- [Express.js](https://expressjs.com/) - JavaScript backend
 - [ChromaDB](https://www.trychroma.com/) - Vector database
 - [IPFS](https://ipfs.io/) - Decentralized storage
 - [Ethereum](https://ethereum.org/) - Blockchain platform

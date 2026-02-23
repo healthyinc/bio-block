@@ -1,76 +1,86 @@
-import React, { useState } from 'react';
-import { Wallet, Search, Upload, User, ChevronDown, Shield, Database, Globe, Zap } from 'lucide-react';
-import SearchData from './search_data';
-import UploadData from './upload_data';
-import Dashboard from './Dashboard';
+import React, { useState } from "react";
+import {
+  Wallet,
+  Search,
+  Upload,
+  User,
+  ChevronDown,
+  Shield,
+  Database,
+  Globe,
+  Zap,
+} from "lucide-react";
+import SearchData from "./search_data";
+import UploadData from "./upload_data";
+import Dashboard from "./Dashboard";
 
 export default function App() {
   const [isWalletConnected, setIsWalletConnected] = useState(false);
-  const [walletAddress, setWalletAddress] = useState('');
-  const [fullWalletAddress, setFullWalletAddress] = useState('');
-  const [currentView, setCurrentView] = useState('main');
+  const [walletAddress, setWalletAddress] = useState("");
+  const [fullWalletAddress, setFullWalletAddress] = useState("");
+  const [currentView, setCurrentView] = useState("main");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const handleWalletConnect = async () => {
     try {
-      if (typeof window.ethereum !== 'undefined') {
+      if (typeof window.ethereum !== "undefined") {
         await window.ethereum.request({
-          method: 'wallet_requestPermissions',
-          params: [{ eth_accounts: {} }]
+          method: "wallet_requestPermissions",
+          params: [{ eth_accounts: {} }],
         });
-        
+
         const accounts = await window.ethereum.request({
-          method: 'eth_requestAccounts'
+          method: "eth_requestAccounts",
         });
-        
+
         const address = accounts[0];
         const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
         setWalletAddress(shortAddress);
         setFullWalletAddress(address);
         setIsWalletConnected(true);
       } else {
-        alert('Please install MetaMask or another Web3 wallet');
+        alert("Please install MetaMask or another Web3 wallet");
       }
     } catch (error) {
-      console.error('Wallet connection failed:', error);
+      console.error("Wallet connection failed:", error);
       if (error.code === 4001) {
-        alert('Connection rejected by user');
+        alert("Connection rejected by user");
       }
     }
   };
 
   const handleDisconnect = () => {
     setIsWalletConnected(false);
-    setWalletAddress('');
-    setFullWalletAddress('');
+    setWalletAddress("");
+    setFullWalletAddress("");
     setIsDropdownOpen(false);
-    setCurrentView('main');
+    setCurrentView("main");
   };
 
   const handleSearch = () => {
-    setCurrentView('search');
+    setCurrentView("search");
   };
 
   const handleUpload = () => {
-    setCurrentView('upload');
+    setCurrentView("upload");
   };
 
   const handleDashboard = () => {
-    setCurrentView('dashboard');
+    setCurrentView("dashboard");
     setIsDropdownOpen(false);
   };
 
   const handleBackToMain = () => {
-    setCurrentView('main');
+    setCurrentView("main");
   };
 
-  if (currentView === 'search') {
+  if (currentView === "search") {
     return <SearchData onBack={handleBackToMain} />;
   }
 
-  if (currentView === 'upload') {
+  if (currentView === "upload") {
     return (
-      <UploadData 
+      <UploadData
         onBack={handleBackToMain}
         isWalletConnected={isWalletConnected}
         walletAddress={fullWalletAddress}
@@ -79,9 +89,9 @@ export default function App() {
     );
   }
 
-  if (currentView === 'dashboard') {
+  if (currentView === "dashboard") {
     return (
-      <Dashboard 
+      <Dashboard
         onBack={handleBackToMain}
         isWalletConnected={isWalletConnected}
         walletAddress={fullWalletAddress}
@@ -93,7 +103,7 @@ export default function App() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
       {/* Enhanced Header with Gradient */}
       <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-blue-600 to-indigo-600 h-2"></div>
-      
+
       {/* Wallet Connection Section */}
       <div className="absolute top-6 right-6">
         {isWalletConnected ? (
@@ -106,7 +116,10 @@ export default function App() {
                 <User size={18} className="text-white" />
               </div>
               <span className="text-sm font-medium text-gray-700">{walletAddress}</span>
-              <ChevronDown size={16} className={`text-gray-500 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown
+                size={16}
+                className={`text-gray-500 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`}
+              />
             </button>
 
             {isDropdownOpen && (
@@ -140,7 +153,6 @@ export default function App() {
       {/* Main Content Container */}
       <div className="flex items-center justify-center min-h-screen p-6">
         <div className="w-full max-w-4xl">
-          
           {/* Hero Section */}
           <div className="text-center mb-12">
             <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl mb-6 shadow-lg">
@@ -153,7 +165,8 @@ export default function App() {
               Secure, decentralized document management powered by blockchain technology
             </p>
             <p className="text-gray-500 max-w-xl mx-auto">
-              Upload, search, and manage your medical documents with enterprise-grade security and privacy
+              Upload, search, and manage your medical documents with enterprise-grade security and
+              privacy
             </p>
           </div>
 
@@ -164,21 +177,27 @@ export default function App() {
                 <Database size={24} className="text-blue-600" />
               </div>
               <h3 className="font-semibold text-gray-800 mb-2">IPFS Storage</h3>
-              <p className="text-sm text-gray-600">Decentralized storage ensures your documents are always accessible and secure</p>
+              <p className="text-sm text-gray-600">
+                Decentralized storage ensures your documents are always accessible and secure
+              </p>
             </div>
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-200 border border-gray-100">
               <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
                 <Shield size={24} className="text-green-600" />
               </div>
               <h3 className="font-semibold text-gray-800 mb-2">Blockchain Verified</h3>
-              <p className="text-sm text-gray-600">Ethereum blockchain ensures document integrity and ownership verification</p>
+              <p className="text-sm text-gray-600">
+                Ethereum blockchain ensures document integrity and ownership verification
+              </p>
             </div>
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-200 border border-gray-100">
               <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
                 <Zap size={24} className="text-purple-600" />
               </div>
               <h3 className="font-semibold text-gray-800 mb-2">Smart Search</h3>
-              <p className="text-sm text-gray-600">Advanced filtering and semantic search to find exactly what you need</p>
+              <p className="text-sm text-gray-600">
+                Advanced filtering and semantic search to find exactly what you need
+              </p>
             </div>
           </div>
 
@@ -246,15 +265,11 @@ export default function App() {
               </div>
             </div>
           </div>
-
         </div>
       </div>
 
       {isDropdownOpen && (
-        <div 
-          className="fixed inset-0 z-0" 
-          onClick={() => setIsDropdownOpen(false)}
-        />
+        <div className="fixed inset-0 z-0" onClick={() => setIsDropdownOpen(false)} />
       )}
     </div>
   );
