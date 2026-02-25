@@ -329,9 +329,9 @@ async def anonymize_image_presidio_only(file: UploadFile = File(...)):
 
 
 @app.post("/store")
-async def store_data_enhanced(request: StoreWithContentRequest):
+async def store_data(request: StoreWithContentRequest):
     """
-    Enhanced storage with both metadata and content vectors
+    Store document data with metadata and content vectors
     """
     try:
         print(f"Received enhanced storage request: {request.dataset_title}")
