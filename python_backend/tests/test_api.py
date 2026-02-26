@@ -67,7 +67,7 @@ class TestAPI(unittest.TestCase):
             "extracted_content": "Columns: Age, Gender, Diagnosis\nRow 1: Age: 45; Gender: Male; Diagnosis: Type 2 Diabetes",
             "file_type": "spreadsheet"
         }
-        resp = requests.post(f"{BASE_URL}/store", json=data)
+        resp = client.post("/store", json=data)
         self.assertIn(resp.status_code, [200, 201])
         self.assertIn("content_chunks", resp.json())
 
@@ -79,7 +79,7 @@ class TestAPI(unittest.TestCase):
             "metadata_weight": 0.4,
             "n_results": 5
         }
-        resp = requests.post(f"{BASE_URL}/search_enhanced", json=data)
+        resp = client.post("/search_enhanced", json=data)
         self.assertEqual(resp.status_code, 200)
         self.assertIn("results", resp.json())
         self.assertIn("search_config", resp.json())
@@ -92,7 +92,7 @@ class TestAPI(unittest.TestCase):
             "cid": "test-cid-old-format",
             "metadata": {"title": "test"}
         }
-        resp = requests.post(f"{BASE_URL}/store", json=data)
+        resp = client.post("/store", json=data)
         self.assertIn(resp.status_code, [200, 201])
 
 if __name__ == "__main__":
