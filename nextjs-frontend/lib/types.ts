@@ -16,17 +16,15 @@ export interface TransactionResult {
   hash: string;
 }
 
+// Note: EthereumProvider is now provided by wagmi/viem
+// Keeping for backwards compatibility with any code that might import it
 export interface EthereumProvider {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
   on?: (event: string, callback: (...args: unknown[]) => void) => void;
   removeListener?: (event: string, callback: (...args: unknown[]) => void) => void;
 }
 
-declare global {
-  interface Window {
-    ethereum?: EthereumProvider;
-  }
-}
+// Window.ethereum type is now provided by @rainbow-me/rainbowkit and wagmi
 
 export interface ContractABI {
   inputs: Array<{ internalType: string; name: string; type: string }>;

@@ -12,8 +12,11 @@ import {
   X,
   Clock,
   Check,
+  AlertTriangle,
 } from 'lucide-react';
-import { storeDocumentHash } from '../lib/contractService';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useChainId, useSwitchChain } from 'wagmi';
+import { storeDocumentHash, getContractChainId } from '../lib/contractService';
 import { encryptFile } from '../lib/encryptionUtils';
 import StreamingEncryption from '../lib/streamingEncryption';
 
@@ -22,7 +25,6 @@ interface UploadDataProps {
   onBack: () => void;
   isWalletConnected: boolean;
   walletAddress: string;
-  onWalletConnect: () => void;
 }
 
 type PreviewType = 'image' | 'spreadsheet' | 'pdf' | 'dicom' | null;
@@ -67,8 +69,16 @@ export default function UploadData({
   onBack,
   isWalletConnected,
   walletAddress,
-  onWalletConnect,
 }: UploadDataProps) {
+  // Chain validation
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+  const isCorrectChain = chainId === getContractChainId();
+
+  const handleSwitchNetwork = () => {
+    switchChain({ chainId: getContractChainId() });
+  };
+
   // State
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [datasetTitle, setDatasetTitle] = useState<string>('');
@@ -474,6 +484,11 @@ export default function UploadData({
       return;
     }
 
+    if (!isCorrectChain) {
+      alert('Please switch to Sepolia network first');
+      return;
+    }
+
     if (!selectedFile) {
       alert('Please select a file first');
       return;
@@ -662,9 +677,8 @@ export default function UploadData({
           ...(diseaseTags.length && { disease_tags: diseaseTags.join(', ') }),
         };
 
-        const pythonBackendUrl =
-          process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://localhost:3002';
-        const storeResponse = await fetch(`${pythonBackendUrl}/store`, {
+        // Use Next.js API route to proxy to Python backend
+        const storeResponse = await fetch('/api/store', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -753,11 +767,28 @@ export default function UploadData({
                     <p className="text-amber-700 text-sm mb-3">
                       Connect your wallet to upload and manage documents securely
                     </p>
+                    <ConnectButton />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isWalletConnected && !isCorrectChain && (
+              <div className="p-8 border-b border-gray-100">
+                <div className="flex items-center gap-4 p-8 bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-2xl">
+                  <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle size={24} className="text-yellow-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-yellow-800 mb-1">Wrong Network</h3>
+                    <p className="text-yellow-700 text-sm mb-3">
+                      Please switch to Sepolia testnet to upload documents
+                    </p>
                     <button
-                      onClick={onWalletConnect}
-                      className="px-4  py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-sm hover:shadow-md font-semibold mx-1 my-1"
+                      onClick={handleSwitchNetwork}
+                      className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
                     >
-                      Connect Wallet
+                      Switch to Sepolia
                     </button>
                   </div>
                 </div>

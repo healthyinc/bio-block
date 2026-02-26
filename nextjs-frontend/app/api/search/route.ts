@@ -5,11 +5,16 @@ const PYTHON_BACKEND_URL = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http:/
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    
+    // Support different endpoints via the body
+    const endpoint = body._endpoint || '/search';
+    const requestBody = { ...body };
+    delete requestBody._endpoint;
 
-    const response = await fetch(`${PYTHON_BACKEND_URL}/search`, {
+    const response = await fetch(`${PYTHON_BACKEND_URL}${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {

@@ -55,7 +55,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-chroma_client = chromadb.PersistentClient(path="./chroma_db")
+# Disable ChromaDB telemetry to avoid telemetry errors
+os.environ["ANONYMIZED_TELEMETRY"] = "false"
+
+chroma_client = chromadb.PersistentClient(path="./chroma_db", settings=chromadb.Settings(anonymized_telemetry=False))
 collection = chroma_client.get_or_create_collection(name="new_user_data")
 
 # 1. Cross-platform Tesseract detection

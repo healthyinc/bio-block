@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Wallet, Search, Upload, User, ChevronDown, Shield, Database, Globe, Zap } from "lucide-react";
+import { Search, Upload, User, ChevronDown, Shield, Database, Globe, Zap } from "lucide-react";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount, useDisconnect } from "wagmi";
 import SearchData from "../components/SearchData";
 import UploadData from "../components/UploadData";
 import Dashboard from "../components/Dashboard";
@@ -9,44 +11,15 @@ import Dashboard from "../components/Dashboard";
 type ViewType = "main" | "search" | "upload" | "dashboard";
 
 export default function Home() {
-  const [isWalletConnected, setIsWalletConnected] = useState<boolean>(false);
-  const [walletAddress, setWalletAddress] = useState<string>("");
-  const [fullWalletAddress, setFullWalletAddress] = useState<string>("");
+  const { address, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
   const [currentView, setCurrentView] = useState<ViewType>("main");
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
 
-  const handleWalletConnect = async () => {
-    try {
-      if (typeof window.ethereum !== "undefined") {
-        await window.ethereum.request({
-          method: "wallet_requestPermissions",
-          params: [{ eth_accounts: {} }],
-        });
-
-        const accounts = await window.ethereum.request({
-          method: "eth_requestAccounts",
-        });
-
-        const address = accounts[0];
-        const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
-        setWalletAddress(shortAddress);
-        setFullWalletAddress(address);
-        setIsWalletConnected(true);
-      } else {
-        alert("Please install MetaMask or another Web3 wallet");
-      }
-    } catch (error: unknown) {
-      console.error("Wallet connection failed:", error);
-      if (error && typeof error === 'object' && 'code' in error && (error as { code: number }).code === 4001) {
-        alert("Connection rejected by user");
-      }
-    }
-  };
+  const shortAddress = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "";
 
   const handleDisconnect = () => {
-    setIsWalletConnected(false);
-    setWalletAddress("");
-    setFullWalletAddress("");
+    disconnect();
     setIsDropdownOpen(false);
     setCurrentView("main");
   };
@@ -76,9 +49,8 @@ export default function Home() {
     return (
       <UploadData
         onBack={handleBackToMain}
-        isWalletConnected={isWalletConnected}
-        walletAddress={fullWalletAddress}
-        onWalletConnect={handleWalletConnect}
+        isWalletConnected={isConnected}
+        walletAddress={address || ""}
       />
     );
   }
@@ -87,8 +59,8 @@ export default function Home() {
     return (
       <Dashboard
         onBack={handleBackToMain}
-        isWalletConnected={isWalletConnected}
-        walletAddress={fullWalletAddress}
+        isWalletConnected={isConnected}
+        walletAddress={address || ""}
       />
     );
   }
@@ -100,7 +72,7 @@ export default function Home() {
       
       {/* Wallet Connection Section */}
       <div className="absolute top-6 right-6">
-        {isWalletConnected ? (
+        {isConnected ? (
           <div className="relative">
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
@@ -109,7 +81,7 @@ export default function Home() {
               <div className="w-9 h-9 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center shadow-md">
                 <User size={18} className="text-white" />
               </div>
-              <span className="text-sm font-medium text-gray-700">{walletAddress}</span>
+              <span className="text-sm font-medium text-gray-700">{shortAddress}</span>
               <ChevronDown size={16} className={`text-gray-500 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
 
@@ -131,13 +103,20 @@ export default function Home() {
             )}
           </div>
         ) : (
-          <button
-            onClick={handleWalletConnect}
-            className="flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
-          >
-            <Wallet size={18} />
-            <span className="font-medium">Connect Wallet</span>
-          </button>
+          <ConnectButton.Custom>
+            {({ openConnectModal }) => (
+              <button
+                onClick={openConnectModal}
+                className="flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/>
+                  <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>
+                </svg>
+                <span className="font-medium">Connect Wallet</span>
+              </button>
+            )}
+          </ConnectButton.Custom>
         )}
       </div>
 
@@ -222,11 +201,14 @@ export default function Home() {
               </button>
             </div>
 
-            {!isWalletConnected && (
+            {!isConnected && (
               <div className="mt-8 p-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl">
                 <div className="flex items-center justify-center gap-3">
                   <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center">
-                    <Wallet size={16} className="text-amber-600" />
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-600">
+                      <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/>
+                      <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>
+                    </svg>
                   </div>
                   <p className="text-amber-700 font-medium">
                     Connect your wallet to upload and manage documents

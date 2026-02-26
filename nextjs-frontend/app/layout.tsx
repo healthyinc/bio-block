@@ -1,5 +1,6 @@
 import "./globals.css";
 import { Metadata } from "next";
+import { Providers } from "../components/Providers";
 
 export const metadata: Metadata = {
   title: "Bio-Block - Decentralized Medical Records",
@@ -35,7 +36,9 @@ interface RootLayoutProps {
 export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body className="m-0 p-0">{children}</body>
+      <body className="m-0 p-0">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

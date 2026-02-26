@@ -1,168 +1,9 @@
-import { ethers, BrowserProvider, Contract } from 'ethers';
-import type { ContractABI } from './types';
+import { parseEther, formatEther, type Address } from 'viem';
+import { readContract, writeContract, waitForTransactionReceipt, getAccount, type Config } from '@wagmi/core';
+import { CONTRACT_ADDRESS, CONTRACT_ABI, CONTRACT_CHAIN_ID, config } from './wagmi';
 
-const CONTRACT_ADDRESS = '0xd58de64aac08d5412b8020c7c61b215fec0c9644';
-
-const CONTRACT_ABI: ContractABI[] = [
-  {
-    inputs: [
-      {
-        internalType: 'string',
-        name: 'ipfsHash',
-        type: 'string',
-      },
-    ],
-    name: 'purchaseDocument',
-    outputs: [
-      {
-        internalType: 'bool',
-        name: '',
-        type: 'bool',
-      },
-    ],
-    stateMutability: 'payable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      {
-        internalType: 'string',
-        name: 'ipfsHash',
-        type: 'string',
-      },
-      {
-        internalType: 'uint256',
-        name: 'price',
-        type: 'uint256',
-      },
-    ],
-    name: 'storeDocument',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [],
-    name: 'withdrawEarnings',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
-  {
-    inputs: [
-      {
-        internalType: 'string',
-        name: '',
-        type: 'string',
-      },
-    ],
-    name: 'documentOwners',
-    outputs: [
-      {
-        internalType: 'address',
-        name: '',
-        type: 'address',
-      },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      {
-        internalType: 'string',
-        name: '',
-        type: 'string',
-      },
-    ],
-    name: 'documentPrices',
-    outputs: [
-      {
-        internalType: 'uint256',
-        name: '',
-        type: 'uint256',
-      },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      {
-        internalType: 'address',
-        name: '',
-        type: 'address',
-      },
-    ],
-    name: 'earnings',
-    outputs: [
-      {
-        internalType: 'uint256',
-        name: '',
-        type: 'uint256',
-      },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [
-      {
-        internalType: 'address',
-        name: 'user',
-        type: 'address',
-      },
-    ],
-    name: 'getDocuments',
-    outputs: [
-      {
-        internalType: 'string[]',
-        name: '',
-        type: 'string[]',
-      },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-  {
-    inputs: [],
-    name: 'getMyDocuments',
-    outputs: [
-      {
-        internalType: 'string[]',
-        name: '',
-        type: 'string[]',
-      },
-    ],
-    stateMutability: 'view',
-    type: 'function',
-  },
-];
-
-/**
- * Get the provider and signer for contract interactions
- */
-const getProviderAndSigner = async () => {
-  if (typeof window === 'undefined' || !window.ethereum) {
-    throw new Error('Ethereum provider not found. Please install MetaMask.');
-  }
-
-  const provider = new BrowserProvider(window.ethereum);
-  const signer = await provider.getSigner();
-  return { provider, signer };
-};
-
-/**
- * Get the contract instance
- */
-const getContract = async (withSigner = true): Promise<Contract> => {
-  const { provider, signer } = await getProviderAndSigner();
-  return new Contract(
-    CONTRACT_ADDRESS,
-    CONTRACT_ABI,
-    withSigner ? signer : provider
-  );
-};
+// Helper to get typed config - wagmi types are complex, this simplifies usage
+const getConfig = () => config as unknown as Config;
 
 /**
  * Store document hash and price on blockchain
@@ -174,12 +15,18 @@ export const storeDocumentHash = async (
   ipfsHash: string,
   priceInEth: number | string
 ): Promise<string> => {
-  const contract = await getContract(true);
-  const priceInWei = ethers.parseEther(priceInEth.toString());
+  const priceInWei = parseEther(priceInEth.toString());
 
-  const tx = await contract.storeDocument(ipfsHash, priceInWei);
-  await tx.wait();
-  return tx.hash;
+  const hash = await writeContract(getConfig(), {
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'storeDocument',
+    args: [ipfsHash, priceInWei],
+    chainId: CONTRACT_CHAIN_ID,
+  } as unknown as Parameters<typeof writeContract>[1]);
+
+  await waitForTransactionReceipt(getConfig(), { hash, chainId: CONTRACT_CHAIN_ID });
+  return hash;
 };
 
 /**
@@ -192,12 +39,19 @@ export const purchaseDocument = async (
   ipfsHash: string,
   priceInEth: number | string
 ): Promise<string> => {
-  const contract = await getContract(true);
-  const priceInWei = ethers.parseEther(priceInEth.toString());
+  const priceInWei = parseEther(priceInEth.toString());
 
-  const tx = await contract.purchaseDocument(ipfsHash, { value: priceInWei });
-  await tx.wait();
-  return tx.hash;
+  const hash = await writeContract(getConfig(), {
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'purchaseDocument',
+    args: [ipfsHash],
+    value: priceInWei,
+    chainId: CONTRACT_CHAIN_ID,
+  } as unknown as Parameters<typeof writeContract>[1]);
+
+  await waitForTransactionReceipt(getConfig(), { hash, chainId: CONTRACT_CHAIN_ID });
+  return hash;
 };
 
 /**
@@ -205,11 +59,15 @@ export const purchaseDocument = async (
  * @returns Transaction hash
  */
 export const withdrawEarnings = async (): Promise<string> => {
-  const contract = await getContract(true);
+  const hash = await writeContract(getConfig(), {
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'withdrawEarnings',
+    chainId: CONTRACT_CHAIN_ID,
+  } as unknown as Parameters<typeof writeContract>[1]);
 
-  const tx = await contract.withdrawEarnings();
-  await tx.wait();
-  return tx.hash;
+  await waitForTransactionReceipt(getConfig(), { hash, chainId: CONTRACT_CHAIN_ID });
+  return hash;
 };
 
 /**
@@ -218,10 +76,15 @@ export const withdrawEarnings = async (): Promise<string> => {
  * @returns Price in ETH as string
  */
 export const getDocumentPrice = async (ipfsHash: string): Promise<string> => {
-  const contract = await getContract(false);
+  const priceInWei = await readContract(getConfig(), {
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'documentPrices',
+    args: [ipfsHash],
+    chainId: CONTRACT_CHAIN_ID,
+  } as unknown as Parameters<typeof readContract>[1]);
 
-  const priceInWei = await contract.documentPrices(ipfsHash);
-  return ethers.formatEther(priceInWei);
+  return formatEther(priceInWei as bigint);
 };
 
 /**
@@ -229,10 +92,20 @@ export const getDocumentPrice = async (ipfsHash: string): Promise<string> => {
  * @returns Array of IPFS hashes
  */
 export const getMyDocuments = async (): Promise<string[]> => {
-  const contract = await getContract(true);
+  const account = getAccount(getConfig());
+  if (!account.address) {
+    throw new Error('Wallet not connected');
+  }
 
-  const documents = await contract.getMyDocuments();
-  return documents;
+  const documents = await readContract(getConfig(), {
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'getDocuments',
+    args: [account.address],
+    chainId: CONTRACT_CHAIN_ID,
+  } as unknown as Parameters<typeof readContract>[1]);
+
+  return documents as string[];
 };
 
 /**
@@ -241,18 +114,15 @@ export const getMyDocuments = async (): Promise<string[]> => {
  * @returns Earnings in ETH as string
  */
 export const getEarnings = async (address: string): Promise<string> => {
-  const contract = await getContract(false);
+  const earningsInWei = await readContract(getConfig(), {
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'earnings',
+    args: [address as Address],
+    chainId: CONTRACT_CHAIN_ID,
+  } as unknown as Parameters<typeof readContract>[1]);
 
-  const earningsInWei = await contract.earnings(address);
-  return ethers.formatEther(earningsInWei);
-};
-
-/**
- * Check if MetaMask is installed
- * @returns true if MetaMask is installed
- */
-export const isMetaMaskInstalled = (): boolean => {
-  return typeof window !== 'undefined' && typeof window.ethereum !== 'undefined';
+  return formatEther(earningsInWei as bigint);
 };
 
 /**
@@ -261,4 +131,20 @@ export const isMetaMaskInstalled = (): boolean => {
  */
 export const getContractAddress = (): string => {
   return CONTRACT_ADDRESS;
+};
+
+/**
+ * Get current connected account from wagmi
+ * @returns Account info or undefined
+ */
+export const getConnectedAccount = () => {
+  return getAccount(getConfig());
+};
+
+/**
+ * Get the chain ID where the contract is deployed
+ * @returns Chain ID
+ */
+export const getContractChainId = (): number => {
+  return CONTRACT_CHAIN_ID;
 };

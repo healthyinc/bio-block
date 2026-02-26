@@ -13,9 +13,11 @@ import {
   User,
   Building,
   X,
+  AlertTriangle,
 } from 'lucide-react';
+import { useChainId, useSwitchChain } from 'wagmi';
 import { decryptFile } from '../lib/encryptionUtils';
-import { purchaseDocument, getDocumentPrice } from '../lib/contractService';
+import { purchaseDocument, getDocumentPrice, getContractChainId } from '../lib/contractService';
 import StreamingEncryption from '../lib/streamingEncryption';
 
 // Types
@@ -70,6 +72,15 @@ interface PreviewData {
 }
 
 export default function SearchData({ onBack }: SearchDataProps) {
+  // Chain validation
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+  const isCorrectChain = chainId === getContractChainId();
+
+  const handleSwitchNetwork = () => {
+    switchChain({ chainId: getContractChainId() });
+  };
+
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
   const [isSearching, setIsSearching] = useState<boolean>(false);
@@ -125,10 +136,15 @@ export default function SearchData({ onBack }: SearchDataProps) {
       return;
     }
 
+    // Require minimum query length for semantic search to be meaningful
+    const MIN_QUERY_LENGTH = 2;
+    if (searchQuery.trim() && searchQuery.trim().length < MIN_QUERY_LENGTH && !useFilters) {
+      alert(`Please enter at least ${MIN_QUERY_LENGTH} characters for search`);
+      return;
+    }
+
     setIsSearching(true);
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://localhost:3002';
-
       let endpoint = '/search';
       let requestBody: Record<string, unknown> = {};
       
@@ -153,12 +169,16 @@ export default function SearchData({ onBack }: SearchDataProps) {
         };
       }
 
-      const response = await fetch(`${backendUrl}${endpoint}`, {
+      // Use Next.js API route to proxy to Python backend
+      const response = await fetch('/api/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify({
+          _endpoint: endpoint,
+          ...requestBody
+        }),
       });
 
       if (!response.ok) {
@@ -166,7 +186,18 @@ export default function SearchData({ onBack }: SearchDataProps) {
       }
 
       const result = await response.json();
-      setSearchResults(result.results || result.data || result || []);
+      const rawResults = result.results || result.data || result || [];
+      
+      // Filter results by minimum relevance score to avoid returning irrelevant results
+      // for short/vague queries. Score is calculated as 1/(1+distance), so higher is better.
+      const MIN_RELEVANCE_SCORE = 0.3;
+      const filteredResults = rawResults.filter((item: SearchResult & { score?: number }) => {
+        // If no score provided (e.g., filter-only search), include the result
+        if (item.score === undefined) return true;
+        return item.score >= MIN_RELEVANCE_SCORE;
+      });
+      
+      setSearchResults(filteredResults);
     } catch (error) {
       console.error('Search Error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -200,6 +231,11 @@ export default function SearchData({ onBack }: SearchDataProps) {
   };
 
   const handlePurchaseAndDownload = async (result: SearchResult, index: number) => {
+    if (!isCorrectChain) {
+      alert('Please switch to Sepolia network first');
+      return;
+    }
+
     const cid = result.cid || result.ipfsHash || result.hash;
     if (!cid) return;
 
@@ -359,6 +395,25 @@ export default function SearchData({ onBack }: SearchDataProps) {
       </div>
 
       <div className="max-w-6xl mx-auto p-6">
+        {/* Network Warning */}
+        {!isCorrectChain && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-4 mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="text-yellow-600" size={24} />
+              <div>
+                <p className="font-medium text-yellow-800">Wrong Network</p>
+                <p className="text-sm text-yellow-600">Switch to Sepolia testnet to purchase documents</p>
+              </div>
+            </div>
+            <button
+              onClick={handleSwitchNetwork}
+              className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+            >
+              Switch to Sepolia
+            </button>
+          </div>
+        )}
+
         {/* Search Card */}
         <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl p-8 mb-8 border border-gray-100">
           {/* Search Input */}

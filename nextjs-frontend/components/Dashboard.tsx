@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Wallet, DollarSign, FileText } from 'lucide-react';
+import { Wallet, DollarSign, FileText, AlertTriangle } from 'lucide-react';
+import { useChainId, useSwitchChain } from 'wagmi';
 import {
   getEarnings,
   withdrawEarnings,
   getMyDocuments,
   getDocumentPrice,
+  getContractChainId,
 } from '../lib/contractService';
 import { decryptFile } from '../lib/encryptionUtils';
 
@@ -37,22 +39,43 @@ export default function Dashboard({
   const [showDocuments, setShowDocuments] = useState<boolean>(false);
   const [loadingDocuments, setLoadingDocuments] = useState<boolean>(false);
   const [downloadingDocs, setDownloadingDocs] = useState<DownloadingState>({});
+  const [error, setError] = useState<string | null>(null);
+  
+  const chainId = useChainId();
+  const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
+  const contractChainId = getContractChainId();
+  const isCorrectChain = chainId === contractChainId;
 
   const loadDashboardData = useCallback(async () => {
     if (!isWalletConnected) return;
+    if (!isCorrectChain) {
+      setError('Please switch to Sepolia network to view your data');
+      return;
+    }
 
     setIsLoading(true);
+    setError(null);
     try {
       const userEarnings = await getEarnings(walletAddress);
       setEarnings(userEarnings);
     } catch (error) {
       console.error('Error loading dashboard:', error);
+      setError('Failed to load earnings. Please ensure you are on Sepolia network.');
     } finally {
       setIsLoading(false);
     }
-  }, [isWalletConnected, walletAddress]);
+  }, [isWalletConnected, walletAddress, isCorrectChain]);
+
+  const handleSwitchNetwork = () => {
+    switchChain({ chainId: contractChainId });
+  };
 
   const handleWithdraw = async () => {
+    if (!isCorrectChain) {
+      alert('Please switch to Sepolia network first');
+      return;
+    }
+    
     if (parseFloat(earnings) <= 0) {
       alert('No earnings to withdraw');
       return;
@@ -77,6 +100,10 @@ export default function Dashboard({
 
   const loadMyDocuments = async () => {
     if (!isWalletConnected) return;
+    if (!isCorrectChain) {
+      alert('Please switch to Sepolia network first');
+      return;
+    }
 
     setLoadingDocuments(true);
     try {
@@ -96,7 +123,7 @@ export default function Dashboard({
       setShowDocuments(true);
     } catch (error) {
       console.error('Error loading documents:', error);
-      alert('Failed to load documents');
+      alert('Failed to load documents. Please ensure you are on Sepolia network.');
     } finally {
       setLoadingDocuments(false);
     }
@@ -172,6 +199,35 @@ export default function Dashboard({
         <h1 className="text-2xl font-bold text-gray-800">My Dashboard</h1>
         <div></div>
       </div>
+
+      {!isCorrectChain && (
+        <div className="max-w-6xl mx-auto mb-6">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="text-yellow-600" size={24} />
+              <div>
+                <p className="font-medium text-yellow-800">Wrong Network</p>
+                <p className="text-sm text-yellow-600">Please switch to Sepolia testnet to use this app</p>
+              </div>
+            </div>
+            <button
+              onClick={handleSwitchNetwork}
+              className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+            >
+              Switch to Sepolia
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="max-w-6xl mx-auto mb-6">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
+            <AlertTriangle className="text-red-600" size={24} />
+            <p className="text-red-800">{error}</p>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="bg-white rounded-lg shadow-lg p-6">
