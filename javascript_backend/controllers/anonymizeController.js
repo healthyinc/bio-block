@@ -297,33 +297,6 @@ const anonymizeFile = async (req, res) => {
       type: "buffer",
     });
 
-             const extractedContent = await extractFileContent(
-                cleanedWorkbook,
-                req.file.originalname,
-                req.body.datasetTitle || ''
-            );
-
-            // Return both files as JSON response
-            const timestamp = Date.now();
-            return res.json({
-                success: true,
-                message: 'File anonymized successfully with preview',
-                files: {
-                    main: {
-                        data: outputBuffer.toString('base64'),
-                        filename: `anonymized_${originalFileName}`,
-                        contentType: outputMimeType
-                    },
-                    preview: {
-                        data: previewBuffer.toString('base64'),
-                        filename: `preview_${originalFileName}`,
-                        contentType: outputMimeType
-                    }
-                },
-                extractedContent: extractedContent,  // Add this line
-                extractionStatus: "success"
-            });
-        }
     // Generate preview if requested
     if (generatePreview) {
       const previewWorkbook = XLSX.utils.book_new();
@@ -398,21 +371,21 @@ const anonymizeFile = async (req, res) => {
 };
 
 const extractFileContent = async (workbook, originalFileName, datasetTitle = "") => {
-    /**
-     * Extract content from anonymized file for enhanced search
-     * Returns extracted content as text
-     */
-    try {
-        const ContentExtractor = require('./contentExtractorController');
-        const extractedContent = ContentExtractor.extractSpreadsheetContent(
-            workbook,
-            datasetTitle
-        );
-        return extractedContent;
-    } catch (error) {
-        console.error('Error extracting content:', error);
-        return ""; // Return empty string on error, don't fail the upload
-    }
+  /**
+   * Extract content from anonymized file for enhanced search
+   * Returns extracted content as text
+   */
+  try {
+    const ContentExtractor = require('./contentExtractorController');
+    const extractedContent = ContentExtractor.extractSpreadsheetContent(
+      workbook,
+      datasetTitle
+    );
+    return extractedContent;
+  } catch (error) {
+    console.error('Error extracting content:', error);
+    return ""; // Return empty string on error, don't fail the upload
+  }
 };
 
 module.exports = {
