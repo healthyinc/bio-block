@@ -35,15 +35,15 @@ describe("API Endpoints", function () {
     expect(res.status).to.equal(200);
   });
 
-   it('POST /api/anonymize should return extractedContent', async function() {
+  it("POST /api/anonymize should return extractedContent", async function () {
     const res = await request(app)
-      .post('/api/anonymize')
-      .attach('file', './tests/test.xlsx')
-      .field('generatePreview', 'true')
-      .field('datasetTitle', 'Test Dataset');
-    
+      .post("/api/anonymize")
+      .attach("file", "./tests/test.xlsx")
+      .field("generatePreview", "true")
+      .field("datasetTitle", "Test Dataset");
+
     expect(res.status).to.equal(200);
-    expect(res.body).to.have.property('extractedContent');
-    expect(res.body).to.have.property('extractionStatus', 'success');
+    expect(res.body).to.have.property("extractedContent");
+    expect(res.body).to.have.property("extractionStatus", "success");
   });
 });
