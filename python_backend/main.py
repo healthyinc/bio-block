@@ -120,6 +120,7 @@ class StoreRequest(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str
+    n_results: Optional[int] = 5
 
 class FilterRequest(BaseModel):
     filters: Dict[str, Any]
@@ -475,7 +476,7 @@ async def search_data(request: SearchRequest):
     try:
         search_results = metadata_collection.query(
             query_texts=[request.query],
-            n_results=5,
+            n_results=request.n_results,
             include=["documents", "metadatas", "distances"]
         )
         
