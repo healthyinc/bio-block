@@ -60,14 +60,14 @@ class TestAPI(unittest.TestCase):
     def test_store_with_content(self):
         """Test enhanced store with extracted content"""
         data = {
-            "summary": "Patient health records with diabetes data", 
+            "summary": "Patient health records with diabetes data",
             "dataset_title": "Diabetes Study 2024",
             "cid": "test-cid-enhanced-123",
             "metadata": {"dataType": "Institution", "disease_tags": "diabetes"},
             "extracted_content": "Columns: Age, Gender, Diagnosis\nRow 1: Age: 45; Gender: Male; Diagnosis: Type 2 Diabetes",
-            "file_type": "spreadsheet"
+            "file_type": "spreadsheet",
         }
-        resp = requests.post(f"{BASE_URL}/store", json=data)
+        resp = client.post("/store", json=data)
         self.assertIn(resp.status_code, [200, 201])
         self.assertIn("content_chunks", resp.json())
 
@@ -77,9 +77,9 @@ class TestAPI(unittest.TestCase):
             "query": "diabetes patient data",
             "content_weight": 0.6,
             "metadata_weight": 0.4,
-            "n_results": 5
+            "n_results": 5,
         }
-        resp = requests.post(f"{BASE_URL}/search_enhanced", json=data)
+        resp = client.post("/search_enhanced", json=data)
         self.assertEqual(resp.status_code, 200)
         self.assertIn("results", resp.json())
         self.assertIn("search_config", resp.json())
@@ -87,12 +87,12 @@ class TestAPI(unittest.TestCase):
     def test_store_backward_compatibility(self):
         """Test that old store format still works"""
         data = {
-            "summary": "test summary", 
+            "summary": "test summary",
             "dataset_title": "test title",
             "cid": "test-cid-old-format",
-            "metadata": {"title": "test"}
+            "metadata": {"title": "test"},
         }
-        resp = requests.post(f"{BASE_URL}/store", json=data)
+        resp = client.post("/store", json=data)
         self.assertIn(resp.status_code, [200, 201])
 
 if __name__ == "__main__":
