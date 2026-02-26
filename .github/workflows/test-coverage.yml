@@ -52,8 +52,8 @@ jobs:
       - name: Run Python tests with coverage
         working-directory: python_backend
         run: |
-          coverage run --source=. --omit="config-3.py" -m pytest
-          coverage xml --omit="config-3.py"
+          coverage run --source=. --omit="config*.py" -m pytest
+          coverage xml --omit="config*.py"
         continue-on-error: false
 
       - name: Upload Python coverage report
