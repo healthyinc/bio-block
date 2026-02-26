@@ -105,9 +105,7 @@ describe("IPFS Upload Controller", function () {
         .attach("encryptedFile", Buffer.from("data"), "test.enc")
         .field("fileName", "test.enc");
 
-      expect(capturedUrl).to.equal(
-        "https://api.pinata.cloud/pinning/pinFileToIPFS"
-      );
+      expect(capturedUrl).to.equal("https://api.pinata.cloud/pinning/pinFileToIPFS");
     });
   });
 
@@ -116,9 +114,7 @@ describe("IPFS Upload Controller", function () {
   // ------------------------------------------------------------------
   describe("Input validation", function () {
     it("should return 400 when no file is uploaded", async function () {
-      const res = await request(app)
-        .post("/api/ipfs/upload")
-        .field("fileName", "missing.enc");
+      const res = await request(app).post("/api/ipfs/upload").field("fileName", "missing.enc");
 
       expect(res.status).to.equal(400);
       expect(res.body).to.have.property("error");
@@ -248,12 +244,7 @@ describe("IPFS Upload Controller", function () {
         .field("fileName", "file.enc");
 
       expect(res.status).to.equal(200);
-      expect(res.body).to.have.all.keys(
-        "success",
-        "ipfsHash",
-        "fileName",
-        "fileSize"
-      );
+      expect(res.body).to.have.all.keys("success", "ipfsHash", "fileName", "fileSize");
       expect(res.body.success).to.be.true;
       expect(res.body.ipfsHash).to.be.a("string");
       expect(res.body.fileName).to.be.a("string");
