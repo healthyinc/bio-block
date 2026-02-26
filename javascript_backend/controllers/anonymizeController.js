@@ -360,21 +360,21 @@ const cleanedSheetData = {};
 };
 
 const extractFileContent = async (workbook, originalFileName, datasetTitle = "") => {
-    /**
-     * Extract content from anonymized file for enhanced search
-     * Returns extracted content as text
-     */
-    try {
-        const ContentExtractor = require('./contentExtractorController');
-        const extractedContent = ContentExtractor.extractSpreadsheetContent(
-            workbook,
-            datasetTitle
-        );
-        return extractedContent;
-    } catch (error) {
-        console.error('Error extracting content:', error);
-        return ""; // Return empty string on error, don't fail the upload
-    }
+  /**
+   * Extract content from anonymized file for enhanced search
+   * Returns extracted content as text
+   */
+  try {
+    const ContentExtractor = require('./contentExtractorController');
+    const extractedContent = ContentExtractor.extractSpreadsheetContent(
+      workbook,
+      datasetTitle
+    );
+    return extractedContent;
+  } catch (error) {
+    console.error('Error extracting content:', error);
+    return ""; // Return empty string on error, don't fail the upload
+  }
 };
 
 module.exports = {

@@ -120,6 +120,7 @@ class StoreRequest(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str
+    n_results: Optional[int] = 5
 
 class FilterRequest(BaseModel):
     filters: Dict[str, Any]
@@ -223,69 +224,69 @@ async def root():
         }
     }
 
-# @app.post("/anonymize_image")
-# async def anonymize_image(file: UploadFile = File(...)):
-#     """
-#     Anonymize PHI in JPEG/JPG/PNG images using Presidio (preferred) or legacy OCR+spaCy
-#     """
-#     try:
-#         # Validate file type
-#         if not file.content_type or not file.content_type.startswith('image/'):
-#             raise HTTPException(status_code=400, detail="File must be an image")
-        
-#         if file.content_type not in ['image/jpeg', 'image/jpg', 'image/png']:
-#             raise HTTPException(status_code=400, detail="Only JPEG, JPG, and PNG images are supported")
-        
-#         # Read and convert image
-#         contents = await file.read()
-#         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
-        
-#         # Try Presidio first (preferred method)
-#         if presidio_available and presidio_image_redactor is not None:
-#             try:
-#                 print("Using Presidio advanced image redaction")
-#                 redacted_image_pil = mask_phi_in_image_presidio(pil_image)
-                
-#                 # Save redacted image
-#                 img_buffer = io.BytesIO()
-#                 redacted_image_pil.save(img_buffer, format='JPEG', quality=95)
-#                 img_buffer.seek(0)
-                
-#                 return StreamingResponse(
-#                     io.BytesIO(img_buffer.read()),
-#                     media_type="image/jpeg",
-#                     headers={"Content-Disposition": f"attachment; filename=presidio_anonymized_{file.filename}"}
-#                 )
-                
-#             except Exception as e:
-#                 print(f"Presidio failed, falling back to legacy method: {str(e)}")
-        
-#         # Fallback to legacy OCR + spaCy method
-#         print("Using legacy OCR + spaCy image redaction")
-#         image_cv = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-#         masked_image_cv = mask_phi_in_image_legacy(image_cv)
-        
-#         # Convert back to PIL and save
-#         masked_image_rgb = cv2.cvtColor(masked_image_cv, cv2.COLOR_BGR2RGB)
-#         masked_pil = Image.fromarray(masked_image_rgb)
-        
-#         img_buffer = io.BytesIO()
-#         masked_pil.save(img_buffer, format='JPEG', quality=95)
-#         img_buffer.seek(0)
-
-#         return StreamingResponse(
-#             io.BytesIO(img_buffer.read()),
-#             media_type="image/jpeg",
-#             headers={"Content-Disposition": f"attachment; filename=legacy_anonymized_{file.filename}"}
-#         )
-        
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Failed to anonymize image: {str(e)}")
-
-
 @app.post("/anonymize_image")
+async def anonymize_image(file: UploadFile = File(...)):
+    """
+    Anonymize PHI in JPEG/JPG/PNG images using Presidio (preferred) or legacy OCR+spaCy
+    """
+    try:
+        # Validate file type
+        if not file.content_type or not file.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="File must be an image")
+        
+        if file.content_type not in ['image/jpeg', 'image/jpg', 'image/png']:
+            raise HTTPException(status_code=400, detail="Only JPEG, JPG, and PNG images are supported")
+        
+        # Read and convert image
+        contents = await file.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+        
+        # Try Presidio first (preferred method)
+        if presidio_available and presidio_image_redactor is not None:
+            try:
+                print("Using Presidio advanced image redaction")
+                redacted_image_pil = mask_phi_in_image_presidio(pil_image)
+                
+                # Save redacted image
+                img_buffer = io.BytesIO()
+                redacted_image_pil.save(img_buffer, format='JPEG', quality=95)
+                img_buffer.seek(0)
+                
+                return StreamingResponse(
+                    io.BytesIO(img_buffer.read()),
+                    media_type="image/jpeg",
+                    headers={"Content-Disposition": f"attachment; filename=presidio_anonymized_{file.filename}"}
+                )
+                
+            except Exception as e:
+                print(f"Presidio failed, falling back to legacy method: {str(e)}")
+        
+        # Fallback to legacy OCR + spaCy method
+        print("Using legacy OCR + spaCy image redaction")
+        image_cv = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+        masked_image_cv = mask_phi_in_image_legacy(image_cv)
+        
+        # Convert back to PIL and save
+        masked_image_rgb = cv2.cvtColor(masked_image_cv, cv2.COLOR_BGR2RGB)
+        masked_pil = Image.fromarray(masked_image_rgb)
+        
+        img_buffer = io.BytesIO()
+        masked_pil.save(img_buffer, format='JPEG', quality=95)
+        img_buffer.seek(0)
+
+        return StreamingResponse(
+            io.BytesIO(img_buffer.read()),
+            media_type="image/jpeg",
+            headers={"Content-Disposition": f"attachment; filename=legacy_anonymized_{file.filename}"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to anonymize image: {str(e)}")
+
+
+@app.post("/anonymize_image_presidio")
 async def anonymize_image_presidio_only(file: UploadFile = File(...)):
     """
     Anonymize PHI in images using ONLY Presidio (force advanced method)
@@ -329,9 +330,9 @@ async def anonymize_image_presidio_only(file: UploadFile = File(...)):
 
 
 @app.post("/store")
-async def store_data_enhanced(request: StoreWithContentRequest):
+async def store_data(request: StoreWithContentRequest):
     """
-    Enhanced storage with both metadata and content vectors
+    Store document data with metadata and content vectors
     """
     try:
         print(f"Received enhanced storage request: {request.dataset_title}")
@@ -473,9 +474,9 @@ async def store_data_enhanced(request: StoreWithContentRequest):
 @app.post("/search")
 async def search_data(request: SearchRequest):
     try:
-        search_results = collection.query(
+        search_results = metadata_collection.query(
             query_texts=[request.query],
-            n_results=5,
+            n_results=request.n_results,
             include=["documents", "metadatas", "distances"]
         )
         
@@ -518,7 +519,7 @@ async def filter_data(request: FilterRequest):
         print(f"Where clause: {where_clause}")  
         
        
-        search_results = collection.get(
+        search_results = metadata_collection.get(
             where=where_clause,
             include=["documents", "metadatas"]
         )
@@ -579,7 +580,7 @@ async def search_with_filter(request: Dict[str, Any]):
             else:
                 search_kwargs["where"] = filters
         
-        search_results = collection.query(**search_kwargs)
+        search_results = metadata_collection.query(**search_kwargs)
         
         results = []
         if search_results["ids"][0]:
@@ -606,7 +607,7 @@ async def search_with_filter(request: Dict[str, Any]):
 @app.get("/documents/{doc_id}")
 async def get_document(doc_id: str):
     try:
-        result = collection.get(
+        result = metadata_collection.get(
             ids=[doc_id],
             include=["documents", "metadatas"]
         )
@@ -629,7 +630,7 @@ async def get_document(doc_id: str):
 @app.put("/documents/{doc_id}")
 async def update_document(doc_id: str, request: UpdateRequest):
     try:
-        existing = collection.get(
+        existing = metadata_collection.get(
             ids=[doc_id],
             include=["documents", "metadatas"]
         )
@@ -658,7 +659,7 @@ async def update_document(doc_id: str, request: UpdateRequest):
         if disease_tags:
             combined_document += f"\nDisease Tags: {disease_tags}"
         
-        collection.add(
+        metadata_collection.add(
             ids=[new_doc_id],
             documents=[combined_document],
             metadatas=[updated_metadata]
@@ -676,7 +677,7 @@ async def update_document(doc_id: str, request: UpdateRequest):
 @app.delete("/documents/{doc_id}")
 async def delete_document(doc_id: str, request: DeleteRequest):
     try:
-        existing = collection.get(
+        existing = metadata_collection.get(
             ids=[doc_id],
             include=["metadatas"]
         )
@@ -688,7 +689,7 @@ async def delete_document(doc_id: str, request: DeleteRequest):
         if stored_owner.lower() != request.owner_address.lower():
             raise HTTPException(status_code=403, detail="Unauthorized: not document owner")
         
-        collection.delete(ids=[doc_id])
+        metadata_collection.delete(ids=[doc_id])
         
         print(f"Document {doc_id} deleted")
         
