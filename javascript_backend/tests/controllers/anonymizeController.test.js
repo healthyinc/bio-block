@@ -144,10 +144,7 @@ describe("PHI Detection in Anonymization", function () {
         const buffer = createXlsxBuffer(data);
         const output = await anonymizeAndParse(buffer);
 
-        expect(String(output[1][0])).to.match(
-          WID_PATTERN,
-          `"${header}" should be detected as PHI`
-        );
+        expect(String(output[1][0])).to.match(WID_PATTERN, `"${header}" should be detected as PHI`);
         expect(output[1][1]).to.equal("safe");
       });
     });
@@ -172,11 +169,7 @@ describe("PHI Detection in Anonymization", function () {
 
     safeHeaders.forEach((header) => {
       it(`should NOT anonymize non-PHI column "${header}"`, async function () {
-        const data = [
-          [header],
-          ["original_value_123"],
-          ["another_value_456"],
-        ];
+        const data = [[header], ["original_value_123"], ["another_value_456"]];
         const buffer = createXlsxBuffer(data);
         const output = await anonymizeAndParse(buffer);
 
@@ -251,20 +244,12 @@ describe("PHI Detection in Anonymization", function () {
   // ------------------------------------------------------------------
   describe("WID format", function () {
     it("should produce WIDs matching WID_XXXXXXXX (8 hex chars)", async function () {
-      const data = [
-        ["Name"],
-        ["John Doe"],
-        ["Jane Smith"],
-        ["Bob Wilson"],
-      ];
+      const data = [["Name"], ["John Doe"], ["Jane Smith"], ["Bob Wilson"]];
       const buffer = createXlsxBuffer(data);
       const output = await anonymizeAndParse(buffer);
 
       for (let i = 1; i < output.length; i++) {
-        expect(String(output[i][0])).to.match(
-          WID_PATTERN,
-          `Row ${i}: invalid WID format`
-        );
+        expect(String(output[i][0])).to.match(WID_PATTERN, `Row ${i}: invalid WID format`);
       }
     });
   });
