@@ -35,15 +35,20 @@ describe("API Endpoints", function () {
     expect(res.status).to.equal(200);
   });
 
-   it('POST /api/anonymize should return extractedContent', async function() {
+  it("POST /api/anonymize with preview should return main and preview files", async function () {
+    const path = require("path");
+    const testFilePath = path.join(__dirname, "test.xlsx");
+
     const res = await request(app)
-      .post('/api/anonymize')
-      .attach('file', './tests/test.xlsx')
-      .field('generatePreview', 'true')
-      .field('datasetTitle', 'Test Dataset');
-    
+      .post("/api/anonymize")
+      .attach("file", testFilePath)
+      .field("generatePreview", "true");
+
     expect(res.status).to.equal(200);
-    expect(res.body).to.have.property('extractedContent');
-    expect(res.body).to.have.property('extractionStatus', 'success');
+    expect(res.body).to.have.property("success", true);
+    expect(res.body).to.have.nested.property("files.main.data");
+    expect(res.body).to.have.nested.property("files.main.filename");
+    expect(res.body).to.have.nested.property("files.preview.data");
+    expect(res.body).to.have.nested.property("files.preview.filename");
   });
 });

@@ -1,11 +1,19 @@
 frontend:
-  - "prototype/**"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "prototype/**"
 
 backend-js:
-  - "javascript_backend/**"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "javascript_backend/**"
 
 backend-python:
-  - "python_backend/**"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "python_backend/**"
 
 docs:
-  - "**/*.md"
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
