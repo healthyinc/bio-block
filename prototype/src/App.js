@@ -118,7 +118,9 @@ export default function App() {
               <span className="text-sm font-medium text-gray-700">{walletAddress}</span>
               <ChevronDown
                 size={16}
-                className={`text-gray-500 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`}
+                className={`text-gray-500 transition-transform duration-200 ${
+                  isDropdownOpen ? "rotate-180" : ""
+                }`}
               />
             </button>
 

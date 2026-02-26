@@ -63,7 +63,9 @@ describe("DocumentStorage", function () {
       await documentStorage.storeDocument(ipfsHash, ethers.utils.parseEther("1.0"), "metadata");
 
       await expect(
-        documentStorage.connect(buyer).updateMetadata(ipfsHash, ethers.utils.parseEther("1.0"), "hacked")
+        documentStorage
+          .connect(buyer)
+          .updateMetadata(ipfsHash, ethers.utils.parseEther("1.0"), "hacked")
       ).to.be.revertedWith("Only owner can update");
     });
 
@@ -97,15 +99,15 @@ describe("DocumentStorage", function () {
       const ipfsHash = "QmDelete456";
       await documentStorage.storeDocument(ipfsHash, ethers.utils.parseEther("1.0"), "metadata");
 
-      await expect(
-        documentStorage.connect(buyer).deleteDocument(ipfsHash)
-      ).to.be.revertedWith("Only owner can delete");
+      await expect(documentStorage.connect(buyer).deleteDocument(ipfsHash)).to.be.revertedWith(
+        "Only owner can delete"
+      );
     });
 
     it("Should reject delete for non-existent document", async function () {
-      await expect(
-        documentStorage.deleteDocument("QmFakeDelete")
-      ).to.be.revertedWith("Document does not exist");
+      await expect(documentStorage.deleteDocument("QmFakeDelete")).to.be.revertedWith(
+        "Document does not exist"
+      );
     });
   });
 
@@ -130,7 +132,9 @@ describe("DocumentStorage", function () {
       await documentStorage.storeDocument(ipfsHash, price, "metadata");
 
       await expect(
-        documentStorage.connect(buyer).purchaseDocument(ipfsHash, { value: ethers.utils.parseEther("0.5") })
+        documentStorage
+          .connect(buyer)
+          .purchaseDocument(ipfsHash, { value: ethers.utils.parseEther("0.5") })
       ).to.be.revertedWith("Insufficient payment");
     });
 

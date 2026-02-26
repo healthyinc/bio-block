@@ -131,6 +131,7 @@ npm start        # Starts production server
 ```
 
 Build output:
+
 - 4 static pages (`/`, `/dashboard`, `/search`, `/upload`)
 - 7 dynamic API routes
 - ~279 KB shared JS bundle
@@ -138,33 +139,38 @@ Build output:
 ## Features
 
 ### Wallet Connection
+
 Connect MetaMask, view address in header dropdown, disconnect anytime.
 
 ### Upload Documents
+
 Select file (Excel, CSV, Image, PDF, DICOM) → fill metadata (title, description, disease tags, data type, gender, source, price) → automatic anonymization → client-side encryption → IPFS upload → blockchain hash storage → metadata saved to Python backend.
 
 ### Search Documents
+
 Enter query or use advanced filters (data type, gender, data source, file type) → results from Python backend → preview 5% sample of Excel data → purchase with ETH → download & decrypt.
 
 ### Dashboard
+
 View earnings balance, withdraw ETH, list uploaded documents with prices, download own documents.
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Framework | Next.js 15 (App Router) |
-| Language | TypeScript (ES2018) |
-| Styling | Tailwind CSS |
-| Icons | Lucide React |
-| Blockchain | Ethers.js v6 |
-| Encryption | CryptoJS (AES-256-CBC) |
-| IPFS | Pinata via JS backend |
-| Search | ChromaDB via Python backend |
+| Layer      | Technology                  |
+| ---------- | --------------------------- |
+| Framework  | Next.js 15 (App Router)     |
+| Language   | TypeScript (ES2018)         |
+| Styling    | Tailwind CSS                |
+| Icons      | Lucide React                |
+| Blockchain | Ethers.js v6                |
+| Encryption | CryptoJS (AES-256-CBC)      |
+| IPFS       | Pinata via JS backend       |
+| Search     | ChromaDB via Python backend |
 
 ## Troubleshooting
 
 **Port in use:**
+
 ```bash
 npx kill-port 3000
 ```
@@ -182,4 +188,3 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md).
 ## License
 
 See [LICENSE](../LICENSE).
-
