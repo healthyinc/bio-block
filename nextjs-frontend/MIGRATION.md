@@ -14,47 +14,47 @@ The React prototype (`prototype/src/`) was migrated to Next.js 15 with App Route
 
 ### Components
 
-| React (`prototype/src/`) | Next.js (`components/`) | Notes |
-|--------------------------|------------------------|-------|
-| `Dashboard.js` | `Dashboard.tsx` | Added typed props, interfaces |
-| `search_data.js` | `SearchData.tsx` | Added filter interfaces, preview types |
-| `upload_data.js` | `UploadData.tsx` | Added upload pipeline types |
-| `App.js` (header section) | `Header.tsx` | Extracted as standalone component |
-| `App.js` (hero section) | `HeroSection.tsx` | Extracted as standalone component |
-| — | `FeatureCard.tsx` | New reusable card component |
+| React (`prototype/src/`)  | Next.js (`components/`) | Notes                                  |
+| ------------------------- | ----------------------- | -------------------------------------- |
+| `Dashboard.js`            | `Dashboard.tsx`         | Added typed props, interfaces          |
+| `search_data.js`          | `SearchData.tsx`        | Added filter interfaces, preview types |
+| `upload_data.js`          | `UploadData.tsx`        | Added upload pipeline types            |
+| `App.js` (header section) | `Header.tsx`            | Extracted as standalone component      |
+| `App.js` (hero section)   | `HeroSection.tsx`       | Extracted as standalone component      |
+| —                         | `FeatureCard.tsx`       | New reusable card component            |
 
 ### Utilities
 
-| React (`prototype/src/`) | Next.js (`lib/`) | Notes |
-|--------------------------|-----------------|-------|
-| `contractService.js` | `contractService.ts` | Typed contract methods |
-| `encryptionUtils.js` | `encryptionUtils.ts` | Typed encrypt/decrypt |
-| `utils/streamingEncryption.js` | `streamingEncryption.ts` | Typed streaming class |
-| — | `api.ts` | New typed API client helpers |
-| — | `types.ts` | Shared interfaces |
+| React (`prototype/src/`)       | Next.js (`lib/`)         | Notes                        |
+| ------------------------------ | ------------------------ | ---------------------------- |
+| `contractService.js`           | `contractService.ts`     | Typed contract methods       |
+| `encryptionUtils.js`           | `encryptionUtils.ts`     | Typed encrypt/decrypt        |
+| `utils/streamingEncryption.js` | `streamingEncryption.ts` | Typed streaming class        |
+| —                              | `api.ts`                 | New typed API client helpers |
+| —                              | `types.ts`               | Shared interfaces            |
 
 ### Pages (React Router to App Router)
 
-| React | Next.js | Route |
-|-------|---------|-------|
-| `App.js` (conditional render) | `app/page.tsx` | `/` |
-| `App.js` → `<Dashboard />` | `app/dashboard/page.tsx` | `/dashboard` |
-| `App.js` → `<SearchData />` | `app/search/page.tsx` | `/search` |
-| `App.js` → `<UploadData />` | `app/upload/page.tsx` | `/upload` |
+| React                         | Next.js                  | Route        |
+| ----------------------------- | ------------------------ | ------------ |
+| `App.js` (conditional render) | `app/page.tsx`           | `/`          |
+| `App.js` → `<Dashboard />`    | `app/dashboard/page.tsx` | `/dashboard` |
+| `App.js` → `<SearchData />`   | `app/search/page.tsx`    | `/search`    |
+| `App.js` → `<UploadData />`   | `app/upload/page.tsx`    | `/upload`    |
 
 ### New Files (not in prototype)
 
-| File | Purpose |
-|------|---------|
-| `app/actions.ts` | Server Actions for search, store, health |
-| `app/api/health/route.ts` | Health check proxy |
-| `app/api/search/route.ts` | Search proxy to Python backend |
-| `app/api/store/route.ts` | Metadata store proxy |
-| `app/api/anonymize/route.ts` | Anonymization proxy (routes by file type) |
-| `app/api/ipfs/upload/route.ts` | IPFS upload proxy to JS backend |
-| `app/api/preview/[type]/route.ts` | Dynamic preview proxy |
-| `app/api/proxy/route.ts` | General backend proxy |
-| `types/ethereum.d.ts` | `window.ethereum` TypeScript declarations |
+| File                              | Purpose                                   |
+| --------------------------------- | ----------------------------------------- |
+| `app/actions.ts`                  | Server Actions for search, store, health  |
+| `app/api/health/route.ts`         | Health check proxy                        |
+| `app/api/search/route.ts`         | Search proxy to Python backend            |
+| `app/api/store/route.ts`          | Metadata store proxy                      |
+| `app/api/anonymize/route.ts`      | Anonymization proxy (routes by file type) |
+| `app/api/ipfs/upload/route.ts`    | IPFS upload proxy to JS backend           |
+| `app/api/preview/[type]/route.ts` | Dynamic preview proxy                     |
+| `app/api/proxy/route.ts`          | General backend proxy                     |
+| `types/ethereum.d.ts`             | `window.ethereum` TypeScript declarations |
 
 ---
 
@@ -108,11 +108,11 @@ Next.js:   NEXT_PUBLIC_JS_BACKEND_URL
 
 ### 6. Configuration
 
-| Config | Change |
-|--------|--------|
-| `tsconfig.json` | Target `ES2018`, strict mode, `next` plugin |
-| `tailwind.config.js` | Content paths include `.ts`/`.tsx` extensions |
-| `next.config.js` | Image optimization (avif/webp), compression, vendor splitting |
+| Config               | Change                                                        |
+| -------------------- | ------------------------------------------------------------- |
+| `tsconfig.json`      | Target `ES2018`, strict mode, `next` plugin                   |
+| `tailwind.config.js` | Content paths include `.ts`/`.tsx` extensions                 |
+| `next.config.js`     | Image optimization (avif/webp), compression, vendor splitting |
 
 ---
 

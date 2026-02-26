@@ -376,14 +376,11 @@ const extractFileContent = async (workbook, originalFileName, datasetTitle = "")
    * Returns extracted content as text
    */
   try {
-    const ContentExtractor = require('./contentExtractorController');
-    const extractedContent = ContentExtractor.extractSpreadsheetContent(
-      workbook,
-      datasetTitle
-    );
+    const ContentExtractor = require("./contentExtractorController");
+    const extractedContent = ContentExtractor.extractSpreadsheetContent(workbook, datasetTitle);
     return extractedContent;
   } catch (error) {
-    console.error('Error extracting content:', error);
+    console.error("Error extracting content:", error);
     return ""; // Return empty string on error, don't fail the upload
   }
 };
