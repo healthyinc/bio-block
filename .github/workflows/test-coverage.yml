@@ -52,7 +52,7 @@ jobs:
       - name: Run Python tests with coverage
         working-directory: python_backend
         run: |
-          coverage run -m pytest
+          coverage run --source=. -m pytest
           coverage xml
         continue-on-error: false
 
