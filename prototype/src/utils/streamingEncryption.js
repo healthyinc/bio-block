@@ -197,7 +197,12 @@ class StreamingEncryption {
     const STREAMING_THRESHOLD = 5 * 1024 * 1024; // 5MB
     const shouldStream = fileSize > STREAMING_THRESHOLD;
     console.log(
-      `shouldUseStreaming: fileSize=${fileSize} bytes (${(fileSize / (1024 * 1024)).toFixed(2)}MB), threshold=${STREAMING_THRESHOLD} bytes (${(STREAMING_THRESHOLD / (1024 * 1024)).toFixed(2)}MB), shouldStream=${shouldStream}`
+      `shouldUseStreaming: fileSize=${fileSize} bytes (${(fileSize / (1024 * 1024)).toFixed(
+        2
+      )}MB), threshold=${STREAMING_THRESHOLD} bytes (${(
+        STREAMING_THRESHOLD /
+        (1024 * 1024)
+      ).toFixed(2)}MB), shouldStream=${shouldStream}`
     );
     return shouldStream;
   }
