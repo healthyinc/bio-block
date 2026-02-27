@@ -326,6 +326,13 @@ const anonymizeFile = async (req, res) => {
         type: "buffer",
       });
 
+      // Extract file content for vector search
+      const extractedContent = await extractFileContent(
+        cleanedWorkbook,
+        req.file.originalname,
+        req.body.datasetTitle || ""
+      );
+
       // Return both files as JSON response
       const timestamp = Date.now();
       return res.json({
@@ -343,6 +350,8 @@ const anonymizeFile = async (req, res) => {
             contentType: outputMimeType,
           },
         },
+        extractedContent: extractedContent,
+        extractionStatus: "success",
       });
     }
 
