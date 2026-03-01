@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import chromadb
 import time
@@ -119,12 +119,12 @@ class StoreRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = {}
 
 class SearchRequest(BaseModel):
-    query: str
-    n_results: Optional[int] = 5
+    query: str = Field(..., min_length=1)
+    n_results: Optional[int] = Field(default=5, ge=1, le=100)
 
 class FilterRequest(BaseModel):
-    filters: Dict[str, Any]
-    n_results: Optional[int] = 10
+    filters: Dict[str, Any] = Field(..., min_length=1)
+    n_results: Optional[int] = Field(default=10, ge=1, le=100)
     
 # Add new request model for enhanced storage
 class StoreWithContentRequest(BaseModel):
@@ -652,22 +652,21 @@ async def update_document(doc_id: str, request: UpdateRequest):
         updated_metadata["dataset_title"] = new_dataset_title
         updated_metadata["owner_address"] = request.owner_address
         
-        new_doc_id = generate_id()
         combined_document = f"Dataset Title: {new_dataset_title}\n{new_summary}"
         
         disease_tags = updated_metadata.get("disease_tags")
         if disease_tags:
             combined_document += f"\nDisease Tags: {disease_tags}"
         
-        metadata_collection.add(
-            ids=[new_doc_id],
+        metadata_collection.update(
+            ids=[doc_id],
             documents=[combined_document],
             metadatas=[updated_metadata]
         )
         
-        print(f"Document updated: {doc_id} -> {new_doc_id}")
+        print(f"Document updated in-place: {doc_id}")
         
-        return {"message": "Document updated", "old_id": doc_id, "new_id": new_doc_id}
+        return {"message": "Document updated", "id": doc_id}
     
     except HTTPException:
         raise

@@ -331,8 +331,8 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       backendUrl = process.env.REACT_APP_PYTHON_BACKEND_URL || "http://localhost:3002";
       endpoint = "/anonymize_image";
     } else if (file.name.match(/\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i)) {
-      backendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
-      endpoint = '/api/anonymize';
+      backendUrl = process.env.REACT_APP_JS_BACKEND_URL || "http://localhost:3001";
+      endpoint = "/api/anonymize";
     } else {
       throw new Error(
         "File type not supported for anonymization. Only Excel (.xlsx, .xls, .csv, .ods, .tsv, .xlsm, .xlsb) and image files (.jpg, .jpeg, .png) are supported."
@@ -391,10 +391,10 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
     formData.append("fileName", fileName);
 
     const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || "http://localhost:3001";
-   
+
     const response = await fetch(`${backendUrl}/api/ipfs/upload`, {
-      method: 'POST',
-      body: formData
+      method: "POST",
+      body: formData,
     });
 
     if (!response.ok) {
@@ -499,10 +499,16 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
 
         console.log(`=== ENCRYPTION DECISION ===`);
         console.log(
-          `Original file: ${selectedFile.name}, size: ${selectedFile.size} bytes (${(selectedFile.size / (1024 * 1024)).toFixed(2)}MB)`
+          `Original file: ${selectedFile.name}, size: ${selectedFile.size} bytes (${(
+            selectedFile.size /
+            (1024 * 1024)
+          ).toFixed(2)}MB)`
         );
         console.log(
-          `Anonymized file: ${fileToUpload.name}, size: ${fileToUpload.size} bytes (${(fileToUpload.size / (1024 * 1024)).toFixed(2)}MB)`
+          `Anonymized file: ${fileToUpload.name}, size: ${fileToUpload.size} bytes (${(
+            fileToUpload.size /
+            (1024 * 1024)
+          ).toFixed(2)}MB)`
         );
 
         const shouldUseStreaming = streamer.shouldUseStreaming(fileToUpload.size);
@@ -515,7 +521,10 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
         if (shouldUseStreaming) {
           // Use streaming encryption for large files
           console.log(
-            `🔄 Using STREAMING encryption for large file (${(fileToUpload.size / (1024 * 1024)).toFixed(2)}MB)`
+            `🔄 Using STREAMING encryption for large file (${(
+              fileToUpload.size /
+              (1024 * 1024)
+            ).toFixed(2)}MB)`
           );
           setIsStreamingEncryption(true);
           setEncryptionProgress(0);
@@ -530,7 +539,10 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
         } else {
           // Use traditional encryption for small files
           console.log(
-            `⚡ Using TRADITIONAL encryption for small file (${(fileToUpload.size / (1024 * 1024)).toFixed(2)}MB)`
+            `⚡ Using TRADITIONAL encryption for small file (${(
+              fileToUpload.size /
+              (1024 * 1024)
+            ).toFixed(2)}MB)`
           );
           const fileBuffer = await fileToUpload.arrayBuffer();
           encryptedFile = encryptFile(new Uint8Array(fileBuffer));
@@ -721,7 +733,11 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                   📄 Select Document
                 </label>
                 <div
-                  className={`relative border-2 border-dashed ${isWalletConnected ? "border-gray-300 hover:border-blue-400 hover:bg-blue-50/50" : "border-gray-200 bg-gray-50"} rounded-2xl p-8 text-center transition-all duration-200`}
+                  className={`relative border-2 border-dashed ${
+                    isWalletConnected
+                      ? "border-gray-300 hover:border-blue-400 hover:bg-blue-50/50"
+                      : "border-gray-200 bg-gray-50"
+                  } rounded-2xl p-8 text-center transition-all duration-200`}
                 >
                   <div className={`${isWalletConnected ? "text-gray-500" : "text-gray-300"} mb-4`}>
                     <Upload className="mx-auto mb-4" size={48} />
@@ -738,7 +754,9 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
 
                   <div className="pointer-events-none">
                     <p
-                      className={`${isWalletConnected ? "text-blue-600" : "text-gray-400"} font-medium mb-2`}
+                      className={`${
+                        isWalletConnected ? "text-blue-600" : "text-gray-400"
+                      } font-medium mb-2`}
                     >
                       {selectedFile ? selectedFile.name : "Choose a file or drag and drop"}
                     </p>
@@ -881,7 +899,9 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                     value={datasetTitle}
                     onChange={(e) => setDatasetTitle(e.target.value)}
                     placeholder="Enter a unique title for your dataset..."
-                    className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${!isWalletConnected ? "bg-gray-100 cursor-not-allowed" : "bg-white"}`}
+                    className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+                      !isWalletConnected ? "bg-gray-100 cursor-not-allowed" : "bg-white"
+                    }`}
                     disabled={!isWalletConnected}
                   />
                 </div>
@@ -899,7 +919,9 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                     value={summary}
                     onChange={handleSummaryChange}
                     placeholder="Provide a detailed description of what this document contains..."
-                    className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all duration-200 ${!isWalletConnected ? "bg-gray-100 cursor-not-allowed" : "bg-white"}`}
+                    className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all duration-200 ${
+                      !isWalletConnected ? "bg-gray-100 cursor-not-allowed" : "bg-white"
+                    }`}
                     rows={4}
                     disabled={!isWalletConnected}
                   />
@@ -923,7 +945,9 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                         }
                         e.target.value = ""; // Reset dropdown
                       }}
-                      className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${!isWalletConnected ? "bg-gray-100 cursor-not-allowed" : "bg-white"}`}
+                      className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+                        !isWalletConnected ? "bg-gray-100 cursor-not-allowed" : "bg-white"
+                      }`}
                       disabled={!isWalletConnected}
                     >
                       <option value="">Select disease tags to add...</option>
@@ -993,7 +1017,9 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                     id="dataType"
                     value={dataType}
                     onChange={(e) => setDataType(e.target.value)}
-                    className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${!isWalletConnected ? "bg-gray-100 cursor-not-allowed" : "bg-white"}`}
+                    className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+                      !isWalletConnected ? "bg-gray-100 cursor-not-allowed" : "bg-white"
+                    }`}
                     disabled={!isWalletConnected}
                   >
                     <option value="">Select data type</option>
@@ -1014,7 +1040,9 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                     id="gender"
                     value={gender}
                     onChange={(e) => setGender(e.target.value)}
-                    className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${!isWalletConnected ? "bg-gray-100 cursor-not-allowed" : "bg-white"}`}
+                    className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+                      !isWalletConnected ? "bg-gray-100 cursor-not-allowed" : "bg-white"
+                    }`}
                     disabled={!isWalletConnected}
                   >
                     <option value="">Select gender (optional)</option>
@@ -1036,7 +1064,9 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                     id="dataSource"
                     value={dataSource}
                     onChange={(e) => setDataSource(e.target.value)}
-                    className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${!isWalletConnected ? "bg-gray-100 cursor-not-allowed" : "bg-white"}`}
+                    className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+                      !isWalletConnected ? "bg-gray-100 cursor-not-allowed" : "bg-white"
+                    }`}
                     disabled={!isWalletConnected}
                   >
                     <option value="">Select data source</option>
@@ -1065,7 +1095,9 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                     value={price}
                     onChange={handlePriceChange}
                     placeholder="0.01"
-                    className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${!isWalletConnected ? "bg-gray-100 cursor-not-allowed" : "bg-white"}`}
+                    className={`w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+                      !isWalletConnected ? "bg-gray-100 cursor-not-allowed" : "bg-white"
+                    }`}
                     disabled={!isWalletConnected}
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -1157,8 +1189,8 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                 {uploadProgress.isComplete
                   ? "Upload Complete!"
                   : uploadProgress.hasError
-                    ? "Upload Failed"
-                    : "Uploading Document"}
+                  ? "Upload Failed"
+                  : "Uploading Document"}
               </h3>
               {!uploadProgress.hasError && !uploadProgress.isComplete && (
                 <p className="text-gray-600">Please wait while we process your document...</p>
@@ -1174,10 +1206,10 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                       step.error
                         ? "bg-red-500"
                         : step.completed
-                          ? "bg-green-500"
-                          : index === currentStep
-                            ? "bg-blue-500"
-                            : "bg-gray-300"
+                        ? "bg-green-500"
+                        : index === currentStep
+                        ? "bg-blue-500"
+                        : "bg-gray-300"
                     }`}
                   >
                     {step.error ? (
@@ -1195,10 +1227,10 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                       step.error
                         ? "text-red-600 font-medium"
                         : step.completed
-                          ? "text-green-600 font-medium"
-                          : index === currentStep
-                            ? "text-blue-600 font-medium"
-                            : "text-gray-500"
+                        ? "text-green-600 font-medium"
+                        : index === currentStep
+                        ? "text-blue-600 font-medium"
+                        : "text-gray-500"
                     }`}
                   >
                     {step.name}

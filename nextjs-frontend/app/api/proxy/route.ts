@@ -11,11 +11,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 });
     }
 
-    // Determine full URL
-    let fullUrl = url;
+    // SECURITY: Only allow proxying to known internal backends
+    // Reject arbitrary URLs to prevent SSRF attacks
+    if (!url.startsWith('/js/') && !url.startsWith('/py/')) {
+      return NextResponse.json(
+        { error: 'Invalid proxy target. Only /js/ and /py/ prefixes are allowed.' },
+        { status: 403 }
+      );
+    }
+
+    // Determine full URL from allowed prefixes
+    let fullUrl: string;
     if (url.startsWith('/js/')) {
       fullUrl = `${JS_BACKEND_URL}${url.replace('/js', '')}`;
-    } else if (url.startsWith('/py/')) {
+    } else {
       fullUrl = `${PYTHON_BACKEND_URL}${url.replace('/py', '')}`;
     }
 

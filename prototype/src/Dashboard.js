@@ -5,7 +5,7 @@ import { decryptFile } from "./encryptionUtils";
 
 export default function Dashboard({ onBack, isWalletConnected, walletAddress }) {
   const [earnings, setEarnings] = useState("0");
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [documents, setDocuments] = useState([]);
   const [showDocuments, setShowDocuments] = useState(false);
