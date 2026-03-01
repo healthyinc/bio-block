@@ -20,6 +20,18 @@ except Exception:
     wsi_available = False
     WsiPreviewGenerator = None
 
+# Try to import NIfTI generator (may fail if NiBabel not available)
+try:
+    from .nifti_generator import NiftiPreviewGenerator
+    nifti_available = True
+except ImportError:
+    nifti_available = False
+    NiftiPreviewGenerator = None
+except Exception:
+    # Handle other import errors
+    nifti_available = False
+    NiftiPreviewGenerator = None
+
 
 class PreviewFactory:
     """
@@ -31,7 +43,7 @@ class PreviewFactory:
     
     # Registry of available generators (ordered by priority)
     # WSI generator checked first for specific extensions (.svs, .ndpi, etc.)
-    # Then DICOM, then standard images
+    # Then NIfTI, then DICOM, then standard images
     _generators: List[Type[PreviewGenerator]] = [
         DicomPreviewGenerator,
         ImagePreviewGenerator,
@@ -43,6 +55,12 @@ class PreviewFactory:
         # This ensures .svs, .ndpi, etc. are handled by WSI generator
         # before falling back to other generators
         _generators.insert(0, WsiPreviewGenerator)
+    
+    # Add NIfTI generator if available (after WSI, before DICOM)
+    if nifti_available and NiftiPreviewGenerator is not None:
+        # Insert after WSI (index 1 if WSI present, index 0 otherwise)
+        _nifti_idx = 1 if wsi_available else 0
+        _generators.insert(_nifti_idx, NiftiPreviewGenerator)
     
     @classmethod
     def create_generator(cls, filename: str = None, content_type: str = None) -> PreviewGenerator:
