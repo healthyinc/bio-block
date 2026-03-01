@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import chromadb
 import time
@@ -119,12 +119,12 @@ class StoreRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = {}
 
 class SearchRequest(BaseModel):
-    query: str
-    n_results: Optional[int] = 5
+    query: str = Field(..., min_length=1)
+    n_results: Optional[int] = Field(default=5, ge=1, le=100)
 
 class FilterRequest(BaseModel):
-    filters: Dict[str, Any]
-    n_results: Optional[int] = 10
+    filters: Dict[str, Any] = Field(..., min_length=1)
+    n_results: Optional[int] = Field(default=10, ge=1, le=100)
     
 # Add new request model for enhanced storage
 class StoreWithContentRequest(BaseModel):
