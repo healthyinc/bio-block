@@ -8,6 +8,7 @@ numpy
 Pillow
 python-multipart
 pytesseract
+eth-account
 
 # Presidio libraries for advanced image anonymization
 presidio-analyzer

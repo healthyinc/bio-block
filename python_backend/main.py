@@ -18,6 +18,8 @@ import os
 import json
 from typing import List, Tuple
 import re
+from eth_account.messages import encode_defunct
+from eth_account import Account
 
 # Preview factory imports
 from services.preview.factory import PreviewFactory
@@ -143,11 +145,36 @@ class UpdateRequest(BaseModel):
     dataset_title: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     owner_address: str
-    signature: str # Cryptographic signature of the request payload to prevent privilege escalation
+    signature: str  # Hex-encoded signature produced by eth_personal_sign
+    message: str  # The canonical plaintext message that was signed by the client
 
 class DeleteRequest(BaseModel):
     owner_address: str
-    signature: str # Cryptographic signature to prevent unauthorized deletion
+    signature: str  # Hex-encoded signature produced by eth_personal_sign
+    message: str  # The canonical plaintext message that was signed by the client
+
+
+def verify_owner_signature(owner_address: str, signature: str, message: str) -> str:
+    """
+    Recover the signer address via ecrecover and verify it matches the claimed
+    owner_address.  Returns the checksummed recovered address on success;
+    raises HTTPException on any failure.
+    """
+    try:
+        signable = encode_defunct(text=message)
+        recovered = Account.recover_message(signable, signature=signature)
+    except Exception as e:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Signature verification failed: {str(e)}",
+        )
+
+    if recovered.lower() != owner_address.lower():
+        raise HTTPException(
+            status_code=403,
+            detail="Signature does not match owner_address",
+        )
+    return recovered
 
 def generate_id() -> str:
     timestamp = int(time.time() * 1000)
@@ -644,11 +671,8 @@ async def update_document(doc_id: str, request: UpdateRequest):
         if stored_owner.lower() != request.owner_address.lower():
             raise HTTPException(status_code=403, detail="Unauthorized: not document owner")
         
-        # Security Fix: Verify cryptographic signature to prove ownership of the address
-        # TODO: Implement `eth_account.messages.recover_message` to verify request.signature
-        if not request.signature:
-            raise HTTPException(status_code=401, detail="Missing cryptographic signature")
-        # --- End Security Fix ---
+        # Security Fix: Verify cryptographic signature via ecrecover
+        verify_owner_signature(request.owner_address, request.signature, request.message)
         
         new_dataset_title = request.dataset_title if request.dataset_title else old_metadata.get("dataset_title", "")
         new_summary = request.summary if request.summary else existing["documents"][0]
@@ -696,11 +720,8 @@ async def delete_document(doc_id: str, request: DeleteRequest):
         if stored_owner.lower() != request.owner_address.lower():
             raise HTTPException(status_code=403, detail="Unauthorized: not document owner")
         
-        # Security Fix: Verify cryptographic signature to prove ownership of the address
-        # TODO: Implement `eth_account.messages.recover_message` to verify request.signature
-        if not request.signature:
-            raise HTTPException(status_code=401, detail="Missing cryptographic signature")
-        # --- End Security Fix ---
+        # Security Fix: Verify cryptographic signature via ecrecover
+        verify_owner_signature(request.owner_address, request.signature, request.message)
         
         collection.delete(ids=[doc_id])
         metadata_collection.delete(ids=[doc_id])
