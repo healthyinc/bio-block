@@ -17,6 +17,7 @@ contract DocumentStorage {
     
     function storeDocument(string memory ipfsHash, uint256 price, string memory metadata) public {
         require(documentOwners[ipfsHash] == address(0), "Document already exists");
+        require(price > 0, "Price must be greater than 0");  //price check
         userDocuments[msg.sender].push(ipfsHash);
         documentPrices[ipfsHash] = price;
         documentOwners[ipfsHash] = msg.sender;
@@ -35,6 +36,17 @@ contract DocumentStorage {
     function deleteDocument(string memory ipfsHash) public {
         require(documentOwners[ipfsHash] != address(0), "Document does not exist");
         require(documentOwners[ipfsHash] == msg.sender, "Only owner can delete");
+
+        // Remove from userDocuments array
+        string[] storage docs = userDocuments[msg.sender];
+        for (uint256 i = 0; i < docs.length; i++) {
+            if (keccak256(bytes(docs[i])) == keccak256(bytes(ipfsHash))) {
+                docs[i] = docs[docs.length - 1];
+                docs.pop();
+                break;
+            }
+        }
+
         documentOwners[ipfsHash] = address(0);
         documentPrices[ipfsHash] = 0;
         documentMetadata[ipfsHash] = "";
