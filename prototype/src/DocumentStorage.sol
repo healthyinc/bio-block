@@ -16,6 +16,7 @@ contract DocumentStorage {
     mapping(address => uint256) public earnings;
     
     function storeDocument(string memory ipfsHash, uint256 price, string memory metadata) public {
+        require(documentOwners[ipfsHash] == address(0), "Document already exists");
         userDocuments[msg.sender].push(ipfsHash);
         documentPrices[ipfsHash] = price;
         documentOwners[ipfsHash] = msg.sender;
