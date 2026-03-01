@@ -42,10 +42,15 @@ contract DocumentStorage {
     }
 
     function purchaseDocument(string memory ipfsHash) public payable returns (bool) {
-        require(msg.value >= documentPrices[ipfsHash], "Insufficient payment");
-        require(documentOwners[ipfsHash] != address(0), "Document does not exist");
-        earnings[documentOwners[ipfsHash]] += msg.value;
-        emit DocumentPurchased(msg.sender, documentOwners[ipfsHash], ipfsHash, msg.value);
+        address owner = documentOwners[ipfsHash];
+        require(owner != address(0), "Document does not exist");
+        require(msg.sender != owner, "Cannot purchase own document");
+
+        uint256 price = documentPrices[ipfsHash];
+        require(msg.value == price, "Exact price required");
+
+        earnings[owner] += price;
+        emit DocumentPurchased(msg.sender, owner, ipfsHash, price);
         return true;
     }
     
