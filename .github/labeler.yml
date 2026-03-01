@@ -1,6 +1,7 @@
 frontend:
   - changed-files:
       - any-glob-to-any-file:
+          - "nextjs-frontend/**"
           - "prototype/**"
 
 backend-js:
