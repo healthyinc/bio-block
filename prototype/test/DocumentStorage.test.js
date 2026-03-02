@@ -135,7 +135,7 @@ describe("DocumentStorage", function () {
         documentStorage
           .connect(buyer)
           .purchaseDocument(ipfsHash, { value: ethers.utils.parseEther("0.5") })
-      ).to.be.revertedWith("Insufficient payment");
+      ).to.be.revertedWith("Exact price required");
     });
 
     it("Should reject purchase of deleted document", async function () {
@@ -166,6 +166,112 @@ describe("DocumentStorage", function () {
 
       const earnings_after = await documentStorage.earnings(owner.address);
       expect(earnings_after).to.equal(ethers.constants.Zero);
+    });
+  });
+
+  describe("storeDocument security", function () {
+    it("Should reject storing a document with an already registered hash", async function () {
+      const ipfsHash = "QmDuplicate123";
+      const price = ethers.utils.parseEther("1.0");
+
+      await documentStorage.storeDocument(ipfsHash, price, "original");
+
+      await expect(
+        documentStorage.connect(buyer).storeDocument(ipfsHash, ethers.utils.parseEther("0.1"), "hijacked")
+      ).to.be.revertedWith("Document already exists");
+
+      const storedOwner = await documentStorage.documentOwners(ipfsHash);
+      expect(storedOwner).to.equal(owner.address);
+    });
+
+    it("Should allow re-registering a hash after the original is deleted", async function () {
+      const ipfsHash = "QmReRegister123";
+      const price = ethers.utils.parseEther("1.0");
+
+      await documentStorage.storeDocument(ipfsHash, price, "original");
+      await documentStorage.deleteDocument(ipfsHash);
+
+      await documentStorage.connect(buyer).storeDocument(ipfsHash, ethers.utils.parseEther("2.0"), "new owner");
+
+      const newOwner = await documentStorage.documentOwners(ipfsHash);
+      expect(newOwner).to.equal(buyer.address);
+    });
+  });
+
+  describe("purchaseDocument security", function () {
+    it("Should reject purchase of unregistered document", async function () {
+      await expect(
+        documentStorage.connect(buyer).purchaseDocument("QmNeverRegistered", { value: ethers.utils.parseEther("1.0") })
+      ).to.be.revertedWith("Document does not exist");
+    });
+
+    it("Should reject owner self-purchase", async function () {
+      const ipfsHash = "QmSelfBuy123";
+      const price = ethers.utils.parseEther("1.0");
+
+      await documentStorage.storeDocument(ipfsHash, price, "metadata");
+
+      await expect(
+        documentStorage.purchaseDocument(ipfsHash, { value: price })
+      ).to.be.revertedWith("Cannot purchase own document");
+    });
+
+    it("Should reject purchase with incorrect price", async function () {
+      const ipfsHash = "QmExactPrice123";
+      const price = ethers.utils.parseEther("1.0");
+
+      await documentStorage.storeDocument(ipfsHash, price, "metadata");
+
+      await expect(
+        documentStorage.connect(buyer).purchaseDocument(ipfsHash, { value: ethers.utils.parseEther("2.0") })
+      ).to.be.revertedWith("Exact price required");
+    });
+
+    it("Should credit exactly the document price to seller earnings", async function () {
+      const ipfsHash = "QmEarnings123";
+      const price = ethers.utils.parseEther("1.5");
+
+      await documentStorage.storeDocument(ipfsHash, price, "metadata");
+      await documentStorage.connect(buyer).purchaseDocument(ipfsHash, { value: price });
+
+      const sellerEarnings = await documentStorage.earnings(owner.address);
+      expect(sellerEarnings).to.equal(price);
+    });
+  });
+
+  describe("deleteDocument cleanup", function () {
+    it("Should remove document from user's document list", async function () {
+      const ipfsHash = "QmCleanup123";
+      const price = ethers.utils.parseEther("1.0");
+
+      await documentStorage.storeDocument(ipfsHash, price, "metadata");
+
+      let docs = await documentStorage.getMyDocuments();
+      expect(docs).to.include(ipfsHash);
+
+      await documentStorage.deleteDocument(ipfsHash);
+
+      docs = await documentStorage.getMyDocuments();
+      expect(docs).to.not.include(ipfsHash);
+    });
+
+    it("Should not affect other documents in list when deleting", async function () {
+      const hash1 = "QmMulti1";
+      const hash2 = "QmMulti2";
+      const hash3 = "QmMulti3";
+      const price = ethers.utils.parseEther("1.0");
+
+      await documentStorage.storeDocument(hash1, price, "doc1");
+      await documentStorage.storeDocument(hash2, price, "doc2");
+      await documentStorage.storeDocument(hash3, price, "doc3");
+
+      await documentStorage.deleteDocument(hash2);
+
+      const docs = await documentStorage.getMyDocuments();
+      expect(docs.length).to.equal(2);
+      expect(docs).to.include(hash1);
+      expect(docs).to.include(hash3);
+      expect(docs).to.not.include(hash2);
     });
   });
 });
