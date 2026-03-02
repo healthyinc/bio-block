@@ -177,7 +177,9 @@ describe("DocumentStorage", function () {
       await documentStorage.storeDocument(ipfsHash, price, "original");
 
       await expect(
-        documentStorage.connect(buyer).storeDocument(ipfsHash, ethers.utils.parseEther("0.1"), "hijacked")
+        documentStorage
+          .connect(buyer)
+          .storeDocument(ipfsHash, ethers.utils.parseEther("0.1"), "hijacked")
       ).to.be.revertedWith("Document already exists");
 
       const storedOwner = await documentStorage.documentOwners(ipfsHash);
@@ -191,7 +193,9 @@ describe("DocumentStorage", function () {
       await documentStorage.storeDocument(ipfsHash, price, "original");
       await documentStorage.deleteDocument(ipfsHash);
 
-      await documentStorage.connect(buyer).storeDocument(ipfsHash, ethers.utils.parseEther("2.0"), "new owner");
+      await documentStorage
+        .connect(buyer)
+        .storeDocument(ipfsHash, ethers.utils.parseEther("2.0"), "new owner");
 
       const newOwner = await documentStorage.documentOwners(ipfsHash);
       expect(newOwner).to.equal(buyer.address);
@@ -201,7 +205,9 @@ describe("DocumentStorage", function () {
   describe("purchaseDocument security", function () {
     it("Should reject purchase of unregistered document", async function () {
       await expect(
-        documentStorage.connect(buyer).purchaseDocument("QmNeverRegistered", { value: ethers.utils.parseEther("1.0") })
+        documentStorage
+          .connect(buyer)
+          .purchaseDocument("QmNeverRegistered", { value: ethers.utils.parseEther("1.0") })
       ).to.be.revertedWith("Document does not exist");
     });
 
@@ -211,9 +217,9 @@ describe("DocumentStorage", function () {
 
       await documentStorage.storeDocument(ipfsHash, price, "metadata");
 
-      await expect(
-        documentStorage.purchaseDocument(ipfsHash, { value: price })
-      ).to.be.revertedWith("Cannot purchase own document");
+      await expect(documentStorage.purchaseDocument(ipfsHash, { value: price })).to.be.revertedWith(
+        "Cannot purchase own document"
+      );
     });
 
     it("Should reject purchase with incorrect price", async function () {
@@ -223,7 +229,9 @@ describe("DocumentStorage", function () {
       await documentStorage.storeDocument(ipfsHash, price, "metadata");
 
       await expect(
-        documentStorage.connect(buyer).purchaseDocument(ipfsHash, { value: ethers.utils.parseEther("2.0") })
+        documentStorage
+          .connect(buyer)
+          .purchaseDocument(ipfsHash, { value: ethers.utils.parseEther("2.0") })
       ).to.be.revertedWith("Exact price required");
     });
 
