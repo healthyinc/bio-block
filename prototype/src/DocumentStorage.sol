@@ -10,32 +10,37 @@ contract DocumentStorage {
     event WithdrawalSuccess(address indexed user, uint256 amount);
     
     mapping(address => string[]) private userDocuments;
-    mapping(string => uint256) public documentPrices;
-    mapping(string => string) public documentMetadata;
-    mapping(string => address) public documentOwners;
+    mapping(bytes32 => uint256) public documentPrices;
+    mapping(bytes32 => string) public documentMetadata;
+    mapping(bytes32 => address) public documentOwners;
     mapping(address => uint256) public earnings;
     
     function storeDocument(string memory ipfsHash, uint256 price, string memory metadata) public {
-        require(documentOwners[ipfsHash] == address(0), "Document already exists");
+        require(bytes(ipfsHash).length > 0, "Invalid IPFS hash");
+        bytes32 docId = keccak256(bytes(ipfsHash));
+        require(documentOwners[docId] == address(0), "Document already exists");
         require(price > 0, "Price must be greater than 0");  //price check
         userDocuments[msg.sender].push(ipfsHash);
-        documentPrices[ipfsHash] = price;
-        documentOwners[ipfsHash] = msg.sender;
-        documentMetadata[ipfsHash] = metadata;
+        documentPrices[docId] = price;
+        documentOwners[docId] = msg.sender;
+        documentMetadata[docId] = metadata;
         emit DocumentStored(msg.sender, ipfsHash, price);
     }
     
     function updateMetadata(string memory ipfsHash, uint256 newPrice, string memory newMetadata) public {
-        require(documentOwners[ipfsHash] != address(0), "Document does not exist");
-        require(documentOwners[ipfsHash] == msg.sender, "Only owner can update");
-        documentPrices[ipfsHash] = newPrice;
-        documentMetadata[ipfsHash] = newMetadata;
+        bytes32 docId = keccak256(bytes(ipfsHash));
+        require(newPrice > 0, "Price must be greater than 0");
+        require(documentOwners[docId] != address(0), "Document does not exist");
+        require(documentOwners[docId] == msg.sender, "Only owner can update");
+        documentPrices[docId] = newPrice;
+        documentMetadata[docId] = newMetadata;
         emit MetadataUpdated(msg.sender, ipfsHash, newPrice, newMetadata);
     }
 
     function deleteDocument(string memory ipfsHash) public {
-        require(documentOwners[ipfsHash] != address(0), "Document does not exist");
-        require(documentOwners[ipfsHash] == msg.sender, "Only owner can delete");
+        bytes32 docId = keccak256(bytes(ipfsHash));
+        require(documentOwners[docId] != address(0), "Document does not exist");
+        require(documentOwners[docId] == msg.sender, "Only owner can delete");
 
         // Remove from userDocuments array
         string[] storage docs = userDocuments[msg.sender];
@@ -47,18 +52,19 @@ contract DocumentStorage {
             }
         }
 
-        documentOwners[ipfsHash] = address(0);
-        documentPrices[ipfsHash] = 0;
-        documentMetadata[ipfsHash] = "";
+        documentOwners[docId] = address(0);
+        documentPrices[docId] = 0;
+        documentMetadata[docId] = "";
         emit DocumentDeleted(msg.sender, ipfsHash);
     }
 
     function purchaseDocument(string memory ipfsHash) public payable returns (bool) {
-        address owner = documentOwners[ipfsHash];
+        bytes32 docId = keccak256(bytes(ipfsHash));
+        address owner = documentOwners[docId];
         require(owner != address(0), "Document does not exist");
         require(msg.sender != owner, "Cannot purchase own document");
 
-        uint256 price = documentPrices[ipfsHash];
+        uint256 price = documentPrices[docId];
         require(msg.value == price, "Exact price required");
 
         earnings[owner] += price;
@@ -77,7 +83,8 @@ contract DocumentStorage {
     }
     
      function getMetadata(string memory ipfsHash) public view returns (string memory) {
-        return documentMetadata[ipfsHash];
+        bytes32 docId = keccak256(bytes(ipfsHash));
+        return documentMetadata[docId];
     }
 
     function getDocuments(address user) public view returns (string[] memory) {
