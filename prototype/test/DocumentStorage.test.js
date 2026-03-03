@@ -135,7 +135,7 @@ describe("DocumentStorage", function () {
         documentStorage
           .connect(buyer)
           .purchaseDocument(ipfsHash, { value: ethers.utils.parseEther("0.5") })
-      ).to.be.revertedWith("Insufficient payment");
+      ).to.be.revertedWith("Exact price required");
     });
 
     it("Should reject purchase of deleted document", async function () {
