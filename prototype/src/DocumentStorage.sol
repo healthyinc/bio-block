@@ -14,6 +14,7 @@ contract DocumentStorage {
     mapping(string => string) public documentMetadata;
     mapping(string => address) public documentOwners;
     mapping(address => uint256) public earnings;
+    mapping(string => mapping(address => bool)) public hasPurchased;
     
     function storeDocument(string memory ipfsHash, uint256 price, string memory metadata) public {
         require(documentOwners[ipfsHash] == address(0), "Document already exists");
@@ -62,6 +63,7 @@ contract DocumentStorage {
         require(msg.value == price, "Exact price required");
 
         earnings[owner] += price;
+        hasPurchased[ipfsHash][msg.sender] = true;
         emit DocumentPurchased(msg.sender, owner, ipfsHash, price);
         return true;
     }
@@ -78,6 +80,10 @@ contract DocumentStorage {
     
      function getMetadata(string memory ipfsHash) public view returns (string memory) {
         return documentMetadata[ipfsHash];
+    }
+
+    function hasAccess(string memory ipfsHash, address user) public view returns (bool) {
+        return documentOwners[ipfsHash] == user || hasPurchased[ipfsHash][user];
     }
 
     function getDocuments(address user) public view returns (string[] memory) {

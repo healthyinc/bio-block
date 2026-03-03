@@ -151,6 +151,57 @@ describe("DocumentStorage", function () {
     });
   });
 
+  describe("hasAccess", function () {
+    it("Should return true for document owner", async function () {
+      const ipfsHash = "QmAccess100";
+      const price = ethers.utils.parseEther("1.0");
+
+      await documentStorage.storeDocument(ipfsHash, price, "metadata");
+
+      expect(await documentStorage.hasAccess(ipfsHash, owner.address)).to.equal(true);
+    });
+
+    it("Should return false for non-buyer before purchase", async function () {
+      const ipfsHash = "QmAccess200";
+      const price = ethers.utils.parseEther("1.0");
+
+      await documentStorage.storeDocument(ipfsHash, price, "metadata");
+
+      expect(await documentStorage.hasAccess(ipfsHash, buyer.address)).to.equal(false);
+    });
+
+    it("Should return true for buyer after purchase", async function () {
+      const ipfsHash = "QmAccess300";
+      const price = ethers.utils.parseEther("1.0");
+
+      await documentStorage.storeDocument(ipfsHash, price, "metadata");
+      await documentStorage.connect(buyer).purchaseDocument(ipfsHash, { value: price });
+
+      expect(await documentStorage.hasAccess(ipfsHash, buyer.address)).to.equal(true);
+    });
+
+    it("Should set hasPurchased flag after purchase", async function () {
+      const ipfsHash = "QmAccess400";
+      const price = ethers.utils.parseEther("1.0");
+
+      await documentStorage.storeDocument(ipfsHash, price, "metadata");
+
+      expect(await documentStorage.hasPurchased(ipfsHash, buyer.address)).to.equal(false);
+      await documentStorage.connect(buyer).purchaseDocument(ipfsHash, { value: price });
+      expect(await documentStorage.hasPurchased(ipfsHash, buyer.address)).to.equal(true);
+    });
+
+    it("Should return false for unrelated address", async function () {
+      const ipfsHash = "QmAccess500";
+      const price = ethers.utils.parseEther("1.0");
+
+      await documentStorage.storeDocument(ipfsHash, price, "metadata");
+      await documentStorage.connect(buyer).purchaseDocument(ipfsHash, { value: price });
+
+      expect(await documentStorage.hasAccess(ipfsHash, addr1.address)).to.equal(false);
+    });
+  });
+
   describe("withdrawEarnings", function () {
     it("Should withdraw earnings", async function () {
       const ipfsHash = "QmWithdraw123";
