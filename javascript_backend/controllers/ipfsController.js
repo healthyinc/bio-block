@@ -1,17 +1,37 @@
 const multer = require("multer");
 const axios = require("axios");
 const FormData = require("form-data");
+const fs = require("fs");
+const os = require("os");
+const crypto = require("crypto");
 
-// Configure multer for memory storage
-const storage = multer.memoryStorage();
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, os.tmpdir());
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = `upload-${crypto.randomUUID()}-${file.originalname}`;
+    cb(null, uniqueName);
+  },
+});
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 10 * 1024 * 1024 * 1024, // 10GB limit
+    fileSize: 2 * 1024 * 1024 * 1024, // 2GB
   },
 });
 
 const uploadToIPFS = async (req, res) => {
+  const cleanupTempFile = () => {
+    if (req.file && req.file.path) {
+      fs.unlink(req.file.path, (err) => {
+        if (err && err.code !== "ENOENT") {
+          console.error("Failed to clean up temp file:", err);
+        }
+      });
+    }
+  };
+
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -20,21 +40,20 @@ const uploadToIPFS = async (req, res) => {
     }
 
     const { fileName } = req.body;
-    const encryptedBuffer = req.file.buffer;
 
     console.log("Uploading to IPFS:", {
       fileName,
-      fileSize: encryptedBuffer.length,
+      fileSize: req.file.size,
     });
 
-    // Create form data for Pinata
+    const fileStream = fs.createReadStream(req.file.path);
+
     const formData = new FormData();
-    formData.append("file", encryptedBuffer, {
+    formData.append("file", fileStream, {
       filename: fileName || "encrypted_file",
       contentType: "application/octet-stream",
     });
 
-    // Pinata metadata
     const pinataMetadata = JSON.stringify({
       name: fileName || "Encrypted Document",
       keyvalues: {
@@ -44,13 +63,11 @@ const uploadToIPFS = async (req, res) => {
     });
     formData.append("pinataMetadata", pinataMetadata);
 
-    // Pinata options
     const pinataOptions = JSON.stringify({
       cidVersion: 0,
     });
     formData.append("pinataOptions", pinataOptions);
 
-    // Upload to Pinata
     const pinataResponse = await axios.post(
       "https://api.pinata.cloud/pinning/pinFileToIPFS",
       formData,
@@ -68,13 +85,16 @@ const uploadToIPFS = async (req, res) => {
 
     console.log("IPFS upload successful:", { ipfsHash, fileName });
 
+    cleanupTempFile();
+
     res.json({
       success: true,
       ipfsHash: ipfsHash,
       fileName: fileName,
-      fileSize: encryptedBuffer.length,
+      fileSize: req.file.size,
     });
   } catch (error) {
+    cleanupTempFile();
     console.error("IPFS upload error:", error.response?.data || error.message);
 
     if (error.response?.status === 401) {
