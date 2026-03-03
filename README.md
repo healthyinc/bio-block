@@ -1,30 +1,29 @@
 # Bio-Block: Secure Document Management System
-
-Bio-Block is a decentralized document management system that leverages blockchain technology, IPFS (InterPlanetary File System), and vector databases to provide secure, verifiable, and privacy-preserving document storage and management for healthcare data.
+Bio-Block is a secure, decentralized healthcare document management system for the Web3 era. It leverages blockchain technology, IPFS (InterPlanetary File System), and vector databases to provide secure, verifiable, and privacy-preserving document storage and management for healthcare data.
 
 ## Key Features
 
-### 🔐 Advanced Security & Privacy
+### Advanced Security & Privacy
 
 - **Streaming Encryption**: Memory-safe encryption for large files (>5MB) with real-time progress tracking
 - **PHI Anonymization**: Automatic anonymization of Personal Health Information in Excel and image files
 - **Blockchain Verification**: Document hashes stored on Ethereum for tamper-proof verification
 - **Decentralized Storage**: IPFS-based storage with encryption and secure access controls
 
-### 🏥 Healthcare Data Management
+### Healthcare Data Management
 
 - **Multi-format Support**: Excel (.xlsx, .xls), CSV, ODS, TSV, and other spreadsheet formats (.xlsm, .xlsb), plus medical images (.jpg, .jpeg, .png)
 - **Smart Anonymization**: Wallet-based hashing for personal data, OCR+NLP for medical images
 - **Preview System**: Free 5% preview of Excel data for evaluation before purchase
 - **Metadata Collection**: Comprehensive tagging with disease types, demographics, and data sources
 
-### 🔍 Intelligent Search & Discovery
+### Intelligent Search & Discovery
 
 - **Vector Search**: Natural language queries using ChromaDB for semantic document discovery
 - **Advanced Filtering**: Filter by data type, gender, source, file type, and other metadata
 - **Combined Search**: Semantic search enhanced with metadata filters for precise results
 
-### 💰 Marketplace & Economics
+### Marketplace & Economics
 
 - **Document Marketplace**: Set prices and earn from document sales
 - **Earnings Tracking**: Real-time earnings display and withdrawal functionality
@@ -171,7 +170,7 @@ Access the application at `http://localhost:3000`
 
 ### JavaScript Backend (Express.js)
 
-**🔧 Local URL**: `http://localhost:3001`
+**Local URL**: `http://localhost:3001`
 
 - `GET /` - Root endpoint with API information
 - `GET /api/health` - Health check endpoint to verify server status
@@ -187,7 +186,7 @@ Access the application at `http://localhost:3000`
 
 ### Python Backend (FastAPI)
 
-**🔧 Local URL**: `http://localhost:3002`
+**Local URL**: `http://localhost:3002`
 
 - `GET /` - Health check and API information
 - `POST /store` - Store document summaries and metadata in ChromaDB
@@ -282,21 +281,6 @@ We welcome contributions! Here's how to get started:
 - Update documentation as needed
 - Ensure all tests pass before submitting
 
-### Project Structure
-
-```
-healthy/
-├── prototype/                 # React frontend
-├── python_backend/           # FastAPI service
-├── javascript_backend/       # Express.js API
-└── README.md                 # This file
-```
-
-For detailed setup instructions, see the [Quick Start](#quick-start) section above.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgements
 
@@ -308,7 +292,3 @@ Built with these amazing technologies:
 - [ChromaDB](https://www.trychroma.com/) - Vector database
 - [IPFS](https://ipfs.io/) - Decentralized storage
 - [Ethereum](https://ethereum.org/) - Blockchain platform
-
----
-
-**Bio-Block** - Secure, decentralized healthcare document management for the Web3 era.
