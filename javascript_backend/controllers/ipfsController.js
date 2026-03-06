@@ -5,6 +5,7 @@ const fs = require("fs");
 const os = require("os");
 const crypto = require("crypto");
 
+// Configure multer for disk storage with file-type validation
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, os.tmpdir());
@@ -16,6 +17,45 @@ const storage = multer.diskStorage({
 });
 const upload = multer({
   storage: storage,
+  fileFilter: (req, file, cb) => {
+    // Accept health data formats and encrypted blobs that Bio-Block handles
+    const allowedMimeTypes = [
+      // Encrypted blobs (primary use case for IPFS upload)
+      "application/octet-stream",
+      // Spreadsheet formats
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+      "application/vnd.ms-excel", // .xls
+      "text/csv", // .csv
+      "application/csv", // .csv (alternative)
+      "application/vnd.oasis.opendocument.spreadsheet", // .ods
+      "text/tab-separated-values", // .tsv
+      // Image formats
+      "image/jpeg", // .jpg/.jpeg
+      "image/png", // .png
+      // Document formats
+      "application/pdf", // .pdf
+      // Medical imaging
+      "application/dicom", // .dcm
+    ];
+
+    // Extension fallback for cases where MIME type is unreliable
+    const allowedExtensions =
+      /\.(enc|xlsx|xls|csv|ods|tsv|jpg|jpeg|png|pdf|dcm|nii|nii\.gz)$/i;
+
+    if (
+      allowedMimeTypes.includes(file.mimetype) ||
+      allowedExtensions.test(file.originalname)
+    ) {
+      cb(null, true);
+    } else {
+      cb(
+        new Error(
+          "File type not allowed. Accepted: encrypted blobs, spreadsheets (.xlsx, .csv, .ods, .tsv), images (.jpg, .png), documents (.pdf), and medical imaging (.dcm, .nii)."
+        ),
+        false
+      );
+    }
+  },
   limits: {
     fileSize: 2 * 1024 * 1024 * 1024, // 2GB
   },
