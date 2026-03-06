@@ -33,6 +33,11 @@ const CONTRACT_ABI = [
         name: "price",
         type: "uint256",
       },
+      {
+        internalType: "string",
+        name: "metadata",
+        type: "string",
+      },
     ],
     name: "storeDocument",
     outputs: [],
@@ -137,13 +142,13 @@ const CONTRACT_ABI = [
   },
 ];
 
-export const storeDocumentHash = async (ipfsHash, priceInEth) => {
+export const storeDocumentHash = async (ipfsHash, priceInEth, metadata = "") => {
   const provider = new ethers.BrowserProvider(window.ethereum);
   const signer = await provider.getSigner();
   const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
   const priceInWei = ethers.parseEther(priceInEth.toString());
-  const tx = await contract.storeDocument(ipfsHash, priceInWei);
+  const tx = await contract.storeDocument(ipfsHash, priceInWei, metadata);
   await tx.wait();
   console.log(`Transaction successful with hash: ${tx.hash}`);
   return tx.hash;
