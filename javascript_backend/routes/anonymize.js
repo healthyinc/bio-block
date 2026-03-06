@@ -9,7 +9,7 @@ router.post("/", upload.single("file"), anonymizeFile);
 router.use((error, req, res, next) => {
   if (error.code === "LIMIT_FILE_SIZE") {
     return res.status(400).json({
-      error: "File too large. Maximum size is 10GB.",
+      error: "File too large. Maximum size is 500MB.",
     });
   }
   next(error);

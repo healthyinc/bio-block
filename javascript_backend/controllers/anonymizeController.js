@@ -1,12 +1,22 @@
 const multer = require("multer");
 const { Worker } = require("worker_threads");
 const path = require("path");
+const fs = require("fs");
+const os = require("os");
+const crypto = require("crypto");
 
-const storage = multer.memoryStorage();
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, os.tmpdir());
+  },
+  filename: (req, file, cb) => {
+    const uniqueName = `upload-${crypto.randomUUID()}-${file.originalname}`;
+    cb(null, uniqueName);
+  },
+});
 const upload = multer({
   storage: storage,
   fileFilter: (req, file, cb) => {
-    // Accept Excel files, CSV, ODS, TSV and other spreadsheet formats
     const allowedMimeTypes = [
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
       "application/vnd.ms-excel", // .xls
@@ -18,7 +28,6 @@ const upload = multer({
       "application/vnd.ms-excel.sheet.binary.macroEnabled.12", // .xlsb
     ];
 
-    // Also check file extension as a fallback
     const allowedExtensions = /\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i;
 
     if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.test(file.originalname)) {
@@ -33,11 +42,21 @@ const upload = multer({
     }
   },
   limits: {
-    fileSize: 10 * 1024 * 1024 * 1024, // 10GB limit
+    fileSize: 500 * 1024 * 1024, // 500MB
   },
 });
 
 const anonymizeFile = async (req, res) => {
+  const cleanupTempFile = () => {
+    if (req.file && req.file.path) {
+      fs.unlink(req.file.path, (err) => {
+        if (err && err.code !== "ENOENT") {
+          console.error("Failed to clean up temp file:", err);
+        }
+      });
+    }
+  };
+
   try {
     if (!req.file) {
       return res.status(400).json({
@@ -58,16 +77,21 @@ const anonymizeFile = async (req, res) => {
       walletAddress: walletAddress ? `${walletAddress.substring(0, 6)}...` : "N/A",
     });
 
-    // Offload heavy processing to a Worker Thread
+    const diskBuffer = fs.readFileSync(req.file.path);
+
+    const arrayBuffer = new ArrayBuffer(diskBuffer.length);
+    const fileBuffer = Buffer.from(arrayBuffer);
+    diskBuffer.copy(fileBuffer);
+
     const workerPath = path.join(__dirname, "../workers/anonymizeWorker.js");
 
     const worker = new Worker(workerPath);
 
-    const transferList = [req.file.buffer.buffer];
+    const transferList = [arrayBuffer];
 
     worker.postMessage(
       {
-        fileBuffer: req.file.buffer,
+        fileBuffer: fileBuffer,
         walletAddress,
         generatePreview,
         originalFileName: req.file.originalname,
@@ -76,6 +100,8 @@ const anonymizeFile = async (req, res) => {
     );
 
     worker.on("message", (result) => {
+      cleanupTempFile();
+
       if (!result.success) {
         console.error("Worker error:", result.error);
         return res.status(400).json({
@@ -86,7 +112,6 @@ const anonymizeFile = async (req, res) => {
       const { outputBuffer, previewBuffer, outputMimeType, originalFileName } = result;
 
       if (generatePreview && previewBuffer) {
-        // Return both files as JSON response
         return res.json({
           success: true,
           message: "File anonymized successfully with preview",
@@ -105,7 +130,6 @@ const anonymizeFile = async (req, res) => {
         });
       }
 
-      // Standard response for normal anonymization without preview
       const filename = `phi_anonymized_${originalFileName}`;
       const buffer = Buffer.from(outputBuffer);
 
@@ -117,6 +141,7 @@ const anonymizeFile = async (req, res) => {
     });
 
     worker.on("error", (err) => {
+      cleanupTempFile();
       console.error("Worker thread error:", err);
       res.status(500).json({
         error: "Internal server error occurred while processing the file.",
@@ -129,6 +154,7 @@ const anonymizeFile = async (req, res) => {
       }
     });
   } catch (error) {
+    cleanupTempFile();
     console.error("Error processing file:", error);
 
     if (error.message.includes("Only")) {
