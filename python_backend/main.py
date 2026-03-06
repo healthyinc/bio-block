@@ -23,6 +23,7 @@ from eth_account import Account
 
 # Preview factory imports
 from services.preview.factory import PreviewFactory
+from services.audit_logger import AuditLogger
 
 # DICOM imports
 try:
@@ -59,6 +60,7 @@ app.add_middleware(
 
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_or_create_collection(name="new_user_data")
+audit_logger = AuditLogger(chroma_client)
 
 # 1. Cross-platform Tesseract detection
 tesseract_cmd = os.getenv('TESSERACT_CMD') or shutil.which('tesseract')
@@ -281,6 +283,11 @@ async def anonymize_image(file: UploadFile = File(...)):
                 redacted_image_pil.save(img_buffer, format='JPEG', quality=95)
                 img_buffer.seek(0)
                 
+                audit_logger.log_operation(
+                    operation="ANONYMIZE",
+                    details=f"file: {file.filename}, method: presidio",
+                )
+
                 return StreamingResponse(
                     io.BytesIO(img_buffer.read()),
                     media_type="image/jpeg",
@@ -302,6 +309,11 @@ async def anonymize_image(file: UploadFile = File(...)):
         img_buffer = io.BytesIO()
         masked_pil.save(img_buffer, format='JPEG', quality=95)
         img_buffer.seek(0)
+
+        audit_logger.log_operation(
+            operation="ANONYMIZE",
+            details=f"file: {file.filename}, method: legacy",
+        )
 
         return StreamingResponse(
             io.BytesIO(img_buffer.read()),
@@ -416,6 +428,13 @@ async def store_data(request: StoreWithContentRequest):
             
             print(f"Stored {len(content_chunks)} content chunks for document {doc_id}")
         
+        audit_logger.log_operation(
+            operation="STORE",
+            wallet_address=request.metadata.get("owner_address", ""),
+            document_id=doc_id,
+            details=f"CID: {request.cid}, title: {request.dataset_title}",
+        )
+
         return {
             "message": "Stored successfully with enhanced content indexing",
             "cid": request.cid,
@@ -487,6 +506,13 @@ async def store_data_enhanced(request: StoreWithContentRequest):
             
             print(f"Stored {len(content_chunks)} content chunks for document {doc_id}")
         
+        audit_logger.log_operation(
+            operation="STORE",
+            wallet_address=request.metadata.get("owner_address", ""),
+            document_id=doc_id,
+            details=f"CID: {request.cid}, title: {request.dataset_title} (enhanced)",
+        )
+
         return {
             "message": "Stored successfully with enhanced content indexing",
             "cid": request.cid,
@@ -526,6 +552,11 @@ async def search_data(request: SearchRequest):
                     "metadata": metadata
                 })
         
+        audit_logger.log_operation(
+            operation="SEARCH",
+            details=f"query: {request.query}, results: {len(results)}",
+        )
+
         return {"results": results}
         
     except Exception as e:
@@ -697,6 +728,12 @@ async def update_document(doc_id: str, request: UpdateRequest):
         )
         
         print(f"Document updated in-place: {doc_id}")
+
+        audit_logger.log_operation(
+            operation="UPDATE",
+            wallet_address=request.owner_address,
+            document_id=doc_id,
+        )
         
         return {"message": "Document updated", "id": doc_id}
     
@@ -727,6 +764,12 @@ async def delete_document(doc_id: str, request: DeleteRequest):
         metadata_collection.delete(ids=[doc_id])
         
         print(f"Document {doc_id} deleted")
+
+        audit_logger.log_operation(
+            operation="DELETE",
+            wallet_address=request.owner_address,
+            document_id=doc_id,
+        )
         
         return {"message": "Document deleted", "deleted_id": doc_id}
     
@@ -1062,7 +1105,42 @@ class ContentExtractor:
         
         return chunks if chunks else [content]
     
+
+@app.get("/audit/logs")
+async def get_audit_logs(
+    wallet_address: Optional[str] = None,
+    operation: Optional[str] = None,
+    document_id: Optional[str] = None,
+    limit: int = 50,
+):
+    try:
+        logs = audit_logger.query_logs(
+            wallet_address=wallet_address,
+            operation=operation,
+            document_id=document_id,
+            limit=limit,
+        )
+        return {"logs": logs, "total": len(logs)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to query audit logs: {str(e)}")
+
+
+@app.get("/audit/logs/{entry_id}")
+async def get_audit_entry(entry_id: str):
+    try:
+        entry = audit_logger.get_entry(entry_id)
+        if not entry:
+            raise HTTPException(status_code=404, detail="Audit log entry not found")
+
+        verified = audit_logger.verify_integrity(entry_id)
+        entry["integrity_verified"] = verified
+        return entry
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get audit entry: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=3002)
-
