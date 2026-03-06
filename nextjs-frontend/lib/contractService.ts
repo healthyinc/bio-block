@@ -35,10 +35,70 @@ const CONTRACT_ABI: ContractABI[] = [
         name: 'price',
         type: 'uint256',
       },
+      {
+        internalType: 'string',
+        name: 'metadata',
+        type: 'string',
+      },
     ],
     name: 'storeDocument',
     outputs: [],
     stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      {
+        internalType: 'string',
+        name: 'ipfsHash',
+        type: 'string',
+      },
+      {
+        internalType: 'uint256',
+        name: 'newPrice',
+        type: 'uint256',
+      },
+      {
+        internalType: 'string',
+        name: 'newMetadata',
+        type: 'string',
+      },
+    ],
+    name: 'updateMetadata',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      {
+        internalType: 'string',
+        name: 'ipfsHash',
+        type: 'string',
+      },
+    ],
+    name: 'deleteDocument',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [
+      {
+        internalType: 'string',
+        name: 'ipfsHash',
+        type: 'string',
+      },
+    ],
+    name: 'getMetadata',
+    outputs: [
+      {
+        internalType: 'string',
+        name: '',
+        type: 'string',
+      },
+    ],
+    stateMutability: 'view',
     type: 'function',
   },
   {
@@ -165,19 +225,21 @@ const getContract = async (withSigner = true): Promise<Contract> => {
 };
 
 /**
- * Store document hash and price on blockchain
+ * Store document hash, price and metadata on blockchain
  * @param ipfsHash - IPFS hash of the encrypted document
  * @param priceInEth - Price in ETH
+ * @param metadata - Optional metadata string (e.g. tags, description)
  * @returns Transaction hash
  */
 export const storeDocumentHash = async (
   ipfsHash: string,
-  priceInEth: number | string
+  priceInEth: number | string,
+  metadata: string = ''
 ): Promise<string> => {
   const contract = await getContract(true);
   const priceInWei = ethers.parseEther(priceInEth.toString());
 
-  const tx = await contract.storeDocument(ipfsHash, priceInWei);
+  const tx = await contract.storeDocument(ipfsHash, priceInWei, metadata);
   await tx.wait();
   return tx.hash;
 };
@@ -245,6 +307,49 @@ export const getEarnings = async (address: string): Promise<string> => {
 
   const earningsInWei = await contract.earnings(address);
   return ethers.formatEther(earningsInWei);
+};
+
+/**
+ * Get metadata for a document
+ * @param ipfsHash - IPFS hash of the document
+ * @returns Metadata string
+ */
+export const getMetadata = async (ipfsHash: string): Promise<string> => {
+  const contract = await getContract(false);
+  return contract.getMetadata(ipfsHash);
+};
+
+/**
+ * Update document metadata and price (owner only)
+ * @param ipfsHash - IPFS hash of the document
+ * @param newPriceInEth - New price in ETH
+ * @param newMetadata - New metadata string
+ * @returns Transaction hash
+ */
+export const updateMetadata = async (
+  ipfsHash: string,
+  newPriceInEth: number | string,
+  newMetadata: string
+): Promise<string> => {
+  const contract = await getContract(true);
+  const newPriceInWei = ethers.parseEther(newPriceInEth.toString());
+
+  const tx = await contract.updateMetadata(ipfsHash, newPriceInWei, newMetadata);
+  await tx.wait();
+  return tx.hash;
+};
+
+/**
+ * Delete a document (owner only)
+ * @param ipfsHash - IPFS hash of the document
+ * @returns Transaction hash
+ */
+export const deleteDocument = async (ipfsHash: string): Promise<string> => {
+  const contract = await getContract(true);
+
+  const tx = await contract.deleteDocument(ipfsHash);
+  await tx.wait();
+  return tx.hash;
 };
 
 /**
