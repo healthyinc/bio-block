@@ -12,6 +12,11 @@ router.use((error, req, res, next) => {
       error: "File too large. Maximum size is 2GB.",
     });
   }
+  if (error.message && error.message.startsWith("File type not allowed")) {
+    return res.status(400).json({
+      error: error.message,
+    });
+  }
   next(error);
 });
 

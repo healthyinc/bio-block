@@ -339,4 +339,74 @@ describe("IPFS Upload Controller", function () {
       expect(res.body.success).to.be.true;
     });
   });
+
+  // ------------------------------------------------------------------
+  // 7. File-type validation
+  // ------------------------------------------------------------------
+  describe("File-type validation", function () {
+    it("should reject executable files", async function () {
+      const res = await request(app)
+        .post("/api/ipfs/upload")
+        .attach("encryptedFile", Buffer.from("MZ"), "malware.exe")
+        .field("fileName", "malware.exe");
+
+      expect(res.status).to.equal(400);
+      expect(res.body.error).to.include("File type not allowed");
+    });
+
+    it("should reject shell scripts", async function () {
+      const res = await request(app)
+        .post("/api/ipfs/upload")
+        .attach("encryptedFile", Buffer.from("#!/bin/bash"), "script.sh")
+        .field("fileName", "script.sh");
+
+      expect(res.status).to.equal(400);
+      expect(res.body.error).to.include("File type not allowed");
+    });
+
+    it("should accept encrypted blob files (.enc)", async function () {
+      axios.post = async () => ({
+        data: { IpfsHash: "QmEncryptedBlob" },
+      });
+
+      const res = await request(app)
+        .post("/api/ipfs/upload")
+        .attach("encryptedFile", Buffer.from("encrypted data"), "dataset.enc")
+        .field("fileName", "dataset.enc");
+
+      expect(res.status).to.equal(200);
+      expect(res.body.success).to.be.true;
+    });
+
+    it("should accept health data formats (.csv)", async function () {
+      axios.post = async () => ({
+        data: { IpfsHash: "QmCsvData" },
+      });
+
+      const res = await request(app)
+        .post("/api/ipfs/upload")
+        .attach("encryptedFile", Buffer.from("col1,col2\n1,2"), {
+          filename: "data.csv",
+          contentType: "text/csv",
+        })
+        .field("fileName", "data.csv");
+
+      expect(res.status).to.equal(200);
+      expect(res.body.success).to.be.true;
+    });
+
+    it("should accept medical imaging files (.dcm)", async function () {
+      axios.post = async () => ({
+        data: { IpfsHash: "QmDicomFile" },
+      });
+
+      const res = await request(app)
+        .post("/api/ipfs/upload")
+        .attach("encryptedFile", Buffer.from("DICM"), "scan.dcm")
+        .field("fileName", "scan.dcm");
+
+      expect(res.status).to.equal(200);
+      expect(res.body.success).to.be.true;
+    });
+  });
 });
