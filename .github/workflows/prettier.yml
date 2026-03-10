@@ -1,0 +1,30 @@
+name: Prettier Formatting Check
+
+on:
+  pull_request:
+    paths:
+      - "**/*.js"
+      - "**/*.jsx"
+      - "**/*.json"
+      - "**/*.md"
+      - "**/*.yaml"
+      - "**/*.yml"
+
+jobs:
+  prettier:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Prettier
+        run: npm install -g prettier
+
+      - name: Run Prettier format check
+        run: prettier --check "**/*.{js,jsx,json,md,yaml,yml}"
