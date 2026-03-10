@@ -29,6 +29,20 @@ const phiKeywords = [
   "name",
 ];
 
+const FORMULA_PREFIXES = ["=", "+", "-", "@", "\t", "\r", "\n"];
+
+const sanitizeCellValue = (value) => {
+  if (typeof value !== "string" || value.length === 0) return value;
+  if (FORMULA_PREFIXES.includes(value[0])) {
+    return "'" + value;
+  }
+  return value;
+};
+
+const sanitizeSheetData = (data) => {
+  return data.map((row) => row.map((cell) => sanitizeCellValue(cell)));
+};
+
 const generateAnonymizedId = (input, index) => {
   const hash = crypto.createHash("sha256").update(input).digest("hex");
   return `WID_${hash.substring(0, 8)}`;
@@ -148,7 +162,8 @@ parentPort.on("message", (workerData) => {
           }
         }
       }
-      XLSX.utils.book_append_sheet(outWb, XLSX.utils.aoa_to_sheet(cleanData), name);
+      const sanitizedData = sanitizeSheetData(cleanData);
+      XLSX.utils.book_append_sheet(outWb, XLSX.utils.aoa_to_sheet(sanitizedData), name);
     });
 
     const ext = originalFileName.split(".").pop().toLowerCase();
