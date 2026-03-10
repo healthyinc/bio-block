@@ -54,7 +54,6 @@ const anonymizeFile = async (req, res) => {
           console.error("Failed to clean up temp file:", err);
         }
       });
-
     }
   };
 
