@@ -41,6 +41,21 @@ const phiKeywords = [
     'name'
 ];
 
+const FORMULA_PREFIXES = ['=', '+', '-', '@', '\t', '\r', '\n'];
+
+function sanitizeCellValue(value) {
+    if (typeof value !== 'string') return value;
+    if (value.length === 0) return value;
+    if (FORMULA_PREFIXES.includes(value[0])) {
+        return "'" + value;
+    }
+    return value;
+}
+
+function sanitizeSheetData(data) {
+    return data.map(row => row.map(cell => sanitizeCellValue(cell)));
+}
+
 function generateAnonymizedId(input, index) {
     const hash = crypto.createHash('sha256').update(input).digest('hex');
     const shortHash = hash.substring(0, 8);
@@ -227,7 +242,8 @@ const anonymizeFile = async (req, res) => {
                 }
             }
 
-            const newWorksheet = XLSX.utils.aoa_to_sheet(cleanedData);
+            const sanitizedData = sanitizeSheetData(cleanedData);
+            const newWorksheet = XLSX.utils.aoa_to_sheet(sanitizedData);
             XLSX.utils.book_append_sheet(cleanedWorkbook, newWorksheet, sheetName);
         });
 
