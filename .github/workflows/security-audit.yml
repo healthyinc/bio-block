@@ -29,8 +29,7 @@ jobs:
 
       - name: Run npm audit (JavaScript backend)
         working-directory: javascript_backend
-        run: |
-          npm audit --audit-level=high 2>&1 || echo "::warning::npm audit found vulnerabilities in javascript_backend (xlsx has known unfixed CVEs)"
+        run: npm audit --omit=dev --audit-level=high
 
       # ---------- Frontend audit ----------
       - name: Install prototype dependencies
@@ -39,7 +38,7 @@ jobs:
 
       - name: Run npm audit (Prototype)
         working-directory: prototype
-        run: npm audit --audit-level=high
+        run: npm audit --omit=dev --audit-level=high
 
       # ---------- Python backend audit ----------
       - name: Set up Python
@@ -52,4 +51,4 @@ jobs:
 
       - name: Run pip-audit (Python backend)
         working-directory: python_backend
-        run: pip-audit --strict
+        run: pip-audit -r requirements.txt --strict
