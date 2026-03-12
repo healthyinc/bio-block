@@ -1189,8 +1189,8 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                 {uploadProgress.isComplete
                   ? "Upload Complete!"
                   : uploadProgress.hasError
-                  ? "Upload Failed"
-                  : "Uploading Document"}
+                    ? "Upload Failed"
+                    : "Uploading Document"}
               </h3>
               {!uploadProgress.hasError && !uploadProgress.isComplete && (
                 <p className="text-gray-600">Please wait while we process your document...</p>
@@ -1206,10 +1206,10 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                       step.error
                         ? "bg-red-500"
                         : step.completed
-                        ? "bg-green-500"
-                        : index === currentStep
-                        ? "bg-blue-500"
-                        : "bg-gray-300"
+                          ? "bg-green-500"
+                          : index === currentStep
+                            ? "bg-blue-500"
+                            : "bg-gray-300"
                     }`}
                   >
                     {step.error ? (
@@ -1227,10 +1227,10 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                       step.error
                         ? "text-red-600 font-medium"
                         : step.completed
-                        ? "text-green-600 font-medium"
-                        : index === currentStep
-                        ? "text-blue-600 font-medium"
-                        : "text-gray-500"
+                          ? "text-green-600 font-medium"
+                          : index === currentStep
+                            ? "text-blue-600 font-medium"
+                            : "text-gray-500"
                     }`}
                   >
                     {step.name}

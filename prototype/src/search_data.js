@@ -47,8 +47,8 @@ export default function SearchData({ onBack }) {
         typeof encryptedData === "string"
           ? encryptedData
           : encryptedData instanceof Uint8Array
-          ? Buffer.from(encryptedData).toString("utf8")
-          : encryptedData;
+            ? Buffer.from(encryptedData).toString("utf8")
+            : encryptedData;
 
       // Check if it has streaming encryption markers
       if (dataString.includes("|METADATA_SEPARATOR|") && dataString.includes("|CHUNK_SEPARATOR|")) {

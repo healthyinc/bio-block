@@ -1,4 +1,5 @@
 # Bio-Block: Secure Document Management System
+
 Bio-Block is a secure, decentralized healthcare document management system for the Web3 era. It leverages blockchain technology, IPFS (InterPlanetary File System), and vector databases to provide secure, verifiable, and privacy-preserving document storage and management for healthcare data.
 
 ## Key Features
@@ -280,7 +281,6 @@ We welcome contributions! Here's how to get started:
 - Add tests for new features
 - Update documentation as needed
 - Ensure all tests pass before submitting
-
 
 ## Acknowledgements
 
