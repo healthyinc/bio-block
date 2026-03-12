@@ -39,13 +39,9 @@ const upload = multer({
     ];
 
     // Extension fallback for cases where MIME type is unreliable
-    const allowedExtensions =
-      /\.(enc|xlsx|xls|csv|ods|tsv|jpg|jpeg|png|pdf|dcm|nii|nii\.gz)$/i;
+    const allowedExtensions = /\.(enc|xlsx|xls|csv|ods|tsv|jpg|jpeg|png|pdf|dcm|nii|nii\.gz)$/i;
 
-    if (
-      allowedMimeTypes.includes(file.mimetype) ||
-      allowedExtensions.test(file.originalname)
-    ) {
+    if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.test(file.originalname)) {
       cb(null, true);
     } else {
       cb(
