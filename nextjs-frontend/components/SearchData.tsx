@@ -294,8 +294,8 @@ export default function SearchData({ onBack }: SearchDataProps) {
         const previewInfo = {
           fileName: result.metadata?.fileName || `document_${index + 1}`,
           fileSize: bytes.length,
-          dataType: result.metadata?.fileType || 'Excel file',
-          message: 'Excel preview data loaded successfully. This is a 5% sample of the anonymized dataset.',
+          dataType: result.metadata?.fileType || 'Spreadsheet file',
+          message: 'Data preview loaded successfully. This is a 5% sample of the anonymized dataset.',
           headers: headers,
           data: dataRows,
           totalRows: dataRows.length,
@@ -673,8 +673,8 @@ export default function SearchData({ onBack }: SearchDataProps) {
                           
                           {/* Action Buttons */}
                           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                            {/* Preview Button for Excel files */}
-                            {result.metadata?.previewHash && result.metadata?.fileType?.includes('spreadsheet') && (
+                            {/* Preview Button for spreadsheet/CSV files */}
+                            {result.metadata?.previewHash && (result.metadata?.fileType?.includes('spreadsheet') || result.metadata?.fileType?.includes('csv')) && (
                               <button
                                 onClick={() => handlePreviewView(result, index)}
                                 disabled={previewLoading}
@@ -739,7 +739,7 @@ export default function SearchData({ onBack }: SearchDataProps) {
               <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
                 <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
                   <Eye size={24} className="text-blue-600" />
-                  Excel Preview (5% Sample)
+                  Data Preview (5% Sample)
                 </h3>
                 <button
                   onClick={() => {
