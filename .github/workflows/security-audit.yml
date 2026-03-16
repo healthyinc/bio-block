@@ -41,14 +41,17 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
 
       # ---------- Python backend audit ----------
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
 
-      - name: Install pip-audit
-        run: pip install pip-audit
-
-      - name: Run pip-audit (Python backend)
+      - name: Install python
         working-directory: python_backend
-        run: pip-audit -r requirements.txt --strict
+        run: uv python install
+
+      - name: Install python dependencies
+        working-directory: python_backend
+        run: uv sync --frozen
+
+      - name: Run uv audit
+        working-directory: python_backend
+        run: uv audit --preview-features audit
