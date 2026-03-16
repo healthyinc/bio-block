@@ -368,7 +368,9 @@ export default function UploadData({
       formData.append('walletAddress', walletAddress);
     }
 
-    const shouldGeneratePreview = file.name.match(/\.(xlsx|xls)$/i);
+    const shouldGeneratePreview = file.name.match(
+      /\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i
+    );
     if (shouldGeneratePreview) {
       formData.append('generatePreview', 'true');
     }
