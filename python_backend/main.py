@@ -13,6 +13,8 @@ from pytesseract import Output
 import numpy as np
 from PIL import Image
 import io
+import shutil
+import platform
 
 # Presidio imports for advanced image anonymization
 try:
@@ -39,8 +41,19 @@ app.add_middleware(
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_or_create_collection(name="new_user_data")
 
-# Tesseract path for macOS (installed via Homebrew)
-pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+# Auto-detect Tesseract path across operating systems
+tesseract_path = shutil.which('tesseract')
+if tesseract_path:
+    pytesseract.pytesseract.tesseract_cmd = tesseract_path
+else:
+    system = platform.system()
+    if system == 'Windows':
+        default_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    elif system == 'Darwin':  # macOS
+        default_path = '/opt/homebrew/bin/tesseract'
+    else:  # Linux
+        default_path = '/usr/bin/tesseract'
+    pytesseract.pytesseract.tesseract_cmd = default_path
 
 try:
     nlp = spacy.load("en_core_web_lg")  # Updated to use large model for better accuracy
@@ -89,6 +102,10 @@ class SearchRequest(BaseModel):
 class FilterRequest(BaseModel):
     filters: Dict[str, Any]
     n_results: Optional[int] = 10
+
+class AnonymizeTextRequest(BaseModel):
+    text: str
+    language: Optional[str] = "en"
 
 def generate_id() -> str:
     timestamp = int(time.time() * 1000)
@@ -146,6 +163,109 @@ def mask_phi_in_image_legacy(image_cv):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
 
+def anonymize_text_presidio(text: str, language: str = "en"):
+    """
+    Detect and redact PHI from plain text using Presidio Analyzer and Anonymizer.
+    Returns anonymized text and a list of detected entities.
+    """
+    if not presidio_available or presidio_analyzer is None or presidio_anonymizer is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Presidio not available. Install with: pip install presidio_analyzer presidio_anonymizer"
+        )
+
+    try:
+        # Analyze text to detect PHI entities
+        analysis_results = presidio_analyzer.analyze(
+            text=text,
+            language=language,
+            entities=[
+                "PERSON", "PHONE_NUMBER", "EMAIL_ADDRESS",
+                "CREDIT_CARD", "US_SSN", "DATE_TIME",
+                "LOCATION", "NRP", "MEDICAL_LICENSE",
+                "IP_ADDRESS", "US_DRIVER_LICENSE",
+                "US_PASSPORT", "US_BANK_NUMBER", "URL"
+            ]
+        )
+
+        # Build entity details before anonymization (since anonymization changes offsets)
+        entities_found = []
+        for result in analysis_results:
+            entities_found.append({
+                "type": result.entity_type,
+                "text": text[result.start:result.end],
+                "start": result.start,
+                "end": result.end,
+                "score": round(result.score, 4)
+            })
+
+        # Anonymize the text by replacing detected entities with type labels
+        anonymized_result = presidio_anonymizer.anonymize(
+            text=text,
+            analyzer_results=analysis_results
+        )
+
+        return {
+            "anonymized_text": anonymized_result.text,
+            "entities_found": entities_found,
+            "method": "presidio",
+            "entity_count": len(entities_found)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error anonymizing text with Presidio: {str(e)}")
+
+def anonymize_text_spacy(text: str):
+    """
+    Fallback: Detect and redact PHI from plain text using spaCy NER.
+    Replaces detected entities with their type labels.
+    """
+    if nlp is None:
+        raise HTTPException(
+            status_code=503,
+            detail="spaCy model not available. Install with: python -m spacy download en_core_web_sm"
+        )
+
+    try:
+        doc = nlp(text)
+        entities_found = []
+        anonymized_text = text
+
+        # Process entities in reverse order to preserve character offsets
+        sorted_ents = sorted(doc.ents, key=lambda e: e.start_char, reverse=True)
+
+        for ent in sorted_ents:
+            if ent.label_ in PHI_LABELS:
+                entities_found.append({
+                    "type": ent.label_,
+                    "text": ent.text,
+                    "start": ent.start_char,
+                    "end": ent.end_char,
+                    "score": 1.0
+                })
+                anonymized_text = (
+                    anonymized_text[:ent.start_char]
+                    + f"<{ent.label_}>"
+                    + anonymized_text[ent.end_char:]
+                )
+
+        # Reverse so entities are in original document order
+        entities_found.reverse()
+
+        return {
+            "anonymized_text": anonymized_text,
+            "entities_found": entities_found,
+            "method": "spacy",
+            "entity_count": len(entities_found)
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error anonymizing text with spaCy: {str(e)}")
+
 @app.get("/")
 async def root():
     return {
@@ -156,7 +276,8 @@ async def root():
             "/filter": "Filter documents by metadata",
             "/search_with_filter": "Combined search and filter",
             "/anonymize_image": "Anonymize PHI in images (Presidio + Legacy fallback)",
-            "/anonymize_image_presidio": "Anonymize PHI in images (Presidio only, advanced)"
+            "/anonymize_image_presidio": "Anonymize PHI in images (Presidio only, advanced)",
+            "/anonymize_text": "Anonymize PHI in plain text (Presidio + spaCy fallback)"
         },
         "status": {
             "presidio_available": presidio_available,
@@ -268,6 +389,46 @@ async def anonymize_image_presidio_only(file: UploadFile = File(...)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to anonymize image with Presidio: {str(e)}")
+
+
+@app.post("/anonymize_text")
+async def anonymize_text(request: AnonymizeTextRequest):
+    """
+    Anonymize PHI in plain text input (clinical notes, patient records, free-text fields).
+    Uses Presidio (preferred) with spaCy NER as fallback.
+
+    Request body:
+    - text: The text containing potential PHI to anonymize
+    - language: Language code (default: "en")
+
+    Returns:
+    - anonymized_text: Text with PHI replaced by entity type labels
+    - entities_found: List of detected PHI entities with type, position, and confidence
+    - method: Which engine was used ("presidio" or "spacy")
+    - entity_count: Total number of PHI entities detected
+    """
+    try:
+        if not request.text or not request.text.strip():
+            raise HTTPException(status_code=400, detail="Text field is required and cannot be empty")
+
+        # Try Presidio first (preferred method)
+        if presidio_available and presidio_analyzer is not None:
+            try:
+                print("Using Presidio for text anonymization")
+                return anonymize_text_presidio(request.text, request.language)
+            except HTTPException:
+                raise
+            except Exception as e:
+                print(f"Presidio text anonymization failed, falling back to spaCy: {str(e)}")
+
+        # Fallback to spaCy NER
+        print("Using spaCy for text anonymization")
+        return anonymize_text_spacy(request.text)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to anonymize text: {str(e)}")
 
 
 @app.post("/store")

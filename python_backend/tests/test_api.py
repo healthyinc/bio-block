@@ -42,5 +42,37 @@ class TestAPI(unittest.TestCase):
             print(f"Response text: {resp.text}")
             self.assertEqual(resp.status_code, 200)
 
+    def test_anonymize_text(self):
+        """Test PHI anonymization in plain text"""
+        data = {
+            "text": "Patient John Smith, DOB 03/15/1985, SSN 123-45-6789, was admitted to Alaska Regional Hospital on March 10, 2026."
+        }
+        resp = requests.post(f"{BASE_URL}/anonymize_text", json=data)
+        self.assertEqual(resp.status_code, 200)
+        result = resp.json()
+        # Verify response structure
+        self.assertIn("anonymized_text", result)
+        self.assertIn("entities_found", result)
+        self.assertIn("method", result)
+        self.assertIn("entity_count", result)
+        # Verify PHI was actually detected
+        self.assertGreater(result["entity_count"], 0)
+        # Verify original PHI is removed from anonymized text
+        self.assertNotIn("John Smith", result["anonymized_text"])
+
+    def test_anonymize_text_empty(self):
+        """Test that empty text returns 400 error"""
+        data = {"text": ""}
+        resp = requests.post(f"{BASE_URL}/anonymize_text", json=data)
+        self.assertEqual(resp.status_code, 400)
+
+    def test_anonymize_text_no_phi(self):
+        """Test text with no PHI returns successfully with zero entities"""
+        data = {"text": "The weather is sunny today."}
+        resp = requests.post(f"{BASE_URL}/anonymize_text", json=data)
+        self.assertEqual(resp.status_code, 200)
+        result = resp.json()
+        self.assertIn("anonymized_text", result)
+
 if __name__ == "__main__":
     unittest.main()
