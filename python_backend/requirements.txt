@@ -9,6 +9,9 @@ numpy
 Pillow
 python-multipart
 
+# PDF text extraction
+PyMuPDF
+
 # Presidio libraries for advanced image anonymization
 presidio-analyzer
 presidio-anonymizer

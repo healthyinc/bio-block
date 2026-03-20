@@ -15,6 +15,7 @@ from PIL import Image
 import io
 import shutil
 import platform
+import fitz  # PyMuPDF for PDF text extraction
 
 # Presidio imports for advanced image anonymization
 try:
@@ -277,7 +278,8 @@ async def root():
             "/search_with_filter": "Combined search and filter",
             "/anonymize_image": "Anonymize PHI in images (Presidio + Legacy fallback)",
             "/anonymize_image_presidio": "Anonymize PHI in images (Presidio only, advanced)",
-            "/anonymize_text": "Anonymize PHI in plain text (Presidio + spaCy fallback)"
+            "/anonymize_text": "Anonymize PHI in plain text (Presidio + spaCy fallback)",
+            "/anonymize_pdf": "Anonymize PHI in PDF documents (extract text + Presidio/spaCy)"
         },
         "status": {
             "presidio_available": presidio_available,
@@ -429,6 +431,97 @@ async def anonymize_text(request: AnonymizeTextRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to anonymize text: {str(e)}")
+
+
+@app.post("/anonymize_pdf")
+async def anonymize_pdf(file: UploadFile = File(...), language: str = "en"):
+    """
+    Anonymize PHI in PDF documents by extracting text from each page and
+    running PHI detection and redaction.
+
+    Input: PDF file via multipart form data
+    Optional: language query parameter (default: "en")
+
+    Returns:
+    - pages: List of per-page results with original text, anonymized text, and entities
+    - total_entities: Total PHI entities found across all pages
+    - total_pages: Number of pages processed
+    - method: Which anonymization engine was used ("presidio" or "spacy")
+    """
+    try:
+        # Validate file type
+        if not file.filename or not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="File must be a PDF document (.pdf)")
+
+        # Read PDF contents
+        contents = await file.read()
+        if not contents:
+            raise HTTPException(status_code=400, detail="Uploaded PDF file is empty")
+
+        # Open PDF with PyMuPDF
+        try:
+            pdf_document = fitz.open(stream=contents, filetype="pdf")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {str(e)}")
+
+        if pdf_document.page_count == 0:
+            pdf_document.close()
+            raise HTTPException(status_code=400, detail="PDF has no pages")
+
+        pages_result = []
+        total_entities = 0
+        method_used = None
+
+        for page_num in range(pdf_document.page_count):
+            page = pdf_document[page_num]
+            page_text = page.get_text()
+
+            # Skip empty pages
+            if not page_text or not page_text.strip():
+                pages_result.append({
+                    "page_number": page_num + 1,
+                    "original_text": "",
+                    "anonymized_text": "",
+                    "entities_found": [],
+                    "entity_count": 0
+                })
+                continue
+
+            # Anonymize extracted text using Presidio (preferred) or spaCy fallback
+            if presidio_available and presidio_analyzer is not None:
+                try:
+                    result = anonymize_text_presidio(page_text, language)
+                    method_used = "presidio"
+                except Exception:
+                    result = anonymize_text_spacy(page_text)
+                    method_used = "spacy"
+            else:
+                result = anonymize_text_spacy(page_text)
+                method_used = "spacy"
+
+            total_entities += result["entity_count"]
+            pages_result.append({
+                "page_number": page_num + 1,
+                "original_text": page_text,
+                "anonymized_text": result["anonymized_text"],
+                "entities_found": result["entities_found"],
+                "entity_count": result["entity_count"]
+            })
+
+        pdf_document.close()
+
+        return {
+            "pages": pages_result,
+            "total_entities": total_entities,
+            "total_pages": len(pages_result),
+            "method": method_used or "none",
+            "filename": file.filename
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to anonymize PDF: {str(e)}")
 
 
 @app.post("/store")
