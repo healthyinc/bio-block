@@ -13,6 +13,8 @@ from pytesseract import Output
 import numpy as np
 from PIL import Image
 import io
+import shutil
+import platform
 
 # Presidio imports for advanced image anonymization
 try:
@@ -39,8 +41,19 @@ app.add_middleware(
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_or_create_collection(name="new_user_data")
 
-# Tesseract path for macOS (installed via Homebrew)
-pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+# Auto-detect Tesseract path across operating systems
+tesseract_path = shutil.which('tesseract')
+if tesseract_path:
+    pytesseract.pytesseract.tesseract_cmd = tesseract_path
+else:
+    system = platform.system()
+    if system == 'Windows':
+        default_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+    elif system == 'Darwin':  # macOS
+        default_path = '/opt/homebrew/bin/tesseract'
+    else:  # Linux
+        default_path = '/usr/bin/tesseract'
+    pytesseract.pytesseract.tesseract_cmd = default_path
 
 try:
     nlp = spacy.load("en_core_web_lg")  # Updated to use large model for better accuracy
