@@ -22,6 +22,7 @@ pydicom
 pdf2image
 img2pdf
 reportlab
+PyMuPDF  # PDF text extraction for PHI anonymization
 
 # Dev/Test
 pytest

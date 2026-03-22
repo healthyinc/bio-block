@@ -95,5 +95,78 @@ class TestAPI(unittest.TestCase):
         resp = client.post("/store", json=data)
         self.assertIn(resp.status_code, [200, 201])
 
+    # --- Text PHI Anonymization Tests ---
+
+    def test_anonymize_text_with_phi(self):
+        """Test text anonymization detects PHI entities"""
+        data = {"text": "Patient John Smith, DOB 03/15/1985, was admitted to Alaska Regional Hospital."}
+        resp = client.post("/anonymize_text", json=data)
+        self.assertEqual(resp.status_code, 200)
+        result = resp.json()
+        self.assertIn("anonymized_text", result)
+        self.assertIn("entities_found", result)
+        self.assertIn("method", result)
+        self.assertGreater(result["entity_count"], 0)
+
+    def test_anonymize_text_empty(self):
+        """Test that empty text returns 422 validation error"""
+        data = {"text": ""}
+        resp = client.post("/anonymize_text", json=data)
+        self.assertEqual(resp.status_code, 422)
+
+    def test_anonymize_text_no_phi(self):
+        """Test text with no PHI returns successfully"""
+        data = {"text": "The weather in Alaska is cold during winter months."}
+        resp = client.post("/anonymize_text", json=data)
+        self.assertEqual(resp.status_code, 200)
+        result = resp.json()
+        self.assertIn("anonymized_text", result)
+
+    def test_anonymize_text_multiple_entities(self):
+        """Test detection of multiple PHI entity types"""
+        data = {"text": "Dr. Sarah Johnson, email: sarah.johnson@hospital.com, phone: 555-123-4567, seen on 01/15/2026."}
+        resp = client.post("/anonymize_text", json=data)
+        self.assertEqual(resp.status_code, 200)
+        result = resp.json()
+        self.assertGreater(result["entity_count"], 0)
+        entity_types = [e["entity_type"] for e in result["entities_found"]]
+        self.assertTrue(len(entity_types) >= 2, "Should detect at least 2 entity types")
+
+    # --- PDF PHI Anonymization Tests ---
+
+    def test_anonymize_pdf_invalid_file(self):
+        """Test that non-PDF file is rejected"""
+        from io import BytesIO
+        fake_file = BytesIO(b"This is not a PDF")
+        resp = client.post("/anonymize_pdf", files={"file": ("test.txt", fake_file, "text/plain")})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_anonymize_pdf_with_phi(self):
+        """Test PDF anonymization with a generated PDF containing PHI"""
+        try:
+            from reportlab.pdfgen import canvas
+            from io import BytesIO
+
+            buffer = BytesIO()
+            c = canvas.Canvas(buffer)
+            c.drawString(100, 750, "Patient Name: John Smith")
+            c.drawString(100, 730, "Date of Birth: 03/15/1985")
+            c.drawString(100, 710, "SSN: 123-45-6789")
+            c.drawString(100, 690, "Email: john.smith@hospital.com")
+            c.showPage()
+            c.save()
+            buffer.seek(0)
+
+            resp = client.post("/anonymize_pdf", files={"file": ("medical_record.pdf", buffer, "application/pdf")})
+            self.assertEqual(resp.status_code, 200)
+            result = resp.json()
+            self.assertIn("pages", result)
+            self.assertIn("total_pages", result)
+            self.assertIn("total_entities", result)
+            self.assertEqual(result["total_pages"], 1)
+            self.assertGreater(result["total_entities"], 0)
+        except ImportError:
+            self.skipTest("reportlab not installed, skipping PDF generation test")
+
 if __name__ == "__main__":
     unittest.main()

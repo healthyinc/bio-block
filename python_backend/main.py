@@ -18,12 +18,23 @@ import os
 import json
 from typing import List, Tuple
 import re
+import tempfile
 from eth_account.messages import encode_defunct
 from eth_account import Account
 
 # Preview factory imports
 from services.preview.factory import PreviewFactory
 from services.audit_logger import AuditLogger
+
+# PDF extraction imports
+try:
+    import fitz  # PyMuPDF
+    pymupdf_available = True
+    print("PyMuPDF library loaded successfully")
+except ImportError:
+    pymupdf_available = False
+    print("Warning: PyMuPDF not found. PDF anonymization will not work.")
+    print("Install with: pip install PyMuPDF")
 
 # DICOM imports
 try:
@@ -156,6 +167,9 @@ class DeleteRequest(BaseModel):
     signature: str  # Hex-encoded signature produced by eth_personal_sign
     message: str  # The canonical plaintext message that was signed by the client
 
+class AnonymizeTextRequest(BaseModel):
+    text: str = Field(..., min_length=1, description="Text containing potential PHI to anonymize")
+
 
 def verify_owner_signature(owner_address: str, signature: str, message: str) -> str:
     """
@@ -246,11 +260,14 @@ async def root():
             "/search_with_filter": "Combined search and filter",
             "/documents/{doc_id}": "GET: Retrieve document by ID, PUT: Update document metadata, DELETE: Remove document",
             "/anonymize_image": "Anonymize PHI in images (Presidio + Legacy fallback)",
-            "/anonymize_image_presidio": "Anonymize PHI in images (Presidio only, advanced)"
+            "/anonymize_image_presidio": "Anonymize PHI in images (Presidio only, advanced)",
+            "/anonymize_text": "Anonymize PHI in plain text (Presidio + spaCy fallback)",
+            "/anonymize_pdf": "Anonymize PHI in PDF documents (per-page extraction and redaction)"
         },
         "status": {
             "presidio_available": presidio_available,
             "tesseract_available": tesseract_available,
+            "pymupdf_available": pymupdf_available,
             "spacy_model": "en_core_web_lg" if nlp and hasattr(nlp, 'meta') and nlp.meta.get('name') == 'en_core_web_lg' else "en_core_web_sm" if nlp else "not_available"
         }
     }
@@ -368,6 +385,181 @@ async def anonymize_image_presidio_only(file: UploadFile = File(...)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to anonymize image with Presidio: {str(e)}")
+
+
+def anonymize_text_content(text: str) -> dict:
+    """
+    Core text anonymization logic using Presidio with spaCy NER fallback.
+    Returns dict with anonymized_text, entities, and method used.
+    """
+    entities_found = []
+
+    # Try Presidio first
+    if presidio_available and presidio_analyzer and presidio_anonymizer:
+        try:
+            results = presidio_analyzer.analyze(
+                text=text,
+                language="en",
+                entities=[
+                    "PERSON", "PHONE_NUMBER", "EMAIL_ADDRESS", "US_SSN",
+                    "DATE_TIME", "LOCATION", "MEDICAL_LICENSE", "IP_ADDRESS",
+                    "US_DRIVER_LICENSE", "US_PASSPORT", "CREDIT_CARD", "URL"
+                ]
+            )
+
+            anonymized = presidio_anonymizer.anonymize(
+                text=text,
+                analyzer_results=results
+            )
+
+            for result in results:
+                entities_found.append({
+                    "entity_type": result.entity_type,
+                    "start": result.start,
+                    "end": result.end,
+                    "score": round(result.score, 3),
+                    "original_text": text[result.start:result.end]
+                })
+
+            return {
+                "anonymized_text": anonymized.text,
+                "entities_found": entities_found,
+                "entity_count": len(entities_found),
+                "method": "presidio"
+            }
+        except Exception as e:
+            print(f"Presidio text anonymization failed, trying spaCy fallback: {str(e)}")
+
+    # Fallback to spaCy NER
+    if nlp is not None:
+        doc = nlp(text)
+        anonymized_text = text
+
+        sorted_ents = sorted(doc.ents, key=lambda e: e.start_char, reverse=True)
+        for ent in sorted_ents:
+            if ent.label_ in PHI_LABELS:
+                entities_found.append({
+                    "entity_type": ent.label_,
+                    "start": ent.start_char,
+                    "end": ent.end_char,
+                    "score": 1.0,
+                    "original_text": ent.text
+                })
+                anonymized_text = (
+                    anonymized_text[:ent.start_char]
+                    + f"<{ent.label_}>"
+                    + anonymized_text[ent.end_char:]
+                )
+
+        entities_found.reverse()
+        return {
+            "anonymized_text": anonymized_text,
+            "entities_found": entities_found,
+            "entity_count": len(entities_found),
+            "method": "spacy"
+        }
+
+    raise HTTPException(
+        status_code=503,
+        detail="No anonymization engine available. Install Presidio or spaCy."
+    )
+
+
+@app.post("/anonymize_text")
+async def anonymize_text(request: AnonymizeTextRequest):
+    """
+    Anonymize PHI in plain text (clinical notes, patient records, free-text fields).
+    Uses Presidio as primary engine with spaCy NER as fallback.
+    """
+    try:
+        result = anonymize_text_content(request.text)
+
+        audit_logger.log_operation(
+            operation="ANONYMIZE",
+            details=f"text anonymization, method: {result['method']}, entities: {result['entity_count']}",
+        )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to anonymize text: {str(e)}")
+
+
+@app.post("/anonymize_pdf")
+async def anonymize_pdf(file: UploadFile = File(...)):
+    """
+    Anonymize PHI in PDF documents. Extracts text from each page,
+    runs PHI detection and anonymization, returns per-page results.
+    """
+    if not pymupdf_available:
+        raise HTTPException(
+            status_code=503,
+            detail="PyMuPDF not available. Install with: pip install PyMuPDF"
+        )
+
+    if not file.filename or not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="File must be a PDF document")
+
+    try:
+        contents = await file.read()
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(contents)
+            tmp_path = tmp.name
+
+        try:
+            doc = fitz.open(tmp_path)
+            pages_result = []
+            total_entities = 0
+
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                page_text = page.get_text()
+
+                if page_text.strip():
+                    page_anonymized = anonymize_text_content(page_text)
+                    total_entities += page_anonymized["entity_count"]
+                    pages_result.append({
+                        "page_number": page_num + 1,
+                        "original_text": page_text,
+                        "anonymized_text": page_anonymized["anonymized_text"],
+                        "entities_found": page_anonymized["entities_found"],
+                        "entity_count": page_anonymized["entity_count"]
+                    })
+                else:
+                    pages_result.append({
+                        "page_number": page_num + 1,
+                        "original_text": "",
+                        "anonymized_text": "",
+                        "entities_found": [],
+                        "entity_count": 0
+                    })
+
+            method = "presidio" if (presidio_available and presidio_analyzer) else "spacy"
+            doc.close()
+
+            audit_logger.log_operation(
+                operation="ANONYMIZE",
+                details=f"pdf: {file.filename}, pages: {len(pages_result)}, entities: {total_entities}, method: {method}",
+            )
+
+            return {
+                "filename": file.filename,
+                "total_pages": len(pages_result),
+                "total_entities": total_entities,
+                "method": method,
+                "pages": pages_result
+            }
+
+        finally:
+            os.unlink(tmp_path)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to anonymize PDF: {str(e)}")
 
 
 @app.post("/store")
