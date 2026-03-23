@@ -262,7 +262,8 @@ async def root():
             "/anonymize_image": "Anonymize PHI in images (Presidio + Legacy fallback)",
             "/anonymize_image_presidio": "Anonymize PHI in images (Presidio only, advanced)",
             "/anonymize_text": "Anonymize PHI in plain text (Presidio + spaCy fallback)",
-            "/anonymize_pdf": "Anonymize PHI in PDF documents (per-page extraction and redaction)"
+            "/anonymize_pdf": "Anonymize PHI in PDF documents (per-page extraction and redaction)",
+            "/anonymize_dicom": "Anonymize PHI in DICOM file metadata (strips patient identifiers)"
         },
         "status": {
             "presidio_available": presidio_available,
@@ -560,6 +561,110 @@ async def anonymize_pdf(file: UploadFile = File(...)):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to anonymize PDF: {str(e)}")
+
+
+# HIPAA Safe Harbor: 18 identifier types mapped to DICOM tags
+DICOM_PHI_TAGS = {
+    # Direct patient identifiers
+    (0x0010, 0x0010): "PatientName",
+    (0x0010, 0x0020): "PatientID",
+    (0x0010, 0x0030): "PatientBirthDate",
+    (0x0010, 0x0040): "PatientSex",
+    (0x0010, 0x1000): "OtherPatientIDs",
+    (0x0010, 0x1001): "OtherPatientNames",
+    (0x0010, 0x1010): "PatientAge",
+    (0x0010, 0x1040): "PatientAddress",
+    (0x0010, 0x2154): "PatientTelephoneNumbers",
+    (0x0010, 0x21F0): "PatientReligiousPreference",
+    (0x0010, 0x4000): "PatientComments",
+    # Referring/performing physician
+    (0x0008, 0x0090): "ReferringPhysicianName",
+    (0x0008, 0x1050): "PerformingPhysicianName",
+    (0x0008, 0x1070): "OperatorsName",
+    # Institution identifiers
+    (0x0008, 0x0080): "InstitutionName",
+    (0x0008, 0x0081): "InstitutionAddress",
+    (0x0008, 0x1040): "InstitutionalDepartmentName",
+    # Study/accession identifiers
+    (0x0008, 0x0050): "AccessionNumber",
+    (0x0008, 0x0020): "StudyDate",
+    (0x0008, 0x0030): "StudyTime",
+    (0x0008, 0x0021): "SeriesDate",
+    (0x0008, 0x0031): "SeriesTime",
+    (0x0008, 0x0022): "AcquisitionDate",
+    (0x0008, 0x0032): "AcquisitionTime",
+    (0x0008, 0x002A): "AcquisitionDateTime",
+    (0x0020, 0x0010): "StudyID",
+}
+
+
+@app.post("/anonymize_dicom")
+async def anonymize_dicom(file: UploadFile = File(...)):
+    """
+    Anonymize PHI in DICOM file metadata. Strips patient identifiers
+    following HIPAA Safe Harbor de-identification standards.
+    Returns the anonymized DICOM file for download.
+    """
+    if not pydicom_available:
+        raise HTTPException(
+            status_code=503,
+            detail="pydicom not available. Install with: pip install pydicom"
+        )
+
+    if not file.filename or not file.filename.lower().endswith(('.dcm', '.dicom')):
+        raise HTTPException(
+            status_code=400,
+            detail="File must be a DICOM file (.dcm or .dicom)"
+        )
+
+    try:
+        contents = await file.read()
+
+        with tempfile.NamedTemporaryFile(suffix=".dcm", delete=False) as tmp:
+            tmp.write(contents)
+            tmp_path = tmp.name
+
+        try:
+            ds = pydicom.dcmread(tmp_path)
+            stripped_fields = []
+
+            for tag, field_name in DICOM_PHI_TAGS.items():
+                if tag in ds:
+                    original_value = str(ds[tag].value)
+                    ds[tag].value = ""
+                    stripped_fields.append({
+                        "field": field_name,
+                        "tag": f"({tag[0]:04X},{tag[1]:04X})",
+                        "original_value": original_value
+                    })
+
+            # Save anonymized DICOM to buffer
+            anonymized_buffer = io.BytesIO()
+            ds.save_as(anonymized_buffer)
+            anonymized_buffer.seek(0)
+
+            audit_logger.log_operation(
+                operation="ANONYMIZE",
+                details=f"dicom: {file.filename}, fields_stripped: {len(stripped_fields)}",
+            )
+
+            return {
+                "filename": file.filename,
+                "fields_stripped": len(stripped_fields),
+                "stripped_details": stripped_fields,
+                "anonymized_file_base64": anonymized_buffer.getvalue().hex(),
+                "message": f"Successfully anonymized {len(stripped_fields)} PHI fields from DICOM metadata"
+            }
+
+        finally:
+            os.unlink(tmp_path)
+
+    except HTTPException:
+        raise
+    except InvalidDicomError:
+        raise HTTPException(status_code=400, detail="Invalid DICOM file format")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to anonymize DICOM: {str(e)}")
 
 
 @app.post("/store")

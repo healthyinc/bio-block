@@ -168,5 +168,85 @@ class TestAPI(unittest.TestCase):
         except ImportError:
             self.skipTest("reportlab not installed, skipping PDF generation test")
 
+    # --- DICOM PHI Anonymization Tests ---
+
+    def test_anonymize_dicom_invalid_file(self):
+        """Test that non-DICOM file is rejected"""
+        from io import BytesIO
+        fake_file = BytesIO(b"This is not a DICOM file")
+        resp = client.post("/anonymize_dicom", files={"file": ("test.txt", fake_file, "application/octet-stream")})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_anonymize_dicom_with_phi(self):
+        """Test DICOM anonymization strips PHI metadata tags"""
+        try:
+            import pydicom
+            from pydicom.dataset import Dataset, FileDataset
+            from io import BytesIO
+            import tempfile
+
+            # Create a minimal DICOM file with PHI
+            tmp = tempfile.NamedTemporaryFile(suffix=".dcm", delete=False)
+            ds = FileDataset(tmp.name, Dataset(), preamble=b"\x00" * 128, is_implicit_VR=False, is_little_endian=True)
+            ds.PatientName = "John Smith"
+            ds.PatientID = "PAT12345"
+            ds.PatientBirthDate = "19850315"
+            ds.ReferringPhysicianName = "Dr. Sarah Johnson"
+            ds.InstitutionName = "Alaska Regional Hospital"
+            ds.AccessionNumber = "ACC98765"
+            ds.file_meta = pydicom.dataset.FileMetaDataset()
+            ds.file_meta.TransferSyntaxUID = pydicom.uid.ExplicitVRLittleEndian
+            ds.file_meta.MediaStorageSOPClassUID = "1.2.840.10008.5.1.4.1.1.2"
+            ds.file_meta.MediaStorageSOPInstanceUID = pydicom.uid.generate_uid()
+            ds.save_as(tmp.name)
+            tmp.close()
+
+            with open(tmp.name, "rb") as f:
+                resp = client.post("/anonymize_dicom", files={"file": ("test.dcm", f, "application/dicom")})
+
+            os.unlink(tmp.name)
+
+            self.assertEqual(resp.status_code, 200)
+            result = resp.json()
+            self.assertIn("fields_stripped", result)
+            self.assertGreater(result["fields_stripped"], 0)
+            # Verify known PHI fields were stripped
+            stripped_names = [s["field"] for s in result["stripped_details"]]
+            self.assertIn("PatientName", stripped_names)
+            self.assertIn("PatientID", stripped_names)
+            self.assertIn("PatientBirthDate", stripped_names)
+        except ImportError:
+            self.skipTest("pydicom not installed, skipping DICOM test")
+
+    def test_anonymize_dicom_no_phi(self):
+        """Test DICOM file with no PHI tags returns 0 stripped fields"""
+        try:
+            import pydicom
+            from pydicom.dataset import Dataset, FileDataset
+            import tempfile
+
+            tmp = tempfile.NamedTemporaryFile(suffix=".dcm", delete=False)
+            ds = FileDataset(tmp.name, Dataset(), preamble=b"\x00" * 128, is_implicit_VR=False, is_little_endian=True)
+            ds.Modality = "CT"
+            ds.Rows = 512
+            ds.Columns = 512
+            ds.file_meta = pydicom.dataset.FileMetaDataset()
+            ds.file_meta.TransferSyntaxUID = pydicom.uid.ExplicitVRLittleEndian
+            ds.file_meta.MediaStorageSOPClassUID = "1.2.840.10008.5.1.4.1.1.2"
+            ds.file_meta.MediaStorageSOPInstanceUID = pydicom.uid.generate_uid()
+            ds.save_as(tmp.name)
+            tmp.close()
+
+            with open(tmp.name, "rb") as f:
+                resp = client.post("/anonymize_dicom", files={"file": ("clean.dcm", f, "application/dicom")})
+
+            os.unlink(tmp.name)
+
+            self.assertEqual(resp.status_code, 200)
+            result = resp.json()
+            self.assertEqual(result["fields_stripped"], 0)
+        except ImportError:
+            self.skipTest("pydicom not installed, skipping DICOM test")
+
 if __name__ == "__main__":
     unittest.main()
