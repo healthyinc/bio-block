@@ -34,8 +34,11 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
 
     def test_anonymize_image(self):
-        # Replace 'test.jpg' with a valid test image path
-        with open("tests/test.jpg", "rb") as img:
+        # Use path relative to the script's location
+        import os
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        img_path = os.path.join(script_dir, "test.jpg")
+        with open(img_path, "rb") as img:
             files = {"file": ("test.jpg", img, "image/jpeg")}
             resp = requests.post(f"{BASE_URL}/anonymize_image", files=files)
             print(f"Response status: {resp.status_code}")
