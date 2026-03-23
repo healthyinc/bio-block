@@ -6,6 +6,8 @@ from typing import Optional, Dict, Any, List
 import chromadb
 import time
 import uuid
+import os
+import platform
 import cv2
 import pytesseract
 import spacy
@@ -39,8 +41,33 @@ app.add_middleware(
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_or_create_collection(name="new_user_data")
 
-# Tesseract path for macOS (installed via Homebrew)
-pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+def _resolve_tesseract_cmd() -> str:
+    """
+    Resolve the Tesseract binary path with the following priority:
+    1. TESSERACT_CMD environment variable (user-defined, any OS)
+    2. Platform-specific default install locations
+    """
+    env_path = os.environ.get("TESSERACT_CMD")
+    if env_path:
+        return env_path
+
+    system = platform.system()
+    if system == "Windows":
+        return r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    elif system == "Darwin":
+        # Homebrew on Apple Silicon (/opt/homebrew) or Intel (/usr/local)
+        homebrew_arm = "/opt/homebrew/bin/tesseract"
+        homebrew_intel = "/usr/local/bin/tesseract"
+        if os.path.isfile(homebrew_arm):
+            return homebrew_arm
+        if os.path.isfile(homebrew_intel):
+            return homebrew_intel
+        return homebrew_arm  # fallback to ARM default
+    else:  # Linux / other Unix
+        return "/usr/bin/tesseract"
+
+
+pytesseract.pytesseract.tesseract_cmd = _resolve_tesseract_cmd()
 
 try:
     nlp = spacy.load("en_core_web_lg")  # Updated to use large model for better accuracy
