@@ -26,4 +26,15 @@ describe('API Endpoints', function() {
     console.log('Response body:', res.body);
     expect(res.status).to.equal(200);
   });
+
+  it('POST /api/quality/profile should return dataset quality profile', async function() {
+    const res = await request(app)
+      .post('/api/quality/profile')
+      .attach('file', './tests/test.xlsx');
+    console.log('Quality profile status:', res.status);
+    console.log('Quality profile body:', JSON.stringify(res.body, null, 2));
+    expect(res.status).to.equal(200);
+    expect(res.body).to.have.property('success', true);
+    expect(res.body).to.have.property('report');
+  });
 });
