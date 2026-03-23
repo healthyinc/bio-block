@@ -89,6 +89,7 @@ const analyzeDatasetQuality = async (req, res) => {
         name: header || "Unknown",
         missingCount: 0,
         types: { number: 0, text: 0, boolean: 0, date: 0 },
+        numericValues: [], // New: collect numeric values for stats
       }));
 
       // Track duplicate rows (naive JSON stringify comparison)
@@ -114,6 +115,9 @@ const analyzeDatasetQuality = async (req, res) => {
             columnStats[j].missingCount++;
           } else {
             columnStats[j].types[type] = (columnStats[j].types[type] || 0) + 1;
+            if (type === "number") {
+              columnStats[j].numericValues.push(Number(value));
+            }
           }
         }
       }
@@ -133,12 +137,43 @@ const analyzeDatasetQuality = async (req, res) => {
         const missingPercentage =
           totalRows > 0 ? ((stat.missingCount / totalRows) * 100).toFixed(2) : 0;
 
-        return {
+        const result = {
           name: stat.name,
           inferredType: maxCount === 0 ? "empty" : dominantType,
           missingCount: stat.missingCount,
           missingPercentage: parseFloat(missingPercentage),
         };
+
+        // Add statistical summaries for numeric columns
+        if (dominantType === "number" && stat.numericValues.length > 0) {
+          const vals = stat.numericValues.sort((a, b) => a - b);
+          const sum = vals.reduce((a, b) => a + b, 0);
+          const mean = sum / vals.length;
+
+          // Median
+          const mid = Math.floor(vals.length / 2);
+          const median = vals.length % 2 !== 0 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2;
+
+          // Min/Max
+          const min = vals[0];
+          const max = vals[vals.length - 1];
+
+          // Standard Deviation
+          const sqDiffs = vals.map((v) => Math.pow(v - mean, 2));
+          const avgSqDiff = sqDiffs.reduce((a, b) => a + b, 0) / vals.length;
+          const stdDev = Math.sqrt(avgSqDiff);
+
+          result.statistics = {
+            min: parseFloat(min.toFixed(4)),
+            max: parseFloat(max.toFixed(4)),
+            mean: parseFloat(mean.toFixed(4)),
+            median: parseFloat(median.toFixed(4)),
+            stdDev: parseFloat(stdDev.toFixed(4)),
+            count: vals.length,
+          };
+        }
+
+        return result;
       });
 
       report.sheets.push({
