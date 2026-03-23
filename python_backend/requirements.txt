@@ -3,8 +3,7 @@ uvicorn[standard]
 chromadb
 opencv-python
 spacy
-https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
-numpy
+numpy<2
 Pillow
 python-multipart
 pytesseract
@@ -34,7 +33,7 @@ flake8
 #   conda install -c conda-forge openslide-python
 # This installs both the native libopenslide library and Python bindings
 openslide-python
-httpx
+httpx<0.28.0
 
 # Neuroimaging support for NIfTI files
 nibabel

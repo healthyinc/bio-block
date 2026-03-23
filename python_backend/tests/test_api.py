@@ -41,13 +41,11 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
 
     def test_anonymize_image(self):
-        # Create a dummy image for testing if not exists
-        if not os.path.exists("test.jpg"):
-            from PIL import Image
-            img = Image.new('RGB', (100, 100), color = 'red')
-            img.save('test.jpg')
-            
-        with open("test.jpg", "rb") as img:
+        # Use path relative to the script's location
+        import os
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        img_path = os.path.join(script_dir, "test.jpg")
+        with open(img_path, "rb") as img:
             files = {"file": ("test.jpg", img, "image/jpeg")}
             resp = client.post("/anonymize_image", files=files)
             # 405 is expected if the endpoint is commented out in main.py, 
