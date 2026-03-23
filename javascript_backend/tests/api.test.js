@@ -136,4 +136,30 @@ describe("API Endpoints", function () {
 
     fs.unlinkSync(statsFilePath);
   });
+
+  it("POST /api/quality/profile should detect outliers in numeric columns", async function () {
+    const outlierFilePath = path.join(__dirname, "test_outliers.xlsx");
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Value"],
+      [10],
+      [11],
+      [12],
+      [12],
+      [13],
+      [100], // CLEAR OUTLIER
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+    XLSX.writeFile(wb, outlierFilePath);
+
+    const res = await request(app).post("/api/quality/profile").attach("file", outlierFilePath);
+
+    expect(res.status).to.equal(200);
+    const valCol = res.body.report.sheets[0].columns.find((c) => c.name === "Value");
+
+    expect(valCol.statistics).to.have.property("outlierCount", 1);
+    expect(valCol.statistics.outliers).to.include(100);
+
+    fs.unlinkSync(outlierFilePath);
+  });
 });
