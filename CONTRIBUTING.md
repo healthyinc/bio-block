@@ -17,8 +17,7 @@ If your local layout differs, adapt the commands below. These paths reflect the 
 Prerequisites
 
 - Node.js (LTS) and npm
-- Python 3.8+ and pip
-- (Optional) virtualenv / venv for Python
+- uv package manager for python
 
 Frontend (prototype)
 
@@ -40,12 +39,12 @@ Python backend
      ```powershell
      python -m venv .venv; .\.venv\Scripts\Activate.ps1
      ```
-3. Install dependencies: `pip install -r requirements.txt`
-4. Start the backend: `python main.py` (or other entrypoint defined in the directory)
+3. Install dependencies: `uv sync`
+4. Start the backend: `uv run main.py` (or other entrypoint defined in the directory)
 
 Notes / assumptions
 
-- The repo provides `prototype/`, `javascript_backend/`, and `python_backend/`. If an entrypoint differs (e.g., `uvicorn` or a different script), use that command. If dependencies are missing from `requirements.txt` or `package.json`, open an issue so we can update the docs.
+- The repo provides `prototype/`, `javascript_backend/`, and `python_backend/`. If an entrypoint differs (e.g., `uvicorn` or a different script), use that command. If dependencies are missing from `pyproject.toml` or `package.json`, open an issue so we can update the docs.
 
 ## 2) Branch naming and commit conventions
 
@@ -110,8 +109,8 @@ Python backend tests
 
 - Path: `python_backend/tests/`
 - Run (from repo root):
-  ```powershell
-  cd python_backend; python -m venv .venv; .\.venv\Scripts\Activate.ps1; pip install -r requirements.txt; pytest -q
+  ```
+  uv run pytest -q
   ```
 
 If tests require external services (IPFS, DB, etc.), the repository README or test docs should mention mocks or test fixtures. If tests are flaky or require credentials, open an issue so we can improve CI.
@@ -131,11 +130,11 @@ Python
 - Recommended commands:
   ```powershell
   # format
-  black .
+  uv run black .
   # check imports
-  isort . --check-only
+  uv run isort . --check-only
   # lint
-  flake8
+  uv run flake8
   ```
 
 General

@@ -111,7 +111,7 @@ healthy/
 ### Prerequisites
 
 - Node.js (v14+)
-- Python (v3.8+)
+- uv (v0.10+)
 - MetaMask or Ethereum wallet
 - Git
 
@@ -129,8 +129,7 @@ healthy/
    ```bash
    # Python backend
    cd python_backend
-   pip install -r requirements.txt
-   python -m spacy download en_core_web_lg
+   uv sync
 
    # JavaScript backend
    cd ../javascript_backend
@@ -156,7 +155,7 @@ healthy/
 
    ```bash
    # Terminal 1: Python backend
-   cd python_backend && uvicorn main:app --reload --port 3002
+   cd python_backend && uv run uvicorn main:app --reload --port 3002
 
    # Terminal 2: JavaScript backend
    cd javascript_backend && node server.js
@@ -251,7 +250,7 @@ Bio-Block includes comprehensive test suites for both backend services:
 
 ```bash
 # Python backend tests (6 tests)
-cd python_backend && python tests/test_api.py
+cd python_backend && uv run pytest -q
 
 # JavaScript backend tests (3 tests)
 cd javascript_backend && npm test
