@@ -1,29 +1,41 @@
-import React, { useState } from 'react';
-import { Search, Filter, ArrowLeft, Download, ShoppingCart, Eye, FileText, Calendar, User, Building, X } from 'lucide-react';
-import { decryptFile } from './encryptionUtils';
-import { purchaseDocument, getDocumentPrice } from './contractService';
-import StreamingEncryption from './utils/streamingEncryption.js';
+import React, { useState } from "react";
+import {
+  Search,
+  Filter,
+  ArrowLeft,
+  Download,
+  ShoppingCart,
+  Eye,
+  FileText,
+  Calendar,
+  User,
+  Building,
+  X,
+} from "lucide-react";
+import { decryptFile } from "./encryptionUtils";
+import { purchaseDocument, getDocumentPrice } from "./contractService";
+import StreamingEncryption from "./utils/streamingEncryption.js";
 
 export default function SearchData({ onBack }) {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null);
   const [isSearching, setIsSearching] = useState(false);
   const [downloading, setDownloading] = useState({});
   const [purchasing, setPurchasing] = useState({});
-  
+
   // Preview modal states
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewData, setPreviewData] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  
+
   // Filter states
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({
-    dataType: '',
-    gender: '',
-    ageRange: '',
-    dataSource: '',
-    fileType: ''
+    dataType: "",
+    gender: "",
+    ageRange: "",
+    dataSource: "",
+    fileType: "",
   });
   const [useFilters, setUseFilters] = useState(false);
 
@@ -31,65 +43,68 @@ export default function SearchData({ onBack }) {
   const smartDecrypt = async (encryptedData, progressCallback) => {
     try {
       // Try to detect if it's streaming encryption format
-      const dataString = typeof encryptedData === 'string' ? encryptedData : 
-                         encryptedData instanceof Uint8Array ? Buffer.from(encryptedData).toString('utf8') : 
-                         encryptedData;
-      
+      const dataString =
+        typeof encryptedData === "string"
+          ? encryptedData
+          : encryptedData instanceof Uint8Array
+            ? Buffer.from(encryptedData).toString("utf8")
+            : encryptedData;
+
       // Check if it has streaming encryption markers
-      if (dataString.includes('|METADATA_SEPARATOR|') && dataString.includes('|CHUNK_SEPARATOR|')) {
-        console.log('Detected streaming encryption format, using streaming decryption');
+      if (dataString.includes("|METADATA_SEPARATOR|") && dataString.includes("|CHUNK_SEPARATOR|")) {
+        console.log("Detected streaming encryption format, using streaming decryption");
         const streamer = new StreamingEncryption();
         return await streamer.decryptFileStream(dataString, progressCallback);
       } else {
-        console.log('Using traditional decryption');
+        console.log("Using traditional decryption");
         return decryptFile(encryptedData);
       }
     } catch (error) {
-      console.warn('Streaming decryption failed, falling back to traditional:', error);
+      console.warn("Streaming decryption failed, falling back to traditional:", error);
       return decryptFile(encryptedData);
     }
   };
 
   const handleSearchSubmit = async () => {
     if (!searchQuery.trim() && !useFilters) {
-      alert('Please enter a search query or use filters');
+      alert("Please enter a search query or use filters");
       return;
     }
 
     setIsSearching(true);
     try {
-      const backendUrl = process.env.REACT_APP_PYTHON_BACKEND_URL || 'http://localhost:3002';
+      const backendUrl = process.env.REACT_APP_PYTHON_BACKEND_URL || "http://localhost:3002";
 
-      let endpoint = '/search';
+      let endpoint = "/search";
       let requestBody = {};
-      
-      if (useFilters && Object.values(filters).some(value => value !== '')) {
+
+      if (useFilters && Object.values(filters).some((value) => value !== "")) {
         // Use search_with_filter or filter endpoint based on whether there's a query
         if (searchQuery.trim()) {
-          endpoint = '/search_with_filter';
+          endpoint = "/search_with_filter";
           requestBody = {
             query: searchQuery.trim(),
             filters: buildFiltersObject(),
-            n_results: 10
+            n_results: 10,
           };
         } else {
-          endpoint = '/filter';
+          endpoint = "/filter";
           requestBody = {
             filters: buildFiltersObject(),
-            n_results: 10
+            n_results: 10,
           };
         }
       } else {
         // Regular search
         requestBody = {
-          query: searchQuery.trim()
+          query: searchQuery.trim(),
         };
       }
 
       const response = await fetch(`${backendUrl}${endpoint}`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(requestBody),
       });
@@ -101,7 +116,7 @@ export default function SearchData({ onBack }) {
       const result = await response.json();
       setSearchResults(result);
     } catch (error) {
-      console.error('Search Error:', error);
+      console.error("Search Error:", error);
       alert(`Search Error: ${error.message}`);
     } finally {
       setIsSearching(false);
@@ -110,38 +125,38 @@ export default function SearchData({ onBack }) {
 
   const buildFiltersObject = () => {
     const filterObj = {};
-    
+
     // Map UI filters directly to backend expected format
     if (filters.dataType) {
-      filterObj['dataType'] = filters.dataType;
+      filterObj["dataType"] = filters.dataType;
     }
-    
+
     if (filters.gender) {
-      filterObj['gender'] = filters.gender;
+      filterObj["gender"] = filters.gender;
     }
-    
+
     if (filters.dataSource) {
-      filterObj['dataSource'] = filters.dataSource;
+      filterObj["dataSource"] = filters.dataSource;
     }
-    
+
     if (filters.ageRange) {
-      filterObj['ageRange'] = filters.ageRange;
+      filterObj["ageRange"] = filters.ageRange;
     }
-    
+
     if (filters.fileType) {
-      filterObj['fileType'] = filters.fileType;
+      filterObj["fileType"] = filters.fileType;
     }
-    
+
     return filterObj;
   };
 
   const resetFilters = () => {
     setFilters({
-      dataType: '',
-      gender: '',
-      ageRange: '',
-      dataSource: '',
-      fileType: ''
+      dataType: "",
+      gender: "",
+      ageRange: "",
+      dataSource: "",
+      fileType: "",
     });
     setUseFilters(false);
   };
@@ -150,13 +165,13 @@ export default function SearchData({ onBack }) {
     const cid = result.cid || result.ipfsHash || result.hash;
     if (!cid) return;
 
-    setPurchasing(prev => ({ ...prev, [index]: true }));
-    
+    setPurchasing((prev) => ({ ...prev, [index]: true }));
+
     try {
-      const price = result.metadata?.price || await getDocumentPrice(cid);
-      
+      const price = result.metadata?.price || (await getDocumentPrice(cid));
+
       if (!price || parseFloat(price) <= 0) {
-        alert('Unable to get document price');
+        alert("Unable to get document price");
         return;
       }
 
@@ -164,44 +179,48 @@ export default function SearchData({ onBack }) {
       if (!confirmed) return;
 
       const txHash = await purchaseDocument(cid, price);
-      console.log('Purchase successful:', txHash);
+      console.log("Purchase successful:", txHash);
 
-      setDownloading(prev => ({ ...prev, [index]: true }));
-      
+      setDownloading((prev) => ({ ...prev, [index]: true }));
+
       const response = await fetch(`https://gateway.pinata.cloud/ipfs/${cid}`);
       const encryptedData = await response.text();
-      
+
       // Use smart decryption (handles both streaming and traditional)
-      const decryptedData = await smartDecrypt(
-        encryptedData,
-        (progress) => console.log(`Decryption progress: ${progress.toFixed(1)}%`)
+      const decryptedData = await smartDecrypt(encryptedData, (progress) =>
+        console.log(`Decryption progress: ${progress.toFixed(1)}%`)
       );
-      
+
       // Handle both traditional and streaming decryption results
       let bytes;
       if (decryptedData instanceof Uint8Array) {
         bytes = decryptedData;
       } else {
-        bytes = new Uint8Array(atob(decryptedData).split('').map(char => char.charCodeAt(0)));
+        bytes = new Uint8Array(
+          atob(decryptedData)
+            .split("")
+            .map((char) => char.charCodeAt(0))
+        );
       }
-      
-      const blob = new Blob([bytes], { type: result.metadata?.fileType || 'application/octet-stream' });
+
+      const blob = new Blob([bytes], {
+        type: result.metadata?.fileType || "application/octet-stream",
+      });
       const url = URL.createObjectURL(blob);
-      
-      const a = document.createElement('a');
+
+      const a = document.createElement("a");
       a.href = url;
       a.download = result.metadata?.fileName || `document_${index + 1}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      
     } catch (error) {
-      console.error('Purchase/Download Error:', error);
+      console.error("Purchase/Download Error:", error);
       alert(`Error: ${error.message}`);
     } finally {
-      setPurchasing(prev => ({ ...prev, [index]: false }));
-      setDownloading(prev => ({ ...prev, [index]: false }));
+      setPurchasing((prev) => ({ ...prev, [index]: false }));
+      setDownloading((prev) => ({ ...prev, [index]: false }));
     }
   };
 
@@ -211,72 +230,75 @@ export default function SearchData({ onBack }) {
 
     setPreviewLoading(true);
     setShowPreviewModal(true);
-    
+
     try {
       const response = await fetch(`https://gateway.pinata.cloud/ipfs/${previewHash}`);
       const encryptedData = await response.text();
-      
+
       // Use smart decryption for preview
-      const decryptedData = await smartDecrypt(
-        encryptedData,
-        (progress) => console.log(`Preview decryption progress: ${progress.toFixed(1)}%`)
+      const decryptedData = await smartDecrypt(encryptedData, (progress) =>
+        console.log(`Preview decryption progress: ${progress.toFixed(1)}%`)
       );
-      
+
       // Handle both traditional and streaming decryption results
       let bytes;
       if (decryptedData instanceof Uint8Array) {
         bytes = decryptedData;
       } else {
-        bytes = new Uint8Array(atob(decryptedData).split('').map(char => char.charCodeAt(0)));
+        bytes = new Uint8Array(
+          atob(decryptedData)
+            .split("")
+            .map((char) => char.charCodeAt(0))
+        );
       }
-      
+
       // Parse Excel data for preview display
       try {
         // Import XLSX library dynamically
-        const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.0/package/xlsx.mjs');
-        
+        const XLSX = await import("https://cdn.sheetjs.com/xlsx-0.20.0/package/xlsx.mjs");
+
         // Read the Excel file
-        const workbook = XLSX.read(bytes, { type: 'array' });
+        const workbook = XLSX.read(bytes, { type: "array" });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        
+
         // Convert to JSON to get the data
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-        
+
         // Get headers and data rows
         const headers = jsonData[0] || [];
         const dataRows = jsonData.slice(1) || [];
-        
+
         const previewInfo = {
           fileName: result.metadata?.fileName || `document_${index + 1}`,
           fileSize: bytes.length,
-          dataType: result.metadata?.fileType || 'Excel file',
-          message: 'Excel preview data loaded successfully. This is a 5% sample of the anonymized dataset.',
+          dataType: result.metadata?.fileType || "Excel file",
+          message:
+            "Excel preview data loaded successfully. This is a 5% sample of the anonymized dataset.",
           headers: headers,
           data: dataRows,
           totalRows: dataRows.length,
           totalColumns: headers.length,
-          sheetName: firstSheetName
+          sheetName: firstSheetName,
         };
-        
+
         setPreviewData(previewInfo);
-        
       } catch (parseError) {
-        console.error('Error parsing Excel data:', parseError);
+        console.error("Error parsing Excel data:", parseError);
         setPreviewData({
           fileName: result.metadata?.fileName || `document_${index + 1}`,
           fileSize: bytes.length,
-          dataType: 'File',
-          message: 'Preview loaded but could not parse Excel content. The file may be corrupted or in an unsupported format.',
-          error: parseError.message
+          dataType: "File",
+          message:
+            "Preview loaded but could not parse Excel content. The file may be corrupted or in an unsupported format.",
+          error: parseError.message,
         });
       }
-      
     } catch (error) {
-      console.error('Preview View Error:', error);
+      console.error("Preview View Error:", error);
       setPreviewData({
         error: `Error loading preview: ${error.message}`,
-        fileName: result.metadata?.fileName || 'Unknown file'
+        fileName: result.metadata?.fileName || "Unknown file",
       });
     } finally {
       setPreviewLoading(false);
@@ -287,7 +309,7 @@ export default function SearchData({ onBack }) {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
       {/* Enhanced Header with Gradient */}
       <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-blue-600 to-indigo-600 h-2"></div>
-      
+
       {/* Header Section */}
       <div className="bg-white/90 backdrop-blur-sm border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-4">
@@ -299,14 +321,14 @@ export default function SearchData({ onBack }) {
               <ArrowLeft size={18} className="text-gray-600" />
               <span className="font-medium text-gray-700">Back to Main</span>
             </button>
-            
             <div className="text-center">
               <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                 Search Documents
               </h1>
-              <p className="text-gray-600 text-sm mt-1">Find medical documents using advanced search and filtering</p>
+              <p className="text-gray-600 text-sm mt-1">
+                Find medical documents using advanced search and filtering
+              </p>
             </div>
-            
             <div className="w-32"></div> {/* Spacer for balance */}
           </div>
         </div>
@@ -318,14 +340,17 @@ export default function SearchData({ onBack }) {
           {/* Search Input */}
           <div className="mb-6">
             <div className="relative">
-              <Search size={20} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <Search
+                size={20}
+                className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400"
+              />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Enter your search query (e.g., 'diabetes research', 'cancer treatment')..."
                 className="w-full pl-12 pr-4 py-4 border border-gray-300 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg bg-white shadow-sm"
-                onKeyPress={(e) => e.key === 'Enter' && handleSearchSubmit()}
+                onKeyPress={(e) => e.key === "Enter" && handleSearchSubmit()}
               />
             </div>
           </div>
@@ -354,16 +379,16 @@ export default function SearchData({ onBack }) {
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`flex items-center gap-3 px-6 py-4 border-2 rounded-2xl transition-all duration-200 font-medium ${
-                  showFilters 
-                    ? 'border-blue-500 bg-blue-50 text-blue-700' 
-                    : 'border-gray-300 bg-white text-gray-700 hover:border-blue-400 hover:bg-blue-50'
+                  showFilters
+                    ? "border-blue-500 bg-blue-50 text-blue-700"
+                    : "border-gray-300 bg-white text-gray-700 hover:border-blue-400 hover:bg-blue-50"
                 }`}
               >
                 <Filter size={18} />
-                {showFilters ? 'Hide Filters' : 'Show Filters'}
+                {showFilters ? "Hide Filters" : "Show Filters"}
               </button>
             </div>
-            
+
             {useFilters && (
               <div className="flex items-center gap-3 px-4 py-2 bg-green-50 border border-green-200 rounded-xl">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
@@ -378,7 +403,7 @@ export default function SearchData({ onBack }) {
               </div>
             )}
           </div>
-          
+
           {/* Advanced Filters Panel */}
           {showFilters && (
             <div className="mt-8 p-6 bg-gradient-to-r from-gray-50 to-blue-50 rounded-2xl border border-gray-200">
@@ -386,7 +411,7 @@ export default function SearchData({ onBack }) {
                 <Filter size={20} className="text-blue-600" />
                 Advanced Filters
               </h3>
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
                 {/* Data Type Filter */}
                 <div>
@@ -397,7 +422,7 @@ export default function SearchData({ onBack }) {
                   <select
                     value={filters.dataType}
                     onChange={(e) => {
-                      setFilters({...filters, dataType: e.target.value});
+                      setFilters({ ...filters, dataType: e.target.value });
                       setUseFilters(true);
                     }}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all duration-200"
@@ -407,7 +432,7 @@ export default function SearchData({ onBack }) {
                     <option value="Institution">Institution</option>
                   </select>
                 </div>
-                
+
                 {/* Gender Filter */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
@@ -417,7 +442,7 @@ export default function SearchData({ onBack }) {
                   <select
                     value={filters.gender}
                     onChange={(e) => {
-                      setFilters({...filters, gender: e.target.value});
+                      setFilters({ ...filters, gender: e.target.value });
                       setUseFilters(true);
                     }}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all duration-200"
@@ -428,7 +453,7 @@ export default function SearchData({ onBack }) {
                     <option value="Other">Other</option>
                   </select>
                 </div>
-                
+
                 {/* Data Source Filter */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
@@ -438,7 +463,7 @@ export default function SearchData({ onBack }) {
                   <select
                     value={filters.dataSource}
                     onChange={(e) => {
-                      setFilters({...filters, dataSource: e.target.value});
+                      setFilters({ ...filters, dataSource: e.target.value });
                       setUseFilters(true);
                     }}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all duration-200"
@@ -455,7 +480,7 @@ export default function SearchData({ onBack }) {
                     <option value="Other">Other</option>
                   </select>
                 </div>
-                
+
                 {/* File Type Filter */}
                 <div>
                   <label className="block text-sm font-semibold text-gray-800 mb-2 flex items-center gap-2">
@@ -465,20 +490,22 @@ export default function SearchData({ onBack }) {
                   <select
                     value={filters.fileType}
                     onChange={(e) => {
-                      setFilters({...filters, fileType: e.target.value});
+                      setFilters({ ...filters, fileType: e.target.value });
                       setUseFilters(true);
                     }}
                     className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all duration-200"
                   >
                     <option value="">All Types</option>
-                    <option value="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">Excel (XLSX)</option>
+                    <option value="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+                      Excel (XLSX)
+                    </option>
                     <option value="application/vnd.ms-excel">Excel (XLS)</option>
                     <option value="image/jpeg">JPEG Image</option>
                     <option value="image/png">PNG Image</option>
                   </select>
                 </div>
               </div>
-              
+
               {/* Filter Action Buttons */}
               <div className="flex justify-end gap-3">
                 <button
@@ -503,10 +530,10 @@ export default function SearchData({ onBack }) {
         {searchResults && (
           <div className="space-y-6">
             {(() => {
-              const resultsArray = Array.isArray(searchResults) 
-                ? searchResults 
+              const resultsArray = Array.isArray(searchResults)
+                ? searchResults
                 : searchResults.results || searchResults.data || [];
-              
+
               return (
                 <>
                   {/* Results Header */}
@@ -514,7 +541,7 @@ export default function SearchData({ onBack }) {
                     <div className="flex items-center justify-between">
                       <h3 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
                         <Eye size={24} className="text-blue-600" />
-                        {useFilters ? 'Filtered Results' : 'Search Results'}
+                        {useFilters ? "Filtered Results" : "Search Results"}
                       </h3>
                       <div className="flex items-center gap-4">
                         <span className="px-4 py-2 bg-blue-100 text-blue-700 rounded-xl font-semibold">
@@ -529,19 +556,26 @@ export default function SearchData({ onBack }) {
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Results Grid */}
                   {resultsArray.length === 0 ? (
                     <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl p-12 text-center border border-gray-100">
                       <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
                         <Search size={32} className="text-gray-400" />
                       </div>
-                      <h3 className="text-xl font-semibold text-gray-800 mb-2">No Documents Found</h3>
-                      <p className="text-gray-500 mb-6">No documents found matching your search criteria. Try adjusting your search terms or filters.</p>
-                      
+                      <h3 className="text-xl font-semibold text-gray-800 mb-2">
+                        No Documents Found
+                      </h3>
+                      <p className="text-gray-500 mb-6">
+                        No documents found matching your search criteria. Try adjusting your search
+                        terms or filters.
+                      </p>
+
                       {/* Debug Information */}
                       <details className="mt-6 p-4 bg-gray-50 rounded-xl text-left">
-                        <summary className="cursor-pointer text-sm font-medium text-gray-600 mb-2">Debug Information</summary>
+                        <summary className="cursor-pointer text-sm font-medium text-gray-600 mb-2">
+                          Debug Information
+                        </summary>
                         <pre className="text-xs text-gray-500 overflow-auto max-h-32 bg-white p-3 rounded border">
                           {JSON.stringify(searchResults, null, 2)}
                         </pre>
@@ -550,31 +584,51 @@ export default function SearchData({ onBack }) {
                   ) : (
                     <div className="grid gap-6">
                       {resultsArray.map((result, index) => (
-                        <div key={index} className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl p-8 border border-gray-100 hover:shadow-2xl transition-all duration-200">
+                        <div
+                          key={index}
+                          className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-xl p-8 border border-gray-100 hover:shadow-2xl transition-all duration-200"
+                        >
                           {/* Document Header */}
                           <div className="flex items-start justify-between mb-6">
                             <div className="flex-1">
                               <h4 className="text-xl font-bold text-gray-800 mb-3 flex items-center gap-3">
                                 <FileText size={20} className="text-blue-600 flex-shrink-0" />
                                 {(() => {
-                                  const fullText = result.summary || result.description || result.content || result.document || '';
+                                  const fullText =
+                                    result.summary ||
+                                    result.description ||
+                                    result.content ||
+                                    result.document ||
+                                    "";
                                   const titleMatch = fullText.match(/^Dataset Title:\s*(.+?)$/m);
-                                  return titleMatch ? titleMatch[1].trim() : (result.metadata?.fileName || result.title || result.fileName || `Document ${index + 1}`);
+                                  return titleMatch
+                                    ? titleMatch[1].trim()
+                                    : result.metadata?.fileName ||
+                                        result.title ||
+                                        result.fileName ||
+                                        `Document ${index + 1}`;
                                 })()}
                               </h4>
-                              
+
                               <p className="text-gray-600 leading-relaxed mb-4">
                                 {(() => {
-                                  const fullText = result.summary || result.description || result.content || result.document || '';
-                                  const summaryMatch = fullText.match(/^Dataset Title:\s*.+?\n(.+?)(?:\nDisease Tags:|$)/s);
+                                  const fullText =
+                                    result.summary ||
+                                    result.description ||
+                                    result.content ||
+                                    result.document ||
+                                    "";
+                                  const summaryMatch = fullText.match(
+                                    /^Dataset Title:\s*.+?\n(.+?)(?:\nDisease Tags:|$)/s
+                                  );
                                   if (summaryMatch) {
                                     return summaryMatch[1].trim();
                                   }
-                                  return fullText || 'No summary available';
+                                  return fullText || "No summary available";
                                 })()}
                               </p>
                             </div>
-                            
+
                             {/* Price Badge */}
                             {result.metadata?.price && (
                               <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-lg shadow-lg">
@@ -582,19 +636,25 @@ export default function SearchData({ onBack }) {
                               </div>
                             )}
                           </div>
-                          
+
                           {/* Metadata Grid */}
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                             {result.metadata?.fileType && (
                               <div className="bg-blue-50 rounded-xl p-3">
-                                <div className="text-xs font-medium text-blue-600 mb-1">File Type</div>
-                                <div className="text-sm font-semibold text-blue-800">{result.metadata.fileType.split('/').pop().toUpperCase()}</div>
+                                <div className="text-xs font-medium text-blue-600 mb-1">
+                                  File Type
+                                </div>
+                                <div className="text-sm font-semibold text-blue-800">
+                                  {result.metadata.fileType.split("/").pop().toUpperCase()}
+                                </div>
                               </div>
                             )}
                             {result.metadata?.fileSize && (
                               <div className="bg-purple-50 rounded-xl p-3">
                                 <div className="text-xs font-medium text-purple-600 mb-1">Size</div>
-                                <div className="text-sm font-semibold text-purple-800">{(result.metadata.fileSize / 1024).toFixed(1)} KB</div>
+                                <div className="text-sm font-semibold text-purple-800">
+                                  {(result.metadata.fileSize / 1024).toFixed(1)} KB
+                                </div>
                               </div>
                             )}
                             {result.metadata?.uploadDate && (
@@ -603,17 +663,23 @@ export default function SearchData({ onBack }) {
                                   <Calendar size={12} />
                                   Uploaded
                                 </div>
-                                <div className="text-sm font-semibold text-orange-800">{new Date(result.metadata.uploadDate).toLocaleDateString()}</div>
+                                <div className="text-sm font-semibold text-orange-800">
+                                  {new Date(result.metadata.uploadDate).toLocaleDateString()}
+                                </div>
                               </div>
                             )}
                             {result.metadata?.dataSource && (
                               <div className="bg-green-50 rounded-xl p-3">
-                                <div className="text-xs font-medium text-green-600 mb-1">Source</div>
-                                <div className="text-sm font-semibold text-green-800">{result.metadata.dataSource}</div>
+                                <div className="text-xs font-medium text-green-600 mb-1">
+                                  Source
+                                </div>
+                                <div className="text-sm font-semibold text-green-800">
+                                  {result.metadata.dataSource}
+                                </div>
                               </div>
                             )}
                           </div>
-                          
+
                           {/* Additional Metadata */}
                           <div className="flex flex-wrap gap-2 mb-6">
                             {result.metadata?.gender && (
@@ -632,30 +698,31 @@ export default function SearchData({ onBack }) {
                               </span>
                             )}
                           </div>
-                          
+
                           {/* Action Buttons */}
                           <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                             {/* Preview Button for Excel files */}
-                            {result.metadata?.previewHash && result.metadata?.fileType?.includes('spreadsheet') && (
-                              <button
-                                onClick={() => handlePreviewView(result, index)}
-                                disabled={previewLoading}
-                                className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 disabled:transform-none font-medium"
-                              >
-                                {previewLoading ? (
-                                  <>
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                    Loading Preview...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Eye className="w-4 h-4" />
-                                    View Preview (5%)
-                                  </>
-                                )}
-                              </button>
-                            )}
-                            
+                            {result.metadata?.previewHash &&
+                              result.metadata?.fileType?.includes("spreadsheet") && (
+                                <button
+                                  onClick={() => handlePreviewView(result, index)}
+                                  disabled={previewLoading}
+                                  className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed transition-all duration-200 shadow-md hover:shadow-lg transform hover:scale-105 disabled:transform-none font-medium"
+                                >
+                                  {previewLoading ? (
+                                    <>
+                                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                      Loading Preview...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Eye className="w-4 h-4" />
+                                      View Preview (5%)
+                                    </>
+                                  )}
+                                </button>
+                              )}
+
                             {/* Purchase & Download Button */}
                             {(result.cid || result.ipfsHash || result.hash) && (
                               <button
@@ -677,7 +744,9 @@ export default function SearchData({ onBack }) {
                                   <>
                                     <ShoppingCart size={20} />
                                     Purchase & Download
-                                    <span className="text-green-100">({result.metadata?.price || '...'} ETH)</span>
+                                    <span className="text-green-100">
+                                      ({result.metadata?.price || "..."} ETH)
+                                    </span>
                                   </>
                                 )}
                               </button>
@@ -726,7 +795,9 @@ export default function SearchData({ onBack }) {
                     <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                       <X size={32} className="text-red-500" />
                     </div>
-                    <h4 className="text-xl font-semibold text-red-600 mb-2">Error Loading Preview</h4>
+                    <h4 className="text-xl font-semibold text-red-600 mb-2">
+                      Error Loading Preview
+                    </h4>
                     <p className="text-gray-600">{previewData.error}</p>
                   </div>
                 ) : previewData ? (
@@ -740,12 +811,16 @@ export default function SearchData({ onBack }) {
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <span className="text-sm font-medium text-gray-600">File Name:</span>
-                          <p className="text-gray-800 font-semibold break-all">{previewData.fileName || 'Unknown'}</p>
+                          <p className="text-gray-800 font-semibold break-all">
+                            {previewData.fileName || "Unknown"}
+                          </p>
                         </div>
                         <div>
                           <span className="text-sm font-medium text-gray-600">File Size:</span>
                           <p className="text-gray-800 font-semibold">
-                            {previewData.fileSize ? `${(previewData.fileSize / 1024).toFixed(1)} KB` : 'Unknown'}
+                            {previewData.fileSize
+                              ? `${(previewData.fileSize / 1024).toFixed(1)} KB`
+                              : "Unknown"}
                           </p>
                         </div>
                         {previewData.totalRows && (
@@ -757,7 +832,9 @@ export default function SearchData({ onBack }) {
                         {previewData.totalColumns && (
                           <div>
                             <span className="text-sm font-medium text-gray-600">Columns:</span>
-                            <p className="text-gray-800 font-semibold">{previewData.totalColumns}</p>
+                            <p className="text-gray-800 font-semibold">
+                              {previewData.totalColumns}
+                            </p>
                           </div>
                         )}
                       </div>
@@ -770,14 +847,16 @@ export default function SearchData({ onBack }) {
                           <h4 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                             📊 Preview Data
                             {previewData.sheetName && (
-                              <span className="text-sm font-normal text-gray-600">({previewData.sheetName})</span>
+                              <span className="text-sm font-normal text-gray-600">
+                                ({previewData.sheetName})
+                              </span>
                             )}
                           </h4>
                           <p className="text-sm text-gray-600 mt-1">
                             Showing all {previewData.totalRows} rows (5% sample of the full dataset)
                           </p>
                         </div>
-                        
+
                         <div className="overflow-x-auto max-h-96">
                           <table className="min-w-full">
                             {/* Table Headers */}
@@ -787,26 +866,36 @@ export default function SearchData({ onBack }) {
                                   #
                                 </th>
                                 {previewData.headers.map((header, idx) => (
-                                  <th key={idx} className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 bg-gray-100 min-w-[120px]">
+                                  <th
+                                    key={idx}
+                                    className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wider border-r border-gray-200 bg-gray-100 min-w-[120px]"
+                                  >
                                     {header || `Column ${idx + 1}`}
                                   </th>
                                 ))}
                               </tr>
                             </thead>
-                            
+
                             {/* Table Body */}
                             <tbody className="bg-white divide-y divide-gray-200">
                               {previewData.data.map((row, rowIdx) => (
-                                <tr key={rowIdx} className={rowIdx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                <tr
+                                  key={rowIdx}
+                                  className={rowIdx % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                                >
                                   <td className="px-3 py-2 text-sm text-gray-500 border-r border-gray-200 bg-gray-50 font-medium">
                                     {rowIdx + 1}
                                   </td>
                                   {previewData.headers.map((_, colIdx) => (
-                                    <td key={colIdx} className="px-3 py-2 text-sm text-gray-900 border-r border-gray-200 max-w-[200px] truncate">
-                                      {row[colIdx] !== undefined && row[colIdx] !== null ? 
-                                        String(row[colIdx]) : 
+                                    <td
+                                      key={colIdx}
+                                      className="px-3 py-2 text-sm text-gray-900 border-r border-gray-200 max-w-[200px] truncate"
+                                    >
+                                      {row[colIdx] !== undefined && row[colIdx] !== null ? (
+                                        String(row[colIdx])
+                                      ) : (
                                         <span className="text-gray-400 italic">—</span>
-                                      }
+                                      )}
                                     </td>
                                   ))}
                                 </tr>
@@ -822,10 +911,14 @@ export default function SearchData({ onBack }) {
                             <Eye size={16} className="text-white" />
                           </div>
                           <div>
-                            <h5 className="font-semibold text-blue-800 mb-2">Preview Information</h5>
+                            <h5 className="font-semibold text-blue-800 mb-2">
+                              Preview Information
+                            </h5>
                             <p className="text-blue-700">{previewData.message}</p>
                             {previewData.error && (
-                              <p className="text-red-600 mt-2 text-sm">Error: {previewData.error}</p>
+                              <p className="text-red-600 mt-2 text-sm">
+                                Error: {previewData.error}
+                              </p>
                             )}
                           </div>
                         </div>
@@ -841,10 +934,19 @@ export default function SearchData({ onBack }) {
                         <div>
                           <h5 className="font-semibold text-yellow-800 mb-2">About This Preview</h5>
                           <ul className="text-yellow-700 space-y-1 text-sm">
-                            <li>• This preview contains the first 5% of rows from the anonymized dataset</li>
+                            <li>
+                              • This preview contains the first 5% of rows from the anonymized
+                              dataset
+                            </li>
                             <li>• All personal health information (PHI) has been anonymized</li>
-                            <li>• The preview shows the actual data structure and quality you'll receive</li>
-                            <li>• Full dataset purchase includes all remaining data with the same anonymization quality</li>
+                            <li>
+                              • The preview shows the actual data structure and quality you'll
+                              receive
+                            </li>
+                            <li>
+                              • Full dataset purchase includes all remaining data with the same
+                              anonymization quality
+                            </li>
                           </ul>
                         </div>
                       </div>
@@ -861,7 +963,7 @@ export default function SearchData({ onBack }) {
                       >
                         Close Preview
                       </button>
-                      
+
                       <button
                         onClick={() => {
                           setShowPreviewModal(false);

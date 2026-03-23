@@ -1,0 +1,20 @@
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "nextjs-frontend/**"
+          - "prototype/**"
+
+backend-js:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "javascript_backend/**"
+
+backend-python:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "python_backend/**"
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
