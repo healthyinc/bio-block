@@ -58,4 +58,41 @@ describe("API Endpoints", function () {
     expect(res.body).to.have.nested.property("files.preview.data");
     expect(res.body).to.have.nested.property("files.preview.filename");
   });
+
+  it("POST /api/anonymize should redact PHI patterns in cell content", async function () {
+    // Create an Excel file with PHI in cell content but non-PHI column headers
+    const cellPhiPath = path.join(__dirname, "test_cell_phi.xlsx");
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Notes", "Details", "Record"],
+      ["Contact at 555-123-4567", "SSN: 123-45-6789", "john@hospital.com"],
+      ["Normal text here", "No PHI data", "Just notes"],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+    XLSX.writeFile(wb, cellPhiPath);
+
+    const res = await request(app)
+      .post("/api/anonymize")
+      .attach("file", cellPhiPath)
+      .field("generatePreview", "true");
+
+    expect(res.status).to.equal(200);
+
+    // Parse the anonymized output and verify PHI was redacted
+    const outputBuffer = Buffer.from(res.body.files.main.data, "base64");
+    const outputWb = XLSX.read(outputBuffer, { type: "buffer" });
+    const outputData = XLSX.utils.sheet_to_json(outputWb.Sheets["Sheet1"], { header: 1 });
+
+    // Row 1 (index 1) should have PHI redacted from cells
+    expect(outputData[1][0]).to.equal("[PHI_REDACTED]"); // phone number
+    expect(outputData[1][1]).to.equal("[PHI_REDACTED]"); // SSN
+    expect(outputData[1][2]).to.equal("[PHI_REDACTED]"); // email
+
+    // Row 2 (index 2) should remain unchanged (no PHI)
+    expect(outputData[2][0]).to.equal("Normal text here");
+    expect(outputData[2][1]).to.equal("No PHI data");
+    expect(outputData[2][2]).to.equal("Just notes");
+
+    fs.unlinkSync(cellPhiPath);
+  });
 });

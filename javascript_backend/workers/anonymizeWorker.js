@@ -29,6 +29,27 @@ const phiKeywords = [
   "name",
 ];
 
+// Regex patterns to detect PHI in cell content (not just headers)
+const PHI_CONTENT_PATTERNS = {
+  SSN: /\b\d{3}-\d{2}-\d{4}\b/,
+  PHONE: /\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/,
+  EMAIL: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/,
+  MRN: /\bMRN[-:\s]?\d{4,}\b/i,
+  DATE_OF_BIRTH: /\b(?:0[1-9]|1[0-2])[-/](?:0[1-9]|[12]\d|3[01])[-/](?:19|20)\d{2}\b/,
+  IP_ADDRESS: /\b(?:\d{1,3}\.){3}\d{1,3}\b/,
+  CREDIT_CARD: /\b(?:\d{4}[-\s]?){3}\d{4}\b/,
+  DRIVERS_LICENSE: /\b[A-Z]\d{7,14}\b/,
+};
+
+/**
+ * Scans a cell value against PHI content patterns.
+ * Returns true if the cell contains potential PHI.
+ */
+const cellContainsPHI = (value) => {
+  if (typeof value !== "string" || value.length === 0) return false;
+  return Object.values(PHI_CONTENT_PATTERNS).some((pattern) => pattern.test(value));
+};
+
 const FORMULA_PREFIXES = ["=", "+", "-", "@", "\t", "\r", "\n"];
 
 const sanitizeCellValue = (value) => {
@@ -158,6 +179,20 @@ parentPort.on("message", (workerData) => {
               maskCols.forEach((c) => {
                 if (row[c] !== undefined) row[c] = id;
               });
+            }
+          }
+        }
+
+        // Cell-level content scanning: detect PHI patterns in non-header cells
+        // that were NOT already caught by header-based detection
+        const maskColSet = new Set(maskCols);
+        for (let i = 1; i < cleanData.length; i++) {
+          const row = cleanData[i];
+          if (!row) continue;
+          for (let j = 0; j < row.length; j++) {
+            if (maskColSet.has(j)) continue; // Already masked by header detection
+            if (row[j] !== undefined && row[j] !== null && cellContainsPHI(String(row[j]))) {
+              row[j] = "[PHI_REDACTED]";
             }
           }
         }
