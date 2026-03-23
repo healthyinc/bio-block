@@ -117,6 +117,7 @@ def _resolve_tesseract_cmd() -> str:
 
 
 pytesseract.pytesseract.tesseract_cmd = _resolve_tesseract_cmd()
+tesseract_available = os.path.isfile(pytesseract.pytesseract.tesseract_cmd) or shutil.which('tesseract') is not None
 
 try:
     nlp = spacy.load("en_core_web_lg")  # Updated to use large model for better accuracy
