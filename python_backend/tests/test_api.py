@@ -35,7 +35,7 @@ class TestAPI(unittest.TestCase):
 
     def test_anonymize_image(self):
         # Replace 'test.jpg' with a valid test image path
-        with open("test.jpg", "rb") as img:
+        with open("tests/test.jpg", "rb") as img:
             files = {"file": ("test.jpg", img, "image/jpeg")}
             resp = requests.post(f"{BASE_URL}/anonymize_image", files=files)
             print(f"Response status: {resp.status_code}")
