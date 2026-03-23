@@ -38,7 +38,7 @@ app.get("/", (req, res) => {
       "/api/preview/spreadsheet",
       "/api/preview/pdf",
       "/api/preview/dicom",
-      "/api/quality/profile"
+      "/api/quality/profile",
     ],
   });
 });

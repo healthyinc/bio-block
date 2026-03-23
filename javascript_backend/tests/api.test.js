@@ -45,13 +45,11 @@ describe("API Endpoints", function () {
     expect(res.status).to.equal(200);
   });
 
-  it('POST /api/quality/profile should return dataset quality profile', async function() {
-    const res = await request(app)
-      .post('/api/quality/profile')
-      .attach('file', testFilePath);
+  it("POST /api/quality/profile should return dataset quality profile", async function () {
+    const res = await request(app).post("/api/quality/profile").attach("file", testFilePath);
     expect(res.status).to.equal(200);
-    expect(res.body).to.have.property('success', true);
-    expect(res.body).to.have.property('report');
+    expect(res.body).to.have.property("success", true);
+    expect(res.body).to.have.property("report");
   });
 
   it("POST /api/anonymize with preview should return main and preview files", async function () {
