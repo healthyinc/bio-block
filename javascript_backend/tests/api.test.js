@@ -45,6 +45,13 @@ describe("API Endpoints", function () {
     expect(res.status).to.equal(200);
   });
 
+  it("POST /api/quality/profile should return dataset quality profile", async function () {
+    const res = await request(app).post("/api/quality/profile").attach("file", testFilePath);
+    expect(res.status).to.equal(200);
+    expect(res.body).to.have.property("success", true);
+    expect(res.body).to.have.property("report");
+  });
+
   it("POST /api/anonymize with preview should return main and preview files", async function () {
     const res = await request(app)
       .post("/api/anonymize")
@@ -94,5 +101,39 @@ describe("API Endpoints", function () {
     expect(outputData[2][2]).to.equal("Just notes");
 
     fs.unlinkSync(cellPhiPath);
+  });
+
+  it("POST /api/quality/profile should return statistical summaries for numeric columns", async function () {
+    const statsFilePath = path.join(__dirname, "test_stats.xlsx");
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ["Name", "Score"],
+      ["Alice", 10],
+      ["Bob", 20],
+      ["Charlie", 30],
+      ["David", 40],
+      ["Eve", 50],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+    XLSX.writeFile(wb, statsFilePath);
+
+    const res = await request(app).post("/api/quality/profile").attach("file", statsFilePath);
+
+    expect(res.status).to.equal(200);
+    const scoreCol = res.body.report.sheets[0].columns.find((c) => c.name === "Score");
+
+    expect(scoreCol).to.have.property("inferredType", "number");
+    expect(scoreCol).to.have.property("statistics");
+    expect(scoreCol.statistics).to.deep.include({
+      min: 10,
+      max: 50,
+      mean: 30,
+      median: 30,
+      count: 5,
+    });
+    expect(scoreCol.statistics).to.have.property("stdDev");
+    expect(scoreCol.statistics.stdDev).to.be.closeTo(14.1421, 0.0001);
+
+    fs.unlinkSync(statsFilePath);
   });
 });
