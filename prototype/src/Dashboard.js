@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Wallet, DollarSign, FileText, Copy, ExternalLink, ArrowUpRight } from "lucide-react";
-import { getEarnings, withdrawEarnings, getMyDocuments, getDocumentPrice, getWalletBalance } from "./contractService";
+import { Wallet, FileText, Copy, ExternalLink, ArrowUpRight } from "lucide-react";
+import {
+  getEarnings,
+  withdrawEarnings,
+  getMyDocuments,
+  getDocumentPrice,
+  getWalletBalance,
+} from "./contractService";
 import { decryptFile } from "./encryptionUtils";
 
 export default function Dashboard({ onBack, isWalletConnected, walletAddress }) {
@@ -165,12 +171,18 @@ export default function Dashboard({ onBack, isWalletConnected, walletAddress }) 
                 <Wallet className="text-blue-600" size={24} />
               </div>
               <div>
-                <p className="text-sm text-gray-500 font-semibold uppercase tracking-wider">Wallet Balance</p>
-                <p className="text-3xl font-bold text-gray-900">{parseFloat(walletBalance).toFixed(4)} ETH</p>
+                <p className="text-sm text-gray-500 font-semibold uppercase tracking-wider">
+                  Wallet Balance
+                </p>
+                <p className="text-3xl font-bold text-gray-900">
+                  {parseFloat(walletBalance).toFixed(4)} ETH
+                </p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-sm text-gray-500 font-semibold uppercase tracking-wider">Platform Earnings</p>
+              <p className="text-sm text-gray-500 font-semibold uppercase tracking-wider">
+                Platform Earnings
+              </p>
               <p className="text-3xl font-bold text-green-600">{earnings} ETH</p>
             </div>
           </div>
@@ -226,7 +238,9 @@ export default function Dashboard({ onBack, isWalletConnected, walletAddress }) 
                 <Wallet size={20} className="text-gray-500" />
               </div>
               <div>
-                <p className="text-xs text-gray-400 uppercase tracking-widest font-black">Connected Address</p>
+                <p className="text-xs text-gray-400 uppercase tracking-widest font-black">
+                  Connected Address
+                </p>
                 <p className="text-sm font-mono text-gray-600 tracking-tight">{walletAddress}</p>
               </div>
             </div>

@@ -143,11 +143,11 @@ const CONTRACT_ABI = [
 ];
 
 export const storeDocumentHash = async (ipfsHash, priceInEth, metadata = "") => {
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  const signer = await provider.getSigner();
+  const provider = new ethers.providers.Web3Provider(window.ethereum);
+  const signer = provider.getSigner();
   const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-  const priceInWei = ethers.parseEther(priceInEth.toString());
+  const priceInWei = ethers.utils.parseEther(priceInEth.toString());
   const tx = await contract.storeDocument(ipfsHash, priceInWei, metadata);
   await tx.wait();
   console.log(`Transaction successful with hash: ${tx.hash}`);
@@ -155,11 +155,11 @@ export const storeDocumentHash = async (ipfsHash, priceInEth, metadata = "") => 
 };
 
 export const purchaseDocument = async (ipfsHash, priceInEth) => {
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  const signer = await provider.getSigner();
+  const provider = new ethers.providers.Web3Provider(window.ethereum);
+  const signer = provider.getSigner();
   const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
-  const priceInWei = ethers.parseEther(priceInEth.toString());
+  const priceInWei = ethers.utils.parseEther(priceInEth.toString());
   const tx = await contract.purchaseDocument(ipfsHash, { value: priceInWei });
   await tx.wait();
   console.log(`Purchase successful with hash: ${tx.hash}`);
@@ -167,8 +167,8 @@ export const purchaseDocument = async (ipfsHash, priceInEth) => {
 };
 
 export const withdrawEarnings = async () => {
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  const signer = await provider.getSigner();
+  const provider = new ethers.providers.Web3Provider(window.ethereum);
+  const signer = provider.getSigner();
   const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
   const tx = await contract.withdrawEarnings();
@@ -178,16 +178,16 @@ export const withdrawEarnings = async () => {
 };
 
 export const getDocumentPrice = async (ipfsHash) => {
-  const provider = new ethers.BrowserProvider(window.ethereum);
+  const provider = new ethers.providers.Web3Provider(window.ethereum);
   const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
 
   const priceInWei = await contract.documentPrices(ipfsHash);
-  return ethers.formatEther(priceInWei);
+  return ethers.utils.formatEther(priceInWei);
 };
 
 export const getMyDocuments = async () => {
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  const signer = await provider.getSigner();
+  const provider = new ethers.providers.Web3Provider(window.ethereum);
+  const signer = provider.getSigner();
   const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
 
   const documents = await contract.getMyDocuments();
@@ -195,15 +195,15 @@ export const getMyDocuments = async () => {
 };
 
 export const getEarnings = async (address) => {
-  const provider = new ethers.BrowserProvider(window.ethereum);
+  const provider = new ethers.providers.Web3Provider(window.ethereum);
   const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
 
   const earningsInWei = await contract.earnings(address);
-  return ethers.formatEther(earningsInWei);
+  return ethers.utils.formatEther(earningsInWei);
 };
 
 export const getWalletBalance = async (address) => {
-  const provider = new ethers.BrowserProvider(window.ethereum);
+  const provider = new ethers.providers.Web3Provider(window.ethereum);
   const balanceInWei = await provider.getBalance(address);
-  return ethers.formatEther(balanceInWei);
+  return ethers.utils.formatEther(balanceInWei);
 };
