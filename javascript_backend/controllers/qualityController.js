@@ -163,12 +163,37 @@ const analyzeDatasetQuality = async (req, res) => {
           const avgSqDiff = sqDiffs.reduce((a, b) => a + b, 0) / vals.length;
           const stdDev = Math.sqrt(avgSqDiff);
 
+          // IQR-based Outlier Detection
+          const q1Idx = (vals.length - 1) * 0.25;
+          const q3Idx = (vals.length - 1) * 0.75;
+
+          const getPercentile = (idx) => {
+            const base = Math.floor(idx);
+            const rest = idx - base;
+            if (vals[base + 1] !== undefined) {
+              return vals[base] + rest * (vals[base + 1] - vals[base]);
+            }
+            return vals[base];
+          };
+
+          const q1 = getPercentile(q1Idx);
+          const q3 = getPercentile(q3Idx);
+          const iqr = q3 - q1;
+          const lowerBound = q1 - 1.5 * iqr;
+          const upperBound = q3 + 1.5 * iqr;
+
+          const outliers = vals.filter((v) => v < lowerBound || v > upperBound);
+
           result.statistics = {
             min: parseFloat(min.toFixed(4)),
             max: parseFloat(max.toFixed(4)),
             mean: parseFloat(mean.toFixed(4)),
             median: parseFloat(median.toFixed(4)),
             stdDev: parseFloat(stdDev.toFixed(4)),
+            q1: parseFloat(q1.toFixed(4)),
+            q3: parseFloat(q3.toFixed(4)),
+            outlierCount: outliers.length,
+            outliers: outliers.slice(0, 10), // Limit to first 10 examples
             count: vals.length,
           };
         }
