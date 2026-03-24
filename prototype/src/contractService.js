@@ -201,3 +201,9 @@ export const getEarnings = async (address) => {
   const earningsInWei = await contract.earnings(address);
   return ethers.formatEther(earningsInWei);
 };
+
+export const getWalletBalance = async (address) => {
+  const provider = new ethers.BrowserProvider(window.ethereum);
+  const balanceInWei = await provider.getBalance(address);
+  return ethers.formatEther(balanceInWei);
+};
