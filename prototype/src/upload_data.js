@@ -14,6 +14,26 @@ import { storeDocumentHash } from "./contractService";
 import { encryptFile } from "./encryptionUtils.js";
 import StreamingEncryption from "./utils/streamingEncryption.js";
 
+function getUploadHeading(isComplete, hasError) {
+  if (isComplete) return "Upload Complete!";
+  if (hasError) return "Upload Failed";
+  return "Uploading Document";
+}
+
+function getStepBgClass(step, index, currentStep) {
+  if (step.error) return "bg-red-500";
+  if (step.completed) return "bg-green-500";
+  if (index === currentStep) return "bg-blue-500";
+  return "bg-gray-300";
+}
+
+function getStepTextClass(step, index, currentStep) {
+  if (step.error) return "text-red-600 font-medium";
+  if (step.completed) return "text-green-600 font-medium";
+  if (index === currentStep) return "text-blue-600 font-medium";
+  return "text-gray-500";
+}
+
 export default function UploadData({ onBack, isWalletConnected, walletAddress, onWalletConnect }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [datasetTitle, setDatasetTitle] = useState("");
@@ -1186,11 +1206,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                 )}
               </div>
               <h3 className="text-2xl font-bold text-gray-800 mb-2">
-                {uploadProgress.isComplete
-                  ? "Upload Complete!"
-                  : uploadProgress.hasError
-                    ? "Upload Failed"
-                    : "Uploading Document"}
+                {getUploadHeading(uploadProgress.isComplete, uploadProgress.hasError)}
               </h3>
               {!uploadProgress.hasError && !uploadProgress.isComplete && (
                 <p className="text-gray-600">Please wait while we process your document...</p>
@@ -1202,15 +1218,11 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
               {uploadProgress.steps.map((step, index) => (
                 <div key={index} className="flex items-center gap-3">
                   <div
-                    className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
-                      step.error
-                        ? "bg-red-500"
-                        : step.completed
-                          ? "bg-green-500"
-                          : index === currentStep
-                            ? "bg-blue-500"
-                            : "bg-gray-300"
-                    }`}
+                    className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${getStepBgClass(
+                      step,
+                      index,
+                      currentStep
+                    )}`}
                   >
                     {step.error ? (
                       <X size={14} className="text-white" />
@@ -1222,17 +1234,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                       <Clock size={14} className="text-white" />
                     )}
                   </div>
-                  <span
-                    className={`text-sm ${
-                      step.error
-                        ? "text-red-600 font-medium"
-                        : step.completed
-                          ? "text-green-600 font-medium"
-                          : index === currentStep
-                            ? "text-blue-600 font-medium"
-                            : "text-gray-500"
-                    }`}
-                  >
+                  <span className={`text-sm ${getStepTextClass(step, index, currentStep)}`}>
                     {step.name}
                     {/* Show streaming encryption progress */}
                     {index === 2 && isStreamingEncryption && encryptionProgress > 0 && (

@@ -43,12 +43,10 @@ export default function SearchData({ onBack }) {
   const smartDecrypt = async (encryptedData, progressCallback) => {
     try {
       // Try to detect if it's streaming encryption format
-      const dataString =
-        typeof encryptedData === "string"
-          ? encryptedData
-          : encryptedData instanceof Uint8Array
-            ? Buffer.from(encryptedData).toString("utf8")
-            : encryptedData;
+      let dataString = encryptedData;
+      if (encryptedData instanceof Uint8Array) {
+        dataString = Buffer.from(encryptedData).toString("utf8");
+      }
 
       // Check if it has streaming encryption markers
       if (dataString.includes("|METADATA_SEPARATOR|") && dataString.includes("|CHUNK_SEPARATOR|")) {
