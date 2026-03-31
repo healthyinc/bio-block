@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { anonymizeFile, upload } = require('../controllers/anonymizeController');
 
-// POST /api/anonymize - Anonymize Excel files
+// POST /api/anonymize - Anonymize Excel files (authentication handled by server.js middleware)
 router.post('/', upload.single('file'), anonymizeFile);
 
 // Error handling for multer

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { uploadToIPFS, upload } = require('../controllers/ipfsController');
 
-// POST /api/ipfs/upload - Upload encrypted files to IPFS
+// POST /api/ipfs/upload - Upload encrypted files to IPFS (authentication handled by server.js middleware)
 router.post('/upload', upload.single('encryptedFile'), uploadToIPFS);
 
 // Error handling for multer

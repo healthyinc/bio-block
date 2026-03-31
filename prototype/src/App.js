@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Wallet, Search, Upload, User, ChevronDown, Shield, Database, Globe, Zap } from 'lucide-react';
 import SearchData from './search_data';
 import UploadData from './upload_data';
 import Dashboard from './Dashboard';
+import authService from './authService';
 
 export default function App() {
   const [isWalletConnected, setIsWalletConnected] = useState(false);
@@ -10,8 +11,31 @@ export default function App() {
   const [fullWalletAddress, setFullWalletAddress] = useState('');
   const [currentView, setCurrentView] = useState('main');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      if (authService.isAuthenticated()) {
+        const walletAddr = authService.getWalletAddress();
+        const shortAddress = `${walletAddr.slice(0, 6)}...${walletAddr.slice(-4)}`;
+        
+        const isValid = await authService.verifyToken();
+        if (isValid) {
+          setWalletAddress(shortAddress);
+          setFullWalletAddress(walletAddr);
+          setIsWalletConnected(true);
+        } else {
+          authService.logout();
+        }
+      }
+    };
+    
+    checkAuth();
+  }, []);
 
   const handleWalletConnect = async () => {
+    setIsAuthenticating(true);
+    
     try {
       if (typeof window.ethereum !== 'undefined') {
         await window.ethereum.request({
@@ -24,10 +48,14 @@ export default function App() {
         });
         
         const address = accounts[0];
+        
+        await authService.authenticateWallet(address);
+        
         const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
         setWalletAddress(shortAddress);
         setFullWalletAddress(address);
         setIsWalletConnected(true);
+        
       } else {
         alert('Please install MetaMask or another Web3 wallet');
       }
@@ -35,11 +63,16 @@ export default function App() {
       console.error('Wallet connection failed:', error);
       if (error.code === 4001) {
         alert('Connection rejected by user');
+      } else {
+        alert('Authentication failed: ' + error.message);
       }
+    } finally {
+      setIsAuthenticating(false);
     }
   };
 
   const handleDisconnect = () => {
+    authService.logout();
     setIsWalletConnected(false);
     setWalletAddress('');
     setFullWalletAddress('');
