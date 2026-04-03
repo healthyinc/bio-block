@@ -6,6 +6,8 @@ const cors = require("cors");
 const multer = require('multer');
 const XLSX = require('xlsx');
 const crypto = require('crypto');
+const fs = require('fs');
+const os = require('os');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
@@ -39,7 +41,13 @@ app.use(express.json());
 //   return Number(`${timestamp}${randomSuffix}`);
 // };
 
-const storage = multer.memoryStorage();
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, os.tmpdir()),
+    filename: (req, file, cb) => {
+        const safeName = (file.originalname || 'upload').replace(/[^a-zA-Z0-9._-]/g, '_');
+        cb(null, `${Date.now()}-${uuidv4()}-${safeName}`);
+    }
+});
 const upload = multer({
     storage: storage,
     fileFilter: (req, file, cb) => {
@@ -51,7 +59,7 @@ const upload = multer({
         }
     },
     limits: {
-        fileSize: 10 * 1024 * 1024 // 10MB limit
+        fileSize: 20 * 1024 * 1024 // 20MB limit
     }
 });
 
@@ -135,6 +143,7 @@ function generateUUID() {
 // });
 
 app.post('/anonymize', upload.single('file'), async (req, res) => {
+    let tempFilePath = null;
     try {
         if (!req.file) {
             return res.status(400).json({ 
@@ -142,8 +151,9 @@ app.post('/anonymize', upload.single('file'), async (req, res) => {
             });
         }
 
-    
-        const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+        tempFilePath = req.file.path;
+
+        const workbook = XLSX.readFile(tempFilePath, { cellDates: true });
 
         const allIdentifiers = new Set();
         const sheetColumnRefs = {};
@@ -303,6 +313,16 @@ app.post('/anonymize', upload.single('file'), async (req, res) => {
         res.status(500).json({ 
             error: 'Internal server error occurred while processing the file.' 
         });
+    } finally {
+        if (tempFilePath) {
+            try {
+                await fs.promises.unlink(tempFilePath);
+            } catch (cleanupError) {
+                if (cleanupError.code !== 'ENOENT') {
+                    console.error('Failed to cleanup temp upload:', cleanupError.message);
+                }
+            }
+        }
     }
 });
 
@@ -318,7 +338,7 @@ app.use((error, req, res, next) => {
     if (error instanceof multer.MulterError) {
         if (error.code === 'LIMIT_FILE_SIZE') {
             return res.status(400).json({ 
-                error: 'File too large. Maximum size is 10MB.' 
+                error: 'File too large. Maximum size is 20MB.' 
             });
         }
     }
