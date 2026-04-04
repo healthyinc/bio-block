@@ -1,11 +1,13 @@
 from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import chromadb
 import time
 import uuid
+import os
+import platform
 import cv2
 import pytesseract
 import spacy
@@ -13,6 +15,39 @@ from pytesseract import Output
 import numpy as np
 from PIL import Image
 import io
+import shutil
+import os
+import json
+from typing import List, Tuple
+import re
+import tempfile
+from eth_account.messages import encode_defunct
+from eth_account import Account
+
+# Preview factory imports
+from services.preview.factory import PreviewFactory
+from services.audit_logger import AuditLogger
+
+# PDF extraction imports
+try:
+    import fitz  # PyMuPDF
+    pymupdf_available = True
+    print("PyMuPDF library loaded successfully")
+except ImportError:
+    pymupdf_available = False
+    print("Warning: PyMuPDF not found. PDF anonymization will not work.")
+    print("Install with: pip install PyMuPDF")
+
+# DICOM imports
+try:
+    import pydicom
+    from pydicom.errors import InvalidDicomError
+    pydicom_available = True
+    print("pydicom library loaded successfully")
+except ImportError:
+    pydicom_available = False
+    print("Warning: pydicom library not found. DICOM preview will not work.")
+    print("Install with: pip install pydicom")
 
 # Presidio imports for advanced image anonymization
 try:
@@ -38,9 +73,51 @@ app.add_middleware(
 
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_or_create_collection(name="new_user_data")
+audit_logger = AuditLogger(chroma_client)
 
-# Tesseract path for macOS (installed via Homebrew)
-pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+# 1. Cross-platform Tesseract detection
+tesseract_cmd = os.getenv('TESSERACT_CMD') or shutil.which('tesseract')
+
+if not tesseract_cmd:
+    common_paths = [
+        '/opt/homebrew/bin/tesseract',
+        '/usr/local/bin/tesseract',
+        '/usr/bin/tesseract',
+        r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+    ]
+    for path in common_paths:
+        if os.path.isfile(path):
+            tesseract_cmd = path
+            break
+
+def _resolve_tesseract_cmd() -> str:
+    """
+    Resolve the Tesseract binary path with the following priority:
+    1. TESSERACT_CMD environment variable (user-defined, any OS)
+    2. Platform-specific default install locations
+    """
+    env_path = os.environ.get("TESSERACT_CMD")
+    if env_path:
+        return env_path
+
+    system = platform.system()
+    if system == "Windows":
+        return r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    elif system == "Darwin":
+        # Homebrew on Apple Silicon (/opt/homebrew) or Intel (/usr/local)
+        homebrew_arm = "/opt/homebrew/bin/tesseract"
+        homebrew_intel = "/usr/local/bin/tesseract"
+        if os.path.isfile(homebrew_arm):
+            return homebrew_arm
+        if os.path.isfile(homebrew_intel):
+            return homebrew_intel
+        return homebrew_arm  # fallback to ARM default
+    else:  # Linux / other Unix
+        return "/usr/bin/tesseract"
+
+
+pytesseract.pytesseract.tesseract_cmd = _resolve_tesseract_cmd()
+tesseract_available = os.path.isfile(pytesseract.pytesseract.tesseract_cmd) or shutil.which('tesseract') is not None
 
 try:
     nlp = spacy.load("en_core_web_lg")  # Updated to use large model for better accuracy
@@ -67,14 +144,6 @@ if presidio_available:
         print(f"Warning: Failed to initialize Presidio engines: {str(e)}")
         presidio_available = False
 
-
-try:
-    pytesseract.get_tesseract_version()
-    tesseract_available = True
-except Exception:
-    print("Warning: Tesseract OCR not found. Image anonymization will not work.")
-    tesseract_available = False
-
 PHI_LABELS = {"PERSON", "ORG", "GPE", "DATE", "LOC", "FAC", "NORP"}
 
 class StoreRequest(BaseModel):
@@ -84,11 +153,64 @@ class StoreRequest(BaseModel):
     metadata: Optional[Dict[str, Any]] = {}
 
 class SearchRequest(BaseModel):
-    query: str
+    query: str = Field(..., min_length=1)
+    n_results: Optional[int] = Field(default=5, ge=1, le=100)
 
 class FilterRequest(BaseModel):
-    filters: Dict[str, Any]
-    n_results: Optional[int] = 10
+    filters: Dict[str, Any] = Field(..., min_length=1)
+    n_results: Optional[int] = Field(default=10, ge=1, le=100)
+    
+# Add new request model for enhanced storage
+class StoreWithContentRequest(BaseModel):
+    summary: str
+    dataset_title: str
+    cid: str
+    metadata: Optional[Dict[str, Any]] = {}
+    extracted_content: Optional[str] = ""  # Actual file content
+    file_type: Optional[str] = "spreadsheet"  # spreadsheet, image, etc.
+
+# Create separate collection for content-based search
+content_collection = chroma_client.get_or_create_collection(name="document_content")
+metadata_collection = chroma_client.get_or_create_collection(name="document_metadata")
+
+class UpdateRequest(BaseModel):
+    summary: Optional[str] = None
+    dataset_title: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    owner_address: str
+    signature: str  # Hex-encoded signature produced by eth_personal_sign
+    message: str  # The canonical plaintext message that was signed by the client
+
+class DeleteRequest(BaseModel):
+    owner_address: str
+    signature: str  # Hex-encoded signature produced by eth_personal_sign
+    message: str  # The canonical plaintext message that was signed by the client
+
+class AnonymizeTextRequest(BaseModel):
+    text: str = Field(..., min_length=1, description="Text containing potential PHI to anonymize")
+
+
+def verify_owner_signature(owner_address: str, signature: str, message: str) -> str:
+    """
+    Recover the signer address via ecrecover and verify it matches the claimed
+    owner_address.  Returns the checksummed recovered address on success;
+    raises HTTPException on any failure.
+    """
+    try:
+        signable = encode_defunct(text=message)
+        recovered = Account.recover_message(signable, signature=signature)
+    except Exception as e:
+        raise HTTPException(
+            status_code=401,
+            detail=f"Signature verification failed: {str(e)}",
+        )
+
+    if recovered.lower() != owner_address.lower():
+        raise HTTPException(
+            status_code=403,
+            detail="Signature does not match owner_address",
+        )
+    return recovered
 
 def generate_id() -> str:
     timestamp = int(time.time() * 1000)
@@ -155,79 +277,94 @@ async def root():
             "/search": "Search documents", 
             "/filter": "Filter documents by metadata",
             "/search_with_filter": "Combined search and filter",
+            "/documents/{doc_id}": "GET: Retrieve document by ID, PUT: Update document metadata, DELETE: Remove document",
             "/anonymize_image": "Anonymize PHI in images (Presidio + Legacy fallback)",
-            "/anonymize_image_presidio": "Anonymize PHI in images (Presidio only, advanced)"
+            "/anonymize_image_presidio": "Anonymize PHI in images (Presidio only, advanced)",
+            "/anonymize_text": "Anonymize PHI in plain text (Presidio + spaCy fallback)",
+            "/anonymize_pdf": "Anonymize PHI in PDF documents (per-page extraction and redaction)",
+            "/anonymize_dicom": "Anonymize PHI in DICOM file metadata (strips patient identifiers)"
         },
         "status": {
             "presidio_available": presidio_available,
             "tesseract_available": tesseract_available,
+            "pymupdf_available": pymupdf_available,
             "spacy_model": "en_core_web_lg" if nlp and hasattr(nlp, 'meta') and nlp.meta.get('name') == 'en_core_web_lg' else "en_core_web_sm" if nlp else "not_available"
         }
     }
 
-# @app.post("/anonymize_image")
-# async def anonymize_image(file: UploadFile = File(...)):
-#     """
-#     Anonymize PHI in JPEG/JPG/PNG images using Presidio (preferred) or legacy OCR+spaCy
-#     """
-#     try:
-#         # Validate file type
-#         if not file.content_type or not file.content_type.startswith('image/'):
-#             raise HTTPException(status_code=400, detail="File must be an image")
-        
-#         if file.content_type not in ['image/jpeg', 'image/jpg', 'image/png']:
-#             raise HTTPException(status_code=400, detail="Only JPEG, JPG, and PNG images are supported")
-        
-#         # Read and convert image
-#         contents = await file.read()
-#         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
-        
-#         # Try Presidio first (preferred method)
-#         if presidio_available and presidio_image_redactor is not None:
-#             try:
-#                 print("Using Presidio advanced image redaction")
-#                 redacted_image_pil = mask_phi_in_image_presidio(pil_image)
-                
-#                 # Save redacted image
-#                 img_buffer = io.BytesIO()
-#                 redacted_image_pil.save(img_buffer, format='JPEG', quality=95)
-#                 img_buffer.seek(0)
-                
-#                 return StreamingResponse(
-#                     io.BytesIO(img_buffer.read()),
-#                     media_type="image/jpeg",
-#                     headers={"Content-Disposition": f"attachment; filename=presidio_anonymized_{file.filename}"}
-#                 )
-                
-#             except Exception as e:
-#                 print(f"Presidio failed, falling back to legacy method: {str(e)}")
-        
-#         # Fallback to legacy OCR + spaCy method
-#         print("Using legacy OCR + spaCy image redaction")
-#         image_cv = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-#         masked_image_cv = mask_phi_in_image_legacy(image_cv)
-        
-#         # Convert back to PIL and save
-#         masked_image_rgb = cv2.cvtColor(masked_image_cv, cv2.COLOR_BGR2RGB)
-#         masked_pil = Image.fromarray(masked_image_rgb)
-        
-#         img_buffer = io.BytesIO()
-#         masked_pil.save(img_buffer, format='JPEG', quality=95)
-#         img_buffer.seek(0)
-
-#         return StreamingResponse(
-#             io.BytesIO(img_buffer.read()),
-#             media_type="image/jpeg",
-#             headers={"Content-Disposition": f"attachment; filename=legacy_anonymized_{file.filename}"}
-#         )
-        
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"Failed to anonymize image: {str(e)}")
-
-
 @app.post("/anonymize_image")
+async def anonymize_image(file: UploadFile = File(...)):
+    """
+    Anonymize PHI in JPEG/JPG/PNG images using Presidio (preferred) or legacy OCR+spaCy
+    """
+    try:
+        # Validate file type
+        if not file.content_type or not file.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="File must be an image")
+        
+        if file.content_type not in ['image/jpeg', 'image/jpg', 'image/png']:
+            raise HTTPException(status_code=400, detail="Only JPEG, JPG, and PNG images are supported")
+        
+        # Read and convert image
+        contents = await file.read()
+        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
+        
+        # Try Presidio first (preferred method)
+        if presidio_available and presidio_image_redactor is not None:
+            try:
+                print("Using Presidio advanced image redaction")
+                redacted_image_pil = mask_phi_in_image_presidio(pil_image)
+                
+                # Save redacted image
+                img_buffer = io.BytesIO()
+                redacted_image_pil.save(img_buffer, format='JPEG', quality=95)
+                img_buffer.seek(0)
+                
+                audit_logger.log_operation(
+                    operation="ANONYMIZE",
+                    details=f"file: {file.filename}, method: presidio",
+                )
+
+                return StreamingResponse(
+                    io.BytesIO(img_buffer.read()),
+                    media_type="image/jpeg",
+                    headers={"Content-Disposition": f"attachment; filename=presidio_anonymized_{file.filename}"}
+                )
+                
+            except Exception as e:
+                print(f"Presidio failed, falling back to legacy method: {str(e)}")
+        
+        # Fallback to legacy OCR + spaCy method
+        print("Using legacy OCR + spaCy image redaction")
+        image_cv = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
+        masked_image_cv = mask_phi_in_image_legacy(image_cv)
+        
+        # Convert back to PIL and save
+        masked_image_rgb = cv2.cvtColor(masked_image_cv, cv2.COLOR_BGR2RGB)
+        masked_pil = Image.fromarray(masked_image_rgb)
+        
+        img_buffer = io.BytesIO()
+        masked_pil.save(img_buffer, format='JPEG', quality=95)
+        img_buffer.seek(0)
+
+        audit_logger.log_operation(
+            operation="ANONYMIZE",
+            details=f"file: {file.filename}, method: legacy",
+        )
+
+        return StreamingResponse(
+            io.BytesIO(img_buffer.read()),
+            media_type="image/jpeg",
+            headers={"Content-Disposition": f"attachment; filename=legacy_anonymized_{file.filename}"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to anonymize image: {str(e)}")
+
+
+@app.post("/anonymize_image_presidio")
 async def anonymize_image_presidio_only(file: UploadFile = File(...)):
     """
     Anonymize PHI in images using ONLY Presidio (force advanced method)
@@ -270,49 +407,447 @@ async def anonymize_image_presidio_only(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Failed to anonymize image with Presidio: {str(e)}")
 
 
-@app.post("/store")
-async def store_data(request: StoreRequest):
+def anonymize_text_content(text: str) -> dict:
+    """
+    Core text anonymization logic using Presidio with spaCy NER fallback.
+    Returns dict with anonymized_text, entities, and method used.
+    """
+    entities_found = []
+
+    # Try Presidio first
+    if presidio_available and presidio_analyzer and presidio_anonymizer:
+        try:
+            results = presidio_analyzer.analyze(
+                text=text,
+                language="en",
+                entities=[
+                    "PERSON", "PHONE_NUMBER", "EMAIL_ADDRESS", "US_SSN",
+                    "DATE_TIME", "LOCATION", "MEDICAL_LICENSE", "IP_ADDRESS",
+                    "US_DRIVER_LICENSE", "US_PASSPORT", "CREDIT_CARD", "URL"
+                ]
+            )
+
+            anonymized = presidio_anonymizer.anonymize(
+                text=text,
+                analyzer_results=results
+            )
+
+            for result in results:
+                entities_found.append({
+                    "entity_type": result.entity_type,
+                    "start": result.start,
+                    "end": result.end,
+                    "score": round(result.score, 3),
+                    "original_text": text[result.start:result.end]
+                })
+
+            return {
+                "anonymized_text": anonymized.text,
+                "entities_found": entities_found,
+                "entity_count": len(entities_found),
+                "method": "presidio"
+            }
+        except Exception as e:
+            print(f"Presidio text anonymization failed, trying spaCy fallback: {str(e)}")
+
+    # Fallback to spaCy NER
+    if nlp is not None:
+        doc = nlp(text)
+        anonymized_text = text
+
+        sorted_ents = sorted(doc.ents, key=lambda e: e.start_char, reverse=True)
+        for ent in sorted_ents:
+            if ent.label_ in PHI_LABELS:
+                entities_found.append({
+                    "entity_type": ent.label_,
+                    "start": ent.start_char,
+                    "end": ent.end_char,
+                    "score": 1.0,
+                    "original_text": ent.text
+                })
+                anonymized_text = (
+                    anonymized_text[:ent.start_char]
+                    + f"<{ent.label_}>"
+                    + anonymized_text[ent.end_char:]
+                )
+
+        entities_found.reverse()
+        return {
+            "anonymized_text": anonymized_text,
+            "entities_found": entities_found,
+            "entity_count": len(entities_found),
+            "method": "spacy"
+        }
+
+    raise HTTPException(
+        status_code=503,
+        detail="No anonymization engine available. Install Presidio or spaCy."
+    )
+
+
+@app.post("/anonymize_text")
+async def anonymize_text(request: AnonymizeTextRequest):
+    """
+    Anonymize PHI in plain text (clinical notes, patient records, free-text fields).
+    Uses Presidio as primary engine with spaCy NER as fallback.
+    """
     try:
-        print(f"Received request: {request}")  
+        result = anonymize_text_content(request.text)
+
+        audit_logger.log_operation(
+            operation="ANONYMIZE",
+            details=f"text anonymization, method: {result['method']}, entities: {result['entity_count']}",
+        )
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to anonymize text: {str(e)}")
+
+
+@app.post("/anonymize_pdf")
+async def anonymize_pdf(file: UploadFile = File(...)):
+    """
+    Anonymize PHI in PDF documents. Extracts text from each page,
+    runs PHI detection and anonymization, returns per-page results.
+    """
+    if not pymupdf_available:
+        raise HTTPException(
+            status_code=503,
+            detail="PyMuPDF not available. Install with: pip install PyMuPDF"
+        )
+
+    if not file.filename or not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="File must be a PDF document")
+
+    try:
+        contents = await file.read()
+
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(contents)
+            tmp_path = tmp.name
+
+        try:
+            doc = fitz.open(tmp_path)
+            pages_result = []
+            total_entities = 0
+
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                page_text = page.get_text()
+
+                if page_text.strip():
+                    page_anonymized = anonymize_text_content(page_text)
+                    total_entities += page_anonymized["entity_count"]
+                    pages_result.append({
+                        "page_number": page_num + 1,
+                        "original_text": page_text,
+                        "anonymized_text": page_anonymized["anonymized_text"],
+                        "entities_found": page_anonymized["entities_found"],
+                        "entity_count": page_anonymized["entity_count"]
+                    })
+                else:
+                    pages_result.append({
+                        "page_number": page_num + 1,
+                        "original_text": "",
+                        "anonymized_text": "",
+                        "entities_found": [],
+                        "entity_count": 0
+                    })
+
+            method = "presidio" if (presidio_available and presidio_analyzer) else "spacy"
+            doc.close()
+
+            audit_logger.log_operation(
+                operation="ANONYMIZE",
+                details=f"pdf: {file.filename}, pages: {len(pages_result)}, entities: {total_entities}, method: {method}",
+            )
+
+            return {
+                "filename": file.filename,
+                "total_pages": len(pages_result),
+                "total_entities": total_entities,
+                "method": method,
+                "pages": pages_result
+            }
+
+        finally:
+            os.unlink(tmp_path)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to anonymize PDF: {str(e)}")
+
+
+# HIPAA Safe Harbor: 18 identifier types mapped to DICOM tags
+DICOM_PHI_TAGS = {
+    # Direct patient identifiers
+    (0x0010, 0x0010): "PatientName",
+    (0x0010, 0x0020): "PatientID",
+    (0x0010, 0x0030): "PatientBirthDate",
+    (0x0010, 0x0040): "PatientSex",
+    (0x0010, 0x1000): "OtherPatientIDs",
+    (0x0010, 0x1001): "OtherPatientNames",
+    (0x0010, 0x1010): "PatientAge",
+    (0x0010, 0x1040): "PatientAddress",
+    (0x0010, 0x2154): "PatientTelephoneNumbers",
+    (0x0010, 0x21F0): "PatientReligiousPreference",
+    (0x0010, 0x4000): "PatientComments",
+    # Referring/performing physician
+    (0x0008, 0x0090): "ReferringPhysicianName",
+    (0x0008, 0x1050): "PerformingPhysicianName",
+    (0x0008, 0x1070): "OperatorsName",
+    # Institution identifiers
+    (0x0008, 0x0080): "InstitutionName",
+    (0x0008, 0x0081): "InstitutionAddress",
+    (0x0008, 0x1040): "InstitutionalDepartmentName",
+    # Study/accession identifiers
+    (0x0008, 0x0050): "AccessionNumber",
+    (0x0008, 0x0020): "StudyDate",
+    (0x0008, 0x0030): "StudyTime",
+    (0x0008, 0x0021): "SeriesDate",
+    (0x0008, 0x0031): "SeriesTime",
+    (0x0008, 0x0022): "AcquisitionDate",
+    (0x0008, 0x0032): "AcquisitionTime",
+    (0x0008, 0x002A): "AcquisitionDateTime",
+    (0x0020, 0x0010): "StudyID",
+}
+
+
+@app.post("/anonymize_dicom")
+async def anonymize_dicom(file: UploadFile = File(...)):
+    """
+    Anonymize PHI in DICOM file metadata. Strips patient identifiers
+    following HIPAA Safe Harbor de-identification standards.
+    Returns the anonymized DICOM file for download.
+    """
+    if not pydicom_available:
+        raise HTTPException(
+            status_code=503,
+            detail="pydicom not available. Install with: pip install pydicom"
+        )
+
+    if not file.filename or not file.filename.lower().endswith(('.dcm', '.dicom')):
+        raise HTTPException(
+            status_code=400,
+            detail="File must be a DICOM file (.dcm or .dicom)"
+        )
+
+    try:
+        contents = await file.read()
+
+        with tempfile.NamedTemporaryFile(suffix=".dcm", delete=False) as tmp:
+            tmp.write(contents)
+            tmp_path = tmp.name
+
+        try:
+            ds = pydicom.dcmread(tmp_path)
+            stripped_fields = []
+
+            for tag, field_name in DICOM_PHI_TAGS.items():
+                if tag in ds:
+                    original_value = str(ds[tag].value)
+                    ds[tag].value = ""
+                    stripped_fields.append({
+                        "field": field_name,
+                        "tag": f"({tag[0]:04X},{tag[1]:04X})",
+                        "original_value": original_value
+                    })
+
+            # Save anonymized DICOM to buffer
+            anonymized_buffer = io.BytesIO()
+            ds.save_as(anonymized_buffer)
+            anonymized_buffer.seek(0)
+
+            audit_logger.log_operation(
+                operation="ANONYMIZE",
+                details=f"dicom: {file.filename}, fields_stripped: {len(stripped_fields)}",
+            )
+
+            return {
+                "filename": file.filename,
+                "fields_stripped": len(stripped_fields),
+                "stripped_details": stripped_fields,
+                "anonymized_file_base64": anonymized_buffer.getvalue().hex(),
+                "message": f"Successfully anonymized {len(stripped_fields)} PHI fields from DICOM metadata"
+            }
+
+        finally:
+            os.unlink(tmp_path)
+
+    except HTTPException:
+        raise
+    except InvalidDicomError:
+        raise HTTPException(status_code=400, detail="Invalid DICOM file format")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to anonymize DICOM: {str(e)}")
+
+
+@app.post("/store")
+async def store_data(request: StoreWithContentRequest):
+    """
+    Store document data with metadata and content vectors
+    """
+    try:
+        print(f"Received enhanced storage request: {request.dataset_title}")
         doc_id = generate_id()
-        print(f"Generated ID: {doc_id}") 
-        
+         
+        # Prepare metadata document
+        combined_metadata = f"Dataset Title: {request.dataset_title}\n{request.summary}"
+        disease_tags = request.metadata.get("disease_tags", "")
      
-        combined_document = f"Dataset Title: {request.dataset_title}\n{request.summary}"
-        
-        disease_tags = request.metadata.get("disease_tags")
         if disease_tags:
-            combined_document += f"\nDisease Tags: {disease_tags}"
+            combined_metadata += f"\nDisease Tags: {disease_tags}"
         
         metadata = {
             "cid": request.cid,
             "dataset_title": request.dataset_title,
+            "file_type": request.file_type,
             **request.metadata
         }
-        print(f"Metadata: {metadata}") 
-        print(f"Combined document: {combined_document}")
-        
-        collection.add(
+        metadata_collection.add(
             ids=[doc_id],
-            documents=[combined_document],
+            documents=[combined_metadata],
             metadatas=[metadata]
         )
         
-        return {"message": "Stored successfully", "cid": request.cid}
+     # Store content if available
+        if request.extracted_content and request.extracted_content.strip():
+            # Chunk content for better vectorization
+            extractor = ContentExtractor()
+            content_chunks = extractor.chunk_content(request.extracted_content)
+            
+            # Add each chunk with reference to original document
+            chunk_ids = []
+            chunk_docs = []
+            chunk_metas = []
+            
+            for chunk_idx, chunk in enumerate(content_chunks):
+                chunk_id = f"{doc_id}_chunk_{chunk_idx}"
+                chunk_ids.append(chunk_id)
+                chunk_docs.append(chunk)
+                chunk_metas.append({
+                    **metadata,
+                    "chunk_index": chunk_idx,
+                    "total_chunks": len(content_chunks),
+                    "parent_doc_id": doc_id
+                })
+            
+            content_collection.add(
+                ids=chunk_ids,
+                documents=chunk_docs,
+                metadatas=chunk_metas
+            )
+            
+            print(f"Stored {len(content_chunks)} content chunks for document {doc_id}")
+        
+        audit_logger.log_operation(
+            operation="STORE",
+            wallet_address=request.metadata.get("owner_address", ""),
+            document_id=doc_id,
+            details=f"CID: {request.cid}, title: {request.dataset_title}",
+        )
+
+        return {
+            "message": "Stored successfully with enhanced content indexing",
+            "cid": request.cid,
+            "doc_id": doc_id,
+            "content_chunks": len(request.extracted_content.split()) if request.extracted_content else 0
+        }   
         
     except Exception as e:
-        print(f"Error in store_data: {str(e)}") 
-        print(f"Error type: {type(e)}") 
+        print(f"Error in enhanced storage: {str(e)}")
+
         import traceback
         traceback.print_exc()  
+        raise HTTPException(status_code=500, detail=f"Failed to store data: {str(e)}")
+
+@app.post("/store_enhanced")
+async def store_data_enhanced(request: StoreWithContentRequest):
+    """
+    Enhanced storage with both metadata and content vectors
+    """
+    try:
+        print(f"Received enhanced storage request: {request.dataset_title}")
+        doc_id = generate_id()
+        
+        # Prepare metadata document
+        combined_metadata = f"Dataset Title: {request.dataset_title}\n{request.summary}"
+        disease_tags = request.metadata.get("disease_tags", "")
+        if disease_tags:
+            combined_metadata += f"\nDisease Tags: {disease_tags}"
+        
+        metadata = {
+            "cid": request.cid,
+            "dataset_title": request.dataset_title,
+            "file_type": request.file_type,
+            **request.metadata
+        }
+        
+        # Store in metadata collection
+        metadata_collection.add(
+            ids=[doc_id],
+            documents=[combined_metadata],
+            metadatas=[metadata]
+        )
+        
+        # Store content if available
+        if request.extracted_content and request.extracted_content.strip():
+            extractor = ContentExtractor()
+            content_chunks = extractor.chunk_content(request.extracted_content)
+            
+            chunk_ids = []
+            chunk_docs = []
+            chunk_metas = []
+            
+            for chunk_idx, chunk in enumerate(content_chunks):
+                chunk_id = f"{doc_id}_chunk_{chunk_idx}"
+                chunk_ids.append(chunk_id)
+                chunk_docs.append(chunk)
+                chunk_metas.append({
+                    **metadata,
+                    "chunk_index": chunk_idx,
+                    "total_chunks": len(content_chunks),
+                    "parent_doc_id": doc_id
+                })
+            
+            content_collection.add(
+                ids=chunk_ids,
+                documents=chunk_docs,
+                metadatas=chunk_metas
+            )
+            
+            print(f"Stored {len(content_chunks)} content chunks for document {doc_id}")
+        
+        audit_logger.log_operation(
+            operation="STORE",
+            wallet_address=request.metadata.get("owner_address", ""),
+            document_id=doc_id,
+            details=f"CID: {request.cid}, title: {request.dataset_title} (enhanced)",
+        )
+
+        return {
+            "message": "Stored successfully with enhanced content indexing",
+            "cid": request.cid,
+            "doc_id": doc_id,
+            "content_chunks": len(request.extracted_content.split()) if request.extracted_content else 0
+        }
+        
+    except Exception as e:
+        print(f"Error in enhanced storage: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to store data: {str(e)}")
 
 @app.post("/search")
 async def search_data(request: SearchRequest):
     try:
-        search_results = collection.query(
+        search_results = metadata_collection.query(
             query_texts=[request.query],
-            n_results=5,
+            n_results=request.n_results,
             include=["documents", "metadatas", "distances"]
         )
         
@@ -333,6 +868,11 @@ async def search_data(request: SearchRequest):
                     "metadata": metadata
                 })
         
+        audit_logger.log_operation(
+            operation="SEARCH",
+            details=f"query: {request.query}, results: {len(results)}",
+        )
+
         return {"results": results}
         
     except Exception as e:
@@ -355,7 +895,7 @@ async def filter_data(request: FilterRequest):
         print(f"Where clause: {where_clause}")  
         
        
-        search_results = collection.get(
+        search_results = metadata_collection.get(
             where=where_clause,
             include=["documents", "metadatas"]
         )
@@ -411,12 +951,12 @@ async def search_with_filter(request: Dict[str, Any]):
         if filters:
          
             if len(filters) > 1:
-                and_conditions = [{key: value} for key, value in filters.items()]
+                and_conditions = [{key: value} for key, value in filters.items() if value]
                 search_kwargs["where"] = {"$and": and_conditions}
             else:
                 search_kwargs["where"] = filters
         
-        search_results = collection.query(**search_kwargs)
+        search_results = metadata_collection.query(**search_kwargs)
         
         results = []
         if search_results["ids"][0]:
@@ -439,7 +979,482 @@ async def search_with_filter(request: Dict[str, Any]):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to search with filter: {str(e)}")
+    
+@app.get("/documents/{doc_id}")
+async def get_document(doc_id: str):
+    try:
+        result = metadata_collection.get(
+            ids=[doc_id],
+            include=["documents", "metadatas"]
+        )
+        
+        if not result["ids"]:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        return {
+            "id": result["ids"][0],
+            "cid": result["metadatas"][0].get("cid", ""),
+            "summary": result["documents"][0],
+            "metadata": result["metadatas"][0]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get document: {str(e)}")
 
+@app.put("/documents/{doc_id}")
+async def update_document(doc_id: str, request: UpdateRequest):
+    try:
+        existing = metadata_collection.get(
+            ids=[doc_id],
+            include=["documents", "metadatas"]
+        )
+        
+        if not existing["ids"]:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        old_metadata = existing["metadatas"][0]
+        stored_owner = old_metadata.get("owner_address", "")
+        if stored_owner.lower() != request.owner_address.lower():
+            raise HTTPException(status_code=403, detail="Unauthorized: not document owner")
+        
+        # Security Fix: Verify cryptographic signature via ecrecover
+        verify_owner_signature(request.owner_address, request.signature, request.message)
+        
+        new_dataset_title = request.dataset_title if request.dataset_title else old_metadata.get("dataset_title", "")
+        new_summary = request.summary if request.summary else existing["documents"][0]
+        
+        updated_metadata = {**old_metadata}
+        if request.metadata:
+            updated_metadata.update(request.metadata)
+        updated_metadata["dataset_title"] = new_dataset_title
+        updated_metadata["owner_address"] = request.owner_address
+        
+        combined_document = f"Dataset Title: {new_dataset_title}\n{new_summary}"
+        
+        disease_tags = updated_metadata.get("disease_tags")
+        if disease_tags:
+            combined_document += f"\nDisease Tags: {disease_tags}"
+        
+        metadata_collection.update(
+            ids=[doc_id],
+            documents=[combined_document],
+            metadatas=[updated_metadata]
+        )
+        
+        print(f"Document updated in-place: {doc_id}")
+
+        audit_logger.log_operation(
+            operation="UPDATE",
+            wallet_address=request.owner_address,
+            document_id=doc_id,
+        )
+        
+        return {"message": "Document updated", "id": doc_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update document: {str(e)}")
+
+@app.delete("/documents/{doc_id}")
+async def delete_document(doc_id: str, request: DeleteRequest):
+    try:
+        existing = metadata_collection.get(
+            ids=[doc_id],
+            include=["metadatas"]
+        )
+        
+        if not existing["ids"]:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        stored_owner = existing["metadatas"][0].get("owner_address", "")
+        if stored_owner.lower() != request.owner_address.lower():
+            raise HTTPException(status_code=403, detail="Unauthorized: not document owner")
+        
+        # Security Fix: Verify cryptographic signature via ecrecover
+        verify_owner_signature(request.owner_address, request.signature, request.message)
+        
+        collection.delete(ids=[doc_id])
+        metadata_collection.delete(ids=[doc_id])
+        
+        print(f"Document {doc_id} deleted")
+
+        audit_logger.log_operation(
+            operation="DELETE",
+            wallet_address=request.owner_address,
+            document_id=doc_id,
+        )
+        
+        return {"message": "Document deleted", "deleted_id": doc_id}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete document: {str(e)}")
+
+
+# --- START: SIMPLE PREVIEW ENDPOINT ---
+
+@app.post("//simple_preview") # Catches the bad URL
+@app.post("/simple_preview", include_in_schema=False)
+async def simple_preview(file: UploadFile = File(...)):
+    """
+    A simple endpoint that just returns the uploaded image
+    without any anonymization. This is to test the pipeline.
+    
+    Now uses the PreviewFactory to support multiple file types including DICOM.
+    Maintains backward compatibility with existing frontend.
+    """
+    print("✅ --- simple_preview endpoint was called! --- ✅")
+    print(f"File received: {file.filename}, Content-Type: {file.content_type}")
+
+    try:
+        # Read the file contents
+        file_contents = await file.read()
+
+        # Use factory to get the appropriate generator
+        generator = PreviewFactory.create_generator(
+            filename=file.filename,
+            content_type=file.content_type
+        )
+
+        # Generate preview using the factory-selected generator
+        response, media_type = generator.generate_preview(
+            file_contents=file_contents,
+            filename=file.filename,
+            content_type=file.content_type
+        )
+
+        print(f"Sending response with media_type: {media_type}")
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate preview: {str(e)}"
+        )
+
+# --- END: SIMPLE PREVIEW ENDPOINT ---
+
+@app.post("/preview_dicom", include_in_schema=False)
+async def preview_dicom(file: UploadFile = File(...)):
+    """
+    Convert DICOM file to PNG/JPEG image for preview.
+    Works on both Mac and Windows.
+    
+    Now uses the PreviewFactory for consistency.
+    Maintains backward compatibility with existing frontend.
+    """
+    try:
+        # Read the file contents
+        file_contents = await file.read()
+
+        # Use factory to get the DICOM generator (factory will validate file type)
+        generator = PreviewFactory.create_generator(
+            filename=file.filename,
+            content_type=file.content_type
+        )
+
+        # Generate preview using the factory-selected generator
+        response, media_type = generator.generate_preview(
+            file_contents=file_contents,
+            filename=file.filename,
+            content_type=file.content_type
+        )
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to convert DICOM to image: {str(e)}"
+        )
+@app.post("/search_enhanced")
+async def search_data_enhanced(request: Dict[str, Any]):
+    """
+    Enhanced search combining content and metadata with intelligent ranking
+    
+    Request body:
+    {
+        "query": "search query",
+        "content_weight": 0.6,  # Weight for content search (default 0.6)
+        "metadata_weight": 0.4,  # Weight for metadata search (default 0.4)
+        "n_results": 5,
+        "filters": {} (optional)
+    }
+    """
+    try:
+        query = request.get("query")
+        content_weight = float(request.get("content_weight", 0.6))
+        metadata_weight = float(request.get("metadata_weight", 0.4))
+        n_results = request.get("n_results", 5)
+        filters = request.get("filters", {})
+        
+        if not query:
+            raise HTTPException(status_code=400, detail="Query is required")
+        
+        # Normalize weights
+        total_weight = content_weight + metadata_weight
+        content_weight = content_weight / total_weight
+        metadata_weight = metadata_weight / total_weight
+        
+        # Search in content collection
+        content_results = {}
+        try:
+            content_search = content_collection.query(
+                query_texts=[query],
+                n_results=n_results * 2,  # Get more results to account for chunking
+                include=["documents", "metadatas", "distances"]
+            )
+            
+            # Group chunks by parent document
+            seen_docs = set()
+            for i, doc_id in enumerate(content_search["ids"][0]):
+                metadata = content_search["metadatas"][0][i]
+                parent_id = metadata.get("parent_doc_id", doc_id)
+                
+                if parent_id not in seen_docs:
+                    distance = content_search["distances"][0][i]
+                    score = 1 / (1 + distance)
+                    content_results[parent_id] = {
+                        "score": score,
+                        "distance": distance,
+                        "source": "content",
+                        "metadata": metadata
+                    }
+                    seen_docs.add(parent_id)
+        except Exception as e:
+            print(f"Content search error: {e}")
+            content_results = {}
+        
+        # Search in metadata collection
+        metadata_results = {}
+        search_kwargs = {
+            "query_texts": [query],
+            "n_results": n_results,
+            "include": ["documents", "metadatas", "distances"]
+        }
+        
+        if filters and any(filters.values()):
+            if len(filters) > 1:
+                and_conditions = [{key: value} for key, value in filters.items() if value]
+                search_kwargs["where"] = {"$and": and_conditions}
+            else:
+                search_kwargs["where"] = filters
+        
+        metadata_search = metadata_collection.query(**search_kwargs)
+        
+        for i, doc_id in enumerate(metadata_search["ids"][0]):
+            distance = metadata_search["distances"][0][i]
+            score = 1 / (1 + distance)
+            metadata_results[doc_id] = {
+                "score": score,
+                "distance": distance,
+                "source": "metadata",
+                "metadata": metadata_search["metadatas"][0][i],
+                "summary": metadata_search["documents"][0][i]
+            }
+        
+        # Combine results with weighted scoring
+        combined_results = {}
+        
+        for doc_id, content_data in content_results.items():
+            if doc_id not in combined_results:
+                combined_results[doc_id] = {
+                    "content_score": 0,
+                    "metadata_score": 0,
+                    "metadata": content_data["metadata"]
+                }
+            combined_results[doc_id]["content_score"] = content_data["score"]
+        
+        for doc_id, metadata_data in metadata_results.items():
+            if doc_id not in combined_results:
+                combined_results[doc_id] = {
+                    "content_score": 0,
+                    "metadata_score": 0,
+                    "metadata": metadata_data["metadata"],
+                    "summary": metadata_data["summary"]
+                }
+            else:
+                combined_results[doc_id]["summary"] = metadata_data["summary"]
+            combined_results[doc_id]["metadata_score"] = metadata_data["score"]
+        
+        # Calculate final scores and sort
+        results = []
+        for doc_id, scores in combined_results.items():
+            final_score = (scores["content_score"] * content_weight + 
+                          scores["metadata_score"] * metadata_weight)
+            results.append({
+                "id": doc_id,
+                "cid": scores["metadata"].get("cid", ""),
+                "score": final_score,
+                "content_score": scores["content_score"],
+                "metadata_score": scores["metadata_score"],
+                "summary": scores.get("summary", ""),
+                "metadata": scores["metadata"]
+            })
+        
+        # Sort by final score
+        results.sort(key=lambda x: x["score"], reverse=True)
+        results = results[:n_results]
+        
+        return {
+            "results": results,
+            "search_config": {
+                "content_weight": content_weight,
+                "metadata_weight": metadata_weight
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Enhanced search error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Enhanced search failed: {str(e)}")
+
+# Content Extraction Module for Enhanced Retrieval
+class ContentExtractor:
+    """
+    Extracts and processes content from various file formats for semantic search
+    """
+    
+    @staticmethod
+    def extract_spreadsheet_content(data: List[List[str]], title: str = "") -> str:
+        """
+        Extract meaningful content from spreadsheet data
+        - data: 2D array of spreadsheet cells
+        - title: dataset title for context
+        Returns: formatted text for vectorization
+        """
+        if not data or not data[0]:
+            return ""
+        
+        headers = data[0]
+        content_parts = []
+        
+        # Add title context
+        if title:
+            content_parts.append(f"Dataset: {title}")
+        
+        # Add headers as schema info
+        content_parts.append(f"Columns: {', '.join(str(h) for h in headers if h)}")
+        
+        # Add sample data patterns (first 10 rows for content understanding)
+        sample_rows = data[1:min(11, len(data))]
+        
+        for row_idx, row in enumerate(sample_rows):
+            row_content = []
+            for col_idx, cell in enumerate(row):
+                if cell and col_idx < len(headers):
+                    header = headers[col_idx]
+                    # Skip anonymized IDs
+                    if not (isinstance(cell, str) and cell.startswith('WID_')):
+                        row_content.append(f"{header}: {cell}")
+            
+            if row_content:
+                content_parts.append(f"Row {row_idx + 1}: {'; '.join(row_content)}")
+        
+        return "\n".join(content_parts)
+    
+    @staticmethod
+    def extract_csv_content(csv_text: str, title: str = "") -> str:
+        """
+        Extract content from CSV text
+        """
+        lines = csv_text.strip().split('\n')
+        if not lines:
+            return ""
+        
+        headers = lines[0].split(',')
+        content_parts = []
+        
+        if title:
+            content_parts.append(f"Dataset: {title}")
+        
+        content_parts.append(f"Columns: {', '.join(headers)}")
+        
+        # Process sample rows
+        for line_idx, line in enumerate(lines[1:min(11, len(lines))]):
+            values = line.split(',')
+            row_content = []
+            for col_idx, value in enumerate(values):
+                if value.strip() and col_idx < len(headers):
+                    if not value.startswith('WID_'):
+                        row_content.append(f"{headers[col_idx]}: {value}")
+            
+            if row_content:
+                content_parts.append(f"Row {line_idx + 1}: {'; '.join(row_content)}")
+        
+        return "\n".join(content_parts)
+    
+    @staticmethod
+    def chunk_content(content: str, chunk_size: int = 500) -> List[str]:
+        """
+        Split large content into chunks for better vectorization
+        Returns list of content chunks
+        """
+        if len(content) <= chunk_size:
+            return [content]
+        
+        chunks = []
+        sentences = re.split(r'(?<=[.!?])\s+', content)
+        
+        current_chunk = ""
+        for sentence in sentences:
+            if len(current_chunk) + len(sentence) <= chunk_size:
+                current_chunk += " " + sentence
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = sentence
+        
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+        
+        return chunks if chunks else [content]
+    
+
+@app.get("/audit/logs")
+async def get_audit_logs(
+    wallet_address: Optional[str] = None,
+    operation: Optional[str] = None,
+    document_id: Optional[str] = None,
+    limit: int = 50,
+):
+    try:
+        logs = audit_logger.query_logs(
+            wallet_address=wallet_address,
+            operation=operation,
+            document_id=document_id,
+            limit=limit,
+        )
+        return {"logs": logs, "total": len(logs)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to query audit logs: {str(e)}")
+
+
+@app.get("/audit/logs/{entry_id}")
+async def get_audit_entry(entry_id: str):
+    try:
+        entry = audit_logger.get_entry(entry_id)
+        if not entry:
+            raise HTTPException(status_code=404, detail="Audit log entry not found")
+
+        verified = audit_logger.verify_integrity(entry_id)
+        entry["integrity_verified"] = verified
+        return entry
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get audit entry: {str(e)}")
 
 
 if __name__ == "__main__":
