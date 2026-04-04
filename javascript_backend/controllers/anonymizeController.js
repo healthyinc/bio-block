@@ -1,9 +1,17 @@
 const multer = require('multer');
 const XLSX = require('xlsx');
 const crypto = require('crypto');
+const fs = require('fs');
+const os = require('os');
 const { v4: uuidv4 } = require('uuid');
 
-const storage = multer.memoryStorage();
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, os.tmpdir()),
+    filename: (req, file, cb) => {
+        const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+        cb(null, `${Date.now()}-${uuidv4()}-${safeName}`);
+    }
+});
 const upload = multer({
     storage: storage,
     fileFilter: (req, file, cb) => {
@@ -29,7 +37,7 @@ const upload = multer({
         }
     },
     limits: {
-        fileSize: 10 * 1024 * 1024 * 1024 // 10GB limit
+        fileSize: 20 * 1024 * 1024 // 20MB limit
     }
 });
 
@@ -52,12 +60,15 @@ function generateUUID() {
 }
 
 const anonymizeFile = async (req, res) => {
+    let tempFilePath = null;
     try {
         if (!req.file) {
             return res.status(400).json({ 
                 error: 'No file uploaded. Please upload a spreadsheet file.' 
             });
         }
+
+        tempFilePath = req.file.path;
 
         const walletAddress = req.body.walletAddress;
         const generatePreview = req.body.generatePreview === 'true';
@@ -75,8 +86,9 @@ const anonymizeFile = async (req, res) => {
         // Parse the file using XLSX library which supports multiple formats
         let workbook;
         try {
+            const fileBuffer = fs.readFileSync(tempFilePath);
             // XLSX library automatically detects format based on file content
-            workbook = XLSX.read(req.file.buffer, { 
+            workbook = XLSX.read(fileBuffer, {
                 type: 'buffer',
                 cellDates: true,
                 cellNF: false,
@@ -344,6 +356,14 @@ const anonymizeFile = async (req, res) => {
         res.status(500).json({ 
             error: 'Internal server error occurred while processing the file.' 
         });
+    } finally {
+        if (tempFilePath) {
+            fs.unlink(tempFilePath, (unlinkError) => {
+                if (unlinkError && unlinkError.code !== 'ENOENT') {
+                    console.error('Failed to remove temp upload file:', unlinkError.message);
+                }
+            });
+        }
     }
 };
 
