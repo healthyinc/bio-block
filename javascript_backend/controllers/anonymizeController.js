@@ -33,7 +33,12 @@ const upload = multer({
     if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.test(file.originalname)) {
       cb(null, true);
     } else {
-      cb(new Error("Only spreadsheet files (.xlsx, .xls, .csv, .ods, .tsv, .xlsm, .xlsb) are allowed"), false);
+      cb(
+        new Error(
+          "Only spreadsheet files (.xlsx, .xls, .csv, .ods, .tsv, .xlsm, .xlsb) are allowed"
+        ),
+        false
+      );
     }
   },
   limits: {
