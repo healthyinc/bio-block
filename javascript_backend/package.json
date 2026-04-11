@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "vercel-build": "echo 'Building for Vercel'",
-    "test": "mocha tests/api.test.js --timeout 10000 --exit"
+    "test": "mocha tests/api.test.js tests/anonymize_limits.test.js --timeout 15000 --exit"
   },
   "engines": {
     "node": ">=18.x"
