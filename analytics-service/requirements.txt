@@ -1,0 +1,31 @@
+# Bio-Block Analytics Service — Dependencies
+# ============================================
+# Core
+fastapi>=0.100.0,<1.0.0
+uvicorn[standard]>=0.23.0
+pydantic>=2.0.0,<3.0.0
+python-multipart>=0.0.5
+
+# Data Analysis
+pandas>=2.0.0,<3.0.0
+numpy>=1.24.0,<2.0.0
+
+# Statistical Testing (GSoC Week 6-7)
+scipy>=1.10.0,<2.0.0
+statsmodels>=0.14.0,<1.0.0
+
+# Visualization (GSoC Week 3-4)
+matplotlib>=3.7.0,<4.0.0
+plotly>=5.15.0,<6.0.0
+
+# Blockchain / Web3
+web3>=5.31.0,<6.0.0
+
+# Differential Privacy (Stretch Goal)
+# opendp>=0.10.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+httpx>=0.24.0
+hypothesis>=6.80.0
