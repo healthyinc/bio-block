@@ -34,12 +34,12 @@ API docs: [http://localhost:3003/docs](http://localhost:3003/docs)
 
 ## Endpoints
 
-| Method | Endpoint | Status | Description |
-|--------|----------|--------|-------------|
-| `GET` | `/health` | ✅ Done | Service health check |
-| `POST` | `/analytics/describe` | ✅ Done | Descriptive statistics |
-| `POST` | `/analytics/visualize` | 🔜 Week 3-4 | Chart generation |
-| `POST` | `/analytics/infer` | 🔜 Week 6-7 | Hypothesis testing |
+| Method | Endpoint               | Status      | Description            |
+| ------ | ---------------------- | ----------- | ---------------------- |
+| `GET`  | `/health`              | ✅ Done     | Service health check   |
+| `POST` | `/analytics/describe`  | ✅ Done     | Descriptive statistics |
+| `POST` | `/analytics/visualize` | 🔜 Week 3-4 | Chart generation       |
+| `POST` | `/analytics/infer`     | 🔜 Week 6-7 | Hypothesis testing     |
 
 ## Testing
 
