@@ -1,4 +1,4 @@
-"""EIP-712 signature verification for analytics API authentication."""
+
 
 from __future__ import annotations
 
@@ -37,13 +37,13 @@ def verify_signature(
     request_hash: str,
     w3: Optional[Web3] = None,
 ) -> bool:
-    """Verify EIP-712 signature with replay protection. Returns True if valid."""
+    """Verify EIP-712 signature with replay protection."""
 
-    # Reject expired signatures
+    # 5-min expiry
     if abs(time.time() - timestamp) > SIGNATURE_EXPIRY_SECONDS:
         return False
 
-    # Reject reused nonces
+    # Replay protection
     wallet_key = wallet_address.lower()
     wallet_nonces = _used_nonces.setdefault(wallet_key, set())
     if nonce in wallet_nonces:
@@ -57,7 +57,6 @@ def verify_signature(
 
 
 def clear_nonces(wallet_address: Optional[str] = None) -> None:
-    """Clear tracked nonces. Pass a wallet to clear just that wallet."""
     if wallet_address:
         _used_nonces.pop(wallet_address.lower(), None)
     else:

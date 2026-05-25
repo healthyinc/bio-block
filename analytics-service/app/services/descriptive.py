@@ -1,4 +1,4 @@
-"""Descriptive statistics engine — column stats, type classification, correlations."""
+
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ import pandas as pd
 
 
 def compute_column_stats(series: pd.Series) -> dict:
-    """Compute summary stats for a single numeric column."""
     clean = series.dropna()
     return {
         "count": int(clean.count()),
@@ -23,7 +22,6 @@ def compute_column_stats(series: pd.Series) -> dict:
 
 
 def classify_columns(df: pd.DataFrame) -> dict:
-    """Classify each column as numeric, categorical, or datetime."""
     result = {}
     for col in df.columns:
         if np.issubdtype(df[col].dtype, np.number):
@@ -36,14 +34,13 @@ def classify_columns(df: pd.DataFrame) -> dict:
 
 
 def compute_correlation_matrix(df: pd.DataFrame, columns: list) -> Optional[dict]:
-    """Pearson correlation matrix. Returns None if < 2 columns."""
+    """Pearson correlation matrix. None if < 2 columns."""
     if len(columns) < 2:
         return None
     return df[columns].corr().round(4).to_dict()
 
 
 def run_descriptive_analysis(df: pd.DataFrame, columns: Optional[list] = None) -> dict:
-    """Run full descriptive analysis. Auto-selects numeric columns if none specified."""
     col_types = classify_columns(df)
 
     if columns:

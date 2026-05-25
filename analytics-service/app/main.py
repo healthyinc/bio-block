@@ -1,4 +1,4 @@
-"""Bio-Block Analytics API — port 3003."""
+
 
 from typing import Optional
 
@@ -14,7 +14,6 @@ APP_VERSION = "0.1.0"
 
 app = FastAPI(
     title="Bio-Block Analytics API",
-    description="Decentralized analytics for the Bio-Block health data marketplace.",
     version=APP_VERSION,
 )
 
@@ -43,7 +42,7 @@ async def descriptive_analysis(
     request_hash: str = Form(...),
     columns: Optional[str] = Form(None),
 ):
-    """Descriptive statistics on an uploaded CSV. Requires EIP-712 signature."""
+
     contents = await file.read()
 
     if not verify_signature(
@@ -65,13 +64,11 @@ async def descriptive_analysis(
 
 @app.post("/analytics/visualize")
 async def visualize():
-    """TODO: Chart generation with matplotlib/plotly."""
     raise HTTPException(501, "Not yet implemented.")
 
 
 @app.post("/analytics/infer")
 async def infer():
-    """TODO: Hypothesis testing with scipy/statsmodels."""
     raise HTTPException(501, "Not yet implemented.")
 
 

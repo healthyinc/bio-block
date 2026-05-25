@@ -1,4 +1,4 @@
-"""CSV parsing with encoding fallback, delimiter detection, and size limits."""
+
 
 import csv
 import io
@@ -36,7 +36,6 @@ def detect_delimiter(text: str) -> str:
 
 
 def parse_csv(content: bytes) -> pd.DataFrame:
-    """Parse uploaded CSV bytes into a DataFrame with validation."""
     validate_file_size(content)
     text = decode_csv_content(content)
     sep = detect_delimiter(text)
