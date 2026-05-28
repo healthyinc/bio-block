@@ -1,0 +1,21 @@
+patient_id,age,gender,glucose_fasting,cholesterol_total,blood_pressure_systolic,blood_pressure_diastolic,bmi,diagnosis
+P001,45,M,92,185,120,80,24.5,Healthy
+P002,62,F,145,242,155,95,31.2,Type 2 Diabetes
+P003,33,M,88,178,118,76,22.1,Healthy
+P004,51,F,126,215,140,88,28.7,Pre-Diabetes
+P005,70,M,165,268,162,98,33.4,Type 2 Diabetes
+P006,28,F,85,165,112,72,20.8,Healthy
+P007,55,M,138,230,148,92,29.5,Type 2 Diabetes
+P008,41,F,95,192,125,82,25.1,Healthy
+P009,67,M,152,255,158,96,32.0,Type 2 Diabetes
+P010,36,F,90,172,116,74,21.9,Healthy
+P011,58,M,142,238,150,94,30.1,Type 2 Diabetes
+P012,44,F,98,188,122,78,24.8,Healthy
+P013,73,M,170,275,165,100,34.2,Type 2 Diabetes
+P014,30,F,82,160,110,70,19.5,Healthy
+P015,49,M,118,205,135,86,27.3,Pre-Diabetes
+P016,65,F,148,248,157,97,31.8,Type 2 Diabetes
+P017,38,M,87,175,119,77,23.0,Healthy
+P018,52,F,130,220,142,90,29.0,Pre-Diabetes
+P019,71,M,160,262,160,98,33.0,Type 2 Diabetes
+P020,25,F,80,155,108,68,18.9,Healthy
