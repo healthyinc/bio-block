@@ -10,13 +10,18 @@ import pandas as pd
 
 def compute_column_stats(series: pd.Series) -> dict:
     clean = series.dropna()
+    q1 = float(clean.quantile(0.25))
+    q3 = float(clean.quantile(0.75))
     return {
         "count": int(clean.count()),
         "mean": round(float(clean.mean()), 4),
         "std": round(float(clean.std()), 4),
         "min": float(clean.min()),
-        "max": float(clean.max()),
+        "q1": round(q1, 4),
         "median": float(clean.median()),
+        "q3": round(q3, 4),
+        "iqr": round(q3 - q1, 4),
+        "max": float(clean.max()),
         "missing_pct": round(float(series.isna().mean() * 100), 2),
     }
 
@@ -34,10 +39,13 @@ def classify_columns(df: pd.DataFrame) -> dict:
 
 
 def compute_correlation_matrix(df: pd.DataFrame, columns: list) -> Optional[dict]:
-    """Pearson correlation matrix. None if < 2 columns."""
+    """Pearson + Spearman correlation matrices. None if < 2 columns."""
     if len(columns) < 2:
         return None
-    return df[columns].corr().round(4).to_dict()
+    return {
+        "pearson": df[columns].corr(method="pearson").round(4).to_dict(),
+        "spearman": df[columns].corr(method="spearman").round(4).to_dict(),
+    }
 
 
 def run_descriptive_analysis(df: pd.DataFrame, columns: Optional[list] = None) -> dict:
