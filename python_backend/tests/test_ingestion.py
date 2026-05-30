@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 import unittest
@@ -8,10 +9,32 @@ from fastapi.testclient import TestClient
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from main import app  # noqa: E402
+from main import app, ingest_file  # noqa: E402
 
 
 client = TestClient(app)
+
+
+class FakeUploadFile:
+    def __init__(self, filename, content, content_type):
+        self.filename = filename
+        self.content = content
+        self.content_type = content_type
+        self.position = 0
+        self.seek_offsets = []
+
+    async def read(self, size=-1):
+        if size is None or size < 0:
+            size = len(self.content) - self.position
+
+        start = self.position
+        end = min(start + size, len(self.content))
+        self.position = end
+        return self.content[start:end]
+
+    async def seek(self, offset):
+        self.seek_offsets.append(offset)
+        self.position = offset
 
 
 def upload_file(filename, content, content_type="application/octet-stream", profile=None):
@@ -91,6 +114,20 @@ class TestIngestionRouting(unittest.TestCase):
         dicom_header = b"\x00" * 128 + b"DICM" + b"routing scaffold"
         response = upload_file("scan.bin", dicom_header, "application/octet-stream")
         self.assert_routes_to(response, "dicom", "anonymize_dicom")
+
+    def test_endpoint_resets_upload_stream_after_header_read(self):
+        fake_file = FakeUploadFile(
+            filename="sample.csv",
+            content=b"age,diagnosis\n42,test\n",
+            content_type="text/csv",
+        )
+
+        result = asyncio.run(ingest_file(file=fake_file, profile="strict"))
+
+        self.assertEqual(fake_file.seek_offsets, [0])
+        self.assertEqual(fake_file.position, 0)
+        self.assertEqual(result["detected_modality"], "csv")
+        self.assertEqual(result["handler"], "anonymize_csv")
 
 
 if __name__ == "__main__":

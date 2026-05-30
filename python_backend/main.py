@@ -310,6 +310,8 @@ async def ingest_file(
         if not header:
             raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
+        await file.seek(0)
+
         return route_for_ingestion(
             filename=file.filename,
             content_type=file.content_type,
