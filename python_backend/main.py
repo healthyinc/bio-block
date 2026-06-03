@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, File, UploadFile
+from fastapi import FastAPI, HTTPException, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -27,6 +27,7 @@ from eth_account import Account
 # Preview factory imports
 from services.preview.factory import PreviewFactory
 from services.audit_logger import AuditLogger
+from services.ingestion import HEADER_READ_LIMIT, IngestionError, route_for_ingestion
 
 # PDF extraction imports
 try:
@@ -282,7 +283,8 @@ async def root():
             "/anonymize_image_presidio": "Anonymize PHI in images (Presidio only, advanced)",
             "/anonymize_text": "Anonymize PHI in plain text (Presidio + spaCy fallback)",
             "/anonymize_pdf": "Anonymize PHI in PDF documents (per-page extraction and redaction)",
-            "/anonymize_dicom": "Anonymize PHI in DICOM file metadata (strips patient identifiers)"
+            "/anonymize_dicom": "Anonymize PHI in DICOM file metadata (strips patient identifiers)",
+            "/api/v1/ingest": "Route uploaded biomedical files to placeholder anonymization handlers"
         },
         "status": {
             "presidio_available": presidio_available,
@@ -291,6 +293,37 @@ async def root():
             "spacy_model": "en_core_web_lg" if nlp and hasattr(nlp, 'meta') and nlp.meta.get('name') == 'en_core_web_lg' else "en_core_web_sm" if nlp else "not_available"
         }
     }
+
+@app.post("/api/v1/ingest")
+async def ingest_file(
+    file: UploadFile = File(...),
+    profile: str = Form("strict"),
+):
+    """
+    Privacy-safe Week 1 upload entry point.
+
+    This endpoint only detects modality and selects a placeholder handler.
+    It does not store raw uploads, index metadata, or trigger downstream flows.
+    """
+    try:
+        header = await file.read(HEADER_READ_LIMIT)
+        if not header:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+        await file.seek(0)
+
+        return route_for_ingestion(
+            filename=file.filename,
+            content_type=file.content_type,
+            header=header,
+            profile=profile,
+        )
+    except IngestionError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to route uploaded file")
 
 @app.post("/anonymize_image")
 async def anonymize_image(file: UploadFile = File(...)):
