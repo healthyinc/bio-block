@@ -10,6 +10,22 @@ import pandas as pd
 
 def compute_column_stats(series: pd.Series) -> dict:
     clean = series.dropna()
+
+    # Guard: return None instead of NaN when column has no data
+    if clean.empty:
+        return {
+            "count": 0,
+            "mean": None,
+            "std": None,
+            "min": None,
+            "q1": None,
+            "median": None,
+            "q3": None,
+            "iqr": None,
+            "max": None,
+            "missing_pct": 100.0,
+        }
+
     q1 = float(clean.quantile(0.25))
     q3 = float(clean.quantile(0.75))
     return {

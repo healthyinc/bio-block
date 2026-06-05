@@ -35,6 +35,20 @@ class TestComputeColumnStats:
         stats = compute_column_stats(pd.Series([7, 7, 7, 7]))
         assert stats["std"] == 0.0
 
+    def test_empty_column(self):
+        """All-NaN column should return None stats, not NaN."""
+        stats = compute_column_stats(pd.Series([None, None, None], dtype="float64"))
+        assert stats["count"] == 0
+        assert stats["missing_pct"] == 100.0
+        assert stats["mean"] is None
+        assert stats["std"] is None
+        assert stats["min"] is None
+        assert stats["q1"] is None
+        assert stats["median"] is None
+        assert stats["q3"] is None
+        assert stats["iqr"] is None
+        assert stats["max"] is None
+
 
 class TestClassifyColumns:
 
