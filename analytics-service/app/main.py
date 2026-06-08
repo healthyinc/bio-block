@@ -2,10 +2,11 @@
 
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.auth.eip712 import verify_signature
+from app.auth.dependencies import AuthenticatedWallet, require_eip712_auth
+from app.auth.rate_limiter import rate_limiter
 from app.models.schemas import DescriptiveResponse, HealthResponse
 from app.services.descriptive import run_descriptive_analysis
 from app.utils.csv_parser import parse_csv
@@ -33,29 +34,21 @@ async def health_check():
 
 @app.post("/analytics/describe", response_model=DescriptiveResponse)
 async def descriptive_analysis(
+    auth: AuthenticatedWallet = Depends(require_eip712_auth),
     file: UploadFile = File(...),
-    wallet_address: str = Form(...),
-    dataset_cid: str = Form(...),
-    signature: str = Form(...),
-    timestamp: int = Form(...),
-    nonce: int = Form(...),
-    request_hash: str = Form(...),
     columns: Optional[str] = Form(None),
 ):
+    # Per-wallet rate limiting
+    if not rate_limiter.check(auth.wallet_address):
+        raise HTTPException(429, "Rate limit exceeded. Try again shortly.")
 
     contents = await file.read()
-
-    if not verify_signature(
-        wallet_address, dataset_cid, signature, timestamp, nonce, request_hash
-    ):
-        raise HTTPException(401, "Invalid or expired signature.")
-
     df = parse_csv(contents)
     target_cols = columns.split(",") if columns else None
     analysis = run_descriptive_analysis(df, columns=target_cols)
 
     return DescriptiveResponse(
-        source_dataset_cid=dataset_cid,
+        source_dataset_cid=auth.dataset_cid,
         row_count=len(df),
         columns_analyzed=analysis["columns_analyzed"],
         results=analysis["results"],
