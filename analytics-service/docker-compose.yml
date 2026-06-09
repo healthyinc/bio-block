@@ -17,6 +17,7 @@ services:
       - "3003:3003"
     environment:
       - PYTHONUNBUFFERED=1
+      - APP_ENV=production
       - SEPOLIA_RPC_URL=${SEPOLIA_RPC_URL:-}
       - DOCUMENT_STORAGE_ADDRESS=0xd58de64aac08d5412b8020c7c61b215fec0c9644
     volumes:

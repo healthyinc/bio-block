@@ -1,5 +1,9 @@
+"""EIP-712 signature verification with environment-aware security guards."""
+
 from __future__ import annotations
 
+import logging
+import os
 import time
 from typing import Dict, Optional, Set
 
@@ -8,6 +12,18 @@ try:
     from eth_account.messages import encode_structured_data
 except ImportError:
     Web3 = None  # type: ignore[misc, assignment]
+
+logger = logging.getLogger(__name__)
+
+APP_ENV = os.getenv("APP_ENV", "production")
+_SAFE_ENVS = {"test", "development"}
+
+# ── Fail-fast: production MUST have web3.py installed ──────────────────
+if Web3 is None and APP_ENV not in _SAFE_ENVS:
+    raise RuntimeError(
+        "web3.py is required in production but is not installed. "
+        "Set APP_ENV=test or APP_ENV=development to skip crypto checks."
+    )
 
 DOCUMENT_STORAGE_ADDRESS = "0xd58de64aac08d5412b8020c7c61b215fec0c9644"
 SIGNATURE_EXPIRY_SECONDS = 300  # 5 minutes
@@ -51,7 +67,7 @@ def verify_signature(
     timestamp: int,
     nonce: int,
     request_hash: str,
-    w3: Optional[Web3] = None,
+    w3: Optional["Web3"] = None,
 ) -> bool:
     """Verify an EIP-712 AnalyticsRequest signature.
 
@@ -60,20 +76,28 @@ def verify_signature(
       2. Nonce not reused by this wallet.
       3. Recovered signer matches the claimed wallet address.
       4. Wallet has purchased the dataset on-chain (hasPurchased mapping).
+
+    In test/development environments (``APP_ENV``), steps 3-4 are skipped
+    so tests can run without ``web3.py``.  In production the full
+    verification pipeline is enforced.
     """
 
-    # 5-min expiry
+    # ── Timestamp expiry (all environments) ────────────────────────────
     if abs(time.time() - timestamp) > SIGNATURE_EXPIRY_SECONDS:
         return False
 
-    # Replay protection
+    # ── Replay protection (all environments) ───────────────────────────
     wallet_key = wallet_address.lower()
     wallet_nonces = _used_nonces.setdefault(wallet_key, set())
     if nonce in wallet_nonces:
         return False
 
-    if Web3 is None:
-        # web3.py not installed — skip crypto checks (tests only)
+    # ── Environment gate ───────────────────────────────────────────────
+    if Web3 is None and APP_ENV in _SAFE_ENVS:
+        logger.debug(
+            "APP_ENV=%s — skipping crypto verification (non-production)",
+            APP_ENV,
+        )
         wallet_nonces.add(nonce)
         return True
 
@@ -129,7 +153,9 @@ def verify_signature(
 
 
 def clear_nonces(wallet_address: Optional[str] = None) -> None:
+    """Clear stored nonces for a wallet (or all wallets)."""
     if wallet_address:
         _used_nonces.pop(wallet_address.lower(), None)
     else:
         _used_nonces.clear()
+
