@@ -1,9 +1,14 @@
 from typing import Any, Callable, Dict, Optional
 
+from services.text_anonymization import (
+    TextAnonymizationError,
+    anonymize_clinical_text,
+)
 
 SUPPORTED_PROFILES = {"strict", "research"}
 SUPPORTED_MODALITIES = {"csv", "text", "dicom", "nifti", "wsi"}
 HEADER_READ_LIMIT = 4096
+TEXT_READ_LIMIT_BYTES = 256 * 1024
 
 
 class IngestionError(ValueError):
@@ -93,8 +98,33 @@ def anonymize_csv() -> Dict[str, str]:
     return _placeholder_result("anonymize_csv")
 
 
-def anonymize_text() -> Dict[str, str]:
-    return _placeholder_result("anonymize_text")
+def anonymize_text(
+    text_content: bytes,
+    profile: str,
+    study_salt: Optional[str] = None,
+) -> Dict[str, Any]:
+    try:
+        text = text_content.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise IngestionError("Text uploads must be UTF-8 encoded") from exc
+
+    try:
+        result = anonymize_clinical_text(
+            text=text,
+            profile=profile,
+            study_salt=study_salt,
+        )
+    except TextAnonymizationError as exc:
+        raise IngestionError(exc.detail, status_code=exc.status_code) from exc
+
+    return {
+        "handler": "anonymize_text",
+        "routing_status": "handler_selected",
+        "anonymization_status": result["anonymization_status"],
+        "message": "Text anonymization completed.",
+        "anonymized_text": result["anonymized_text"],
+        "detected_entities": result["detected_entities"],
+    }
 
 
 def anonymize_dicom() -> Dict[str, str]:
@@ -109,7 +139,7 @@ def anonymize_wsi() -> Dict[str, str]:
     return _placeholder_result("anonymize_wsi")
 
 
-HANDLER_REGISTRY: Dict[str, Callable[[], Dict[str, str]]] = {
+HANDLER_REGISTRY: Dict[str, Callable[..., Dict[str, Any]]] = {
     "csv": anonymize_csv,
     "text": anonymize_text,
     "dicom": anonymize_dicom,
@@ -123,6 +153,8 @@ def route_for_ingestion(
     content_type: Optional[str],
     header: bytes,
     profile: str,
+    text_content: Optional[bytes] = None,
+    study_salt: Optional[str] = None,
 ) -> Dict[str, Any]:
     safe_name = _safe_filename(filename)
     privacy_profile = validate_privacy_profile(profile)
@@ -135,8 +167,17 @@ def route_for_ingestion(
             status_code=500,
         )
 
-    handler_result = handler()
-    return {
+    if modality == "text":
+        if text_content is None:
+            raise IngestionError(
+                "Text content was not provided for anonymization",
+                status_code=500,
+            )
+        handler_result = handler(text_content, privacy_profile, study_salt)
+    else:
+        handler_result = handler()
+
+    response = {
         "status": "success",
         "filename": safe_name,
         "detected_modality": modality,
@@ -152,3 +193,9 @@ def route_for_ingestion(
             "blockchain_transaction": "pending",
         },
     }
+    if "anonymized_text" in handler_result:
+        response["anonymized_text"] = handler_result["anonymized_text"]
+    if "detected_entities" in handler_result:
+        response["detected_entities"] = handler_result["detected_entities"]
+
+    return response

@@ -27,7 +27,13 @@ from eth_account import Account
 # Preview factory imports
 from services.preview.factory import PreviewFactory
 from services.audit_logger import AuditLogger
-from services.ingestion import HEADER_READ_LIMIT, IngestionError, route_for_ingestion
+from services.ingestion import (
+    HEADER_READ_LIMIT,
+    TEXT_READ_LIMIT_BYTES,
+    IngestionError,
+    detect_modality,
+    route_for_ingestion,
+)
 
 # PDF extraction imports
 try:
@@ -300,15 +306,33 @@ async def ingest_file(
     profile: str = Form("strict"),
 ):
     """
-    Privacy-safe Week 1 upload entry point.
+    Privacy-safe upload entry point.
 
-    This endpoint only detects modality and selects a placeholder handler.
-    It does not store raw uploads, index metadata, or trigger downstream flows.
+    Text uploads are anonymized. Other modalities still route to placeholder
+    handlers until their later milestones.
     """
     try:
         header = await file.read(HEADER_READ_LIMIT)
         if not header:
             raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+        text_content = None
+        try:
+            modality = detect_modality(file.filename, file.content_type, header)
+        except IngestionError:
+            modality = None
+
+        if modality == "text":
+            await file.seek(0)
+            text_content = await file.read(TEXT_READ_LIMIT_BYTES + 1)
+            if len(text_content) > TEXT_READ_LIMIT_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail=(
+                        f"Text uploads must be {TEXT_READ_LIMIT_BYTES} "
+                        "bytes or smaller"
+                    ),
+                )
 
         await file.seek(0)
 
@@ -317,6 +341,7 @@ async def ingest_file(
             content_type=file.content_type,
             header=header,
             profile=profile,
+            text_content=text_content,
         )
     except IngestionError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)

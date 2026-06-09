@@ -6,11 +6,11 @@ from io import BytesIO
 
 from fastapi.testclient import TestClient
 
-
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.environ.setdefault("BIOBLOCK_STUDY_SALT", "week2-test-salt")
 
 from main import app, ingest_file  # noqa: E402
-
+from services.ingestion import TEXT_READ_LIMIT_BYTES  # noqa: E402
 
 client = TestClient(app)
 
@@ -37,7 +37,9 @@ class FakeUploadFile:
         self.position = offset
 
 
-def upload_file(filename, content, content_type="application/octet-stream", profile=None):
+def upload_file(
+    filename, content, content_type="application/octet-stream", profile=None
+):
     data = {}
     if profile is not None:
         data["profile"] = profile
@@ -68,8 +70,44 @@ class TestIngestionRouting(unittest.TestCase):
         self.assert_routes_to(response, "csv", "anonymize_csv")
 
     def test_text_routes_to_text_handler(self):
-        response = upload_file("note.txt", b"clinical note scaffold\n", "text/plain")
-        self.assert_routes_to(response, "text", "anonymize_text")
+        response = upload_file(
+            "note.txt",
+            (b"Patient has MRN: 123456 and diabetes. " b"Email john.doe@example.com."),
+            "text/plain",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "success")
+        self.assertEqual(body["detected_modality"], "text")
+        self.assertEqual(body["handler"], "anonymize_text")
+        self.assertEqual(body["routing_status"], "handler_selected")
+        self.assertEqual(body["anonymization_status"], "completed")
+        self.assertNotIn("123456", body["anonymized_text"])
+        self.assertNotIn("john.doe@example.com", body["anonymized_text"])
+        self.assertIn("MRN_", body["anonymized_text"])
+        self.assertIn("<REDACTED_EMAIL>", body["anonymized_text"])
+        self.assertIn("diabetes", body["anonymized_text"])
+        self.assertEqual(body["detected_entities"]["MEDICAL_RECORD_NUMBER"], 1)
+        self.assertEqual(body["detected_entities"]["EMAIL_ADDRESS"], 1)
+        self.assertEqual(body["downstream"]["ipfs_chunking"], "pending")
+        self.assertEqual(body["downstream"]["cid_encryption"], "pending")
+        self.assertEqual(body["downstream"]["metadata_indexing"], "pending")
+        self.assertEqual(body["downstream"]["blockchain_transaction"], "pending")
+
+    def test_text_routes_by_extension_despite_mime_mismatch(self):
+        response = upload_file(
+            "note.txt",
+            b"Patient ID PT-1001 was admitted.",
+            "application/octet-stream",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["detected_modality"], "text")
+        self.assertEqual(body["anonymization_status"], "completed")
+        self.assertNotIn("PT-1001", body["anonymized_text"])
+        self.assertIn("PATIENT_ID_", body["anonymized_text"])
 
     def test_dicom_extension_routes_to_dicom_handler(self):
         response = upload_file("scan.dcm", b"not-real-dicom-routing-only")
@@ -109,6 +147,25 @@ class TestIngestionRouting(unittest.TestCase):
         response = upload_file("sample.csv", b"a,b\n1,2\n", "text/csv", "open")
         self.assertEqual(response.status_code, 400)
         self.assertIn("Invalid privacy profile", response.json()["detail"])
+
+    def test_text_upload_with_unsupported_encoding_is_rejected(self):
+        response = upload_file("note.txt", b"\xff\xfe\x00", "text/plain")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["detail"],
+            "Text uploads must be UTF-8 encoded",
+        )
+
+    def test_large_text_upload_is_rejected(self):
+        response = upload_file(
+            "large-note.txt",
+            b"a" * (TEXT_READ_LIMIT_BYTES + 1),
+            "text/plain",
+        )
+
+        self.assertEqual(response.status_code, 413)
+        self.assertIn("Text uploads must be", response.json()["detail"])
 
     def test_dicom_preamble_detection_routes_to_dicom_handler(self):
         dicom_header = b"\x00" * 128 + b"DICM" + b"routing scaffold"
