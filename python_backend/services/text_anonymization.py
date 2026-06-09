@@ -1,10 +1,12 @@
 import hashlib
+import os
 import re
 from functools import lru_cache
+from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Tuple
 
 SUPPORTED_PROFILES = {"strict", "research"}
-DEFAULT_STUDY_SALT = "bio-block-week2-development-salt"
+STUDY_SALT_ENV_VAR = "BIOBLOCK_STUDY_SALT"
 HASH_LENGTH = 8
 
 _ID_ENTITY_TYPES = {
@@ -405,6 +407,37 @@ def _entity_summary(results: Iterable[Any]) -> Dict[str, int]:
     return summary
 
 
+def _read_local_env_salt() -> str | None:
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if not env_path.exists():
+        return None
+
+    for line in env_path.read_text(encoding="utf-8").splitlines():
+        cleaned = line.strip()
+        if not cleaned or cleaned.startswith("#") or "=" not in cleaned:
+            continue
+        key, value = cleaned.split("=", 1)
+        if key.strip() == STUDY_SALT_ENV_VAR:
+            return value.strip().strip("\"'")
+
+    return None
+
+
+def _resolve_study_salt(study_salt: str | None) -> str:
+    configured_salt = (
+        study_salt
+        or os.getenv(STUDY_SALT_ENV_VAR)
+        or _read_local_env_salt()
+    )
+    if configured_salt and configured_salt.strip():
+        return configured_salt.strip()
+
+    raise TextAnonymizationError(
+        f"Text anonymization salt is not configured. Set {STUDY_SALT_ENV_VAR}.",
+        status_code=500,
+    )
+
+
 def anonymize_clinical_text(
     text: str,
     profile: str = "strict",
@@ -416,7 +449,7 @@ def anonymize_clinical_text(
         raise TextAnonymizationError("Text input is empty")
 
     _normalize_profile(profile)
-    salt = study_salt or DEFAULT_STUDY_SALT
+    salt = _resolve_study_salt(study_salt)
 
     analyzer = _get_analyzer()
     try:

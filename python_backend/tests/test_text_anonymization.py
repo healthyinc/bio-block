@@ -5,6 +5,7 @@ import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from services import text_anonymization  # noqa: E402
 from services.text_anonymization import (  # noqa: E402
     TextAnonymizationError,
     anonymize_clinical_text,
@@ -131,6 +132,17 @@ def test_empty_text_is_rejected():
 
     assert exc.value.status_code == 400
     assert exc.value.detail == "Text input is empty"
+
+
+def test_missing_salt_is_rejected(monkeypatch):
+    monkeypatch.delenv(text_anonymization.STUDY_SALT_ENV_VAR, raising=False)
+    monkeypatch.setattr(text_anonymization, "_read_local_env_salt", lambda: None)
+
+    with pytest.raises(TextAnonymizationError) as exc:
+        anonymize_clinical_text("Patient has MRN: 123456.")
+
+    assert exc.value.status_code == 500
+    assert text_anonymization.STUDY_SALT_ENV_VAR in exc.value.detail
 
 
 def test_entity_summary_does_not_include_raw_values():
