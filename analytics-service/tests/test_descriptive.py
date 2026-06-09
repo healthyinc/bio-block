@@ -35,6 +35,20 @@ class TestComputeColumnStats:
         stats = compute_column_stats(pd.Series([7, 7, 7, 7]))
         assert stats["std"] == 0.0
 
+    def test_empty_column(self):
+        """All-NaN column should return None stats, not NaN."""
+        stats = compute_column_stats(pd.Series([None, None, None], dtype="float64"))
+        assert stats["count"] == 0
+        assert stats["missing_pct"] == 100.0
+        assert stats["mean"] is None
+        assert stats["std"] is None
+        assert stats["min"] is None
+        assert stats["q1"] is None
+        assert stats["median"] is None
+        assert stats["q3"] is None
+        assert stats["iqr"] is None
+        assert stats["max"] is None
+
 
 class TestClassifyColumns:
 
@@ -54,7 +68,8 @@ class TestCorrelationMatrix:
     def test_perfect_correlation(self):
         df = pd.DataFrame({"x": [1, 2, 3, 4], "y": [2, 4, 6, 8]})
         corr = compute_correlation_matrix(df, ["x", "y"])
-        assert corr["x"]["y"] == 1.0
+        assert corr["pearson"]["x"]["y"] == 1.0
+        assert corr["spearman"]["x"]["y"] == 1.0
 
     def test_single_column_returns_none(self):
         df = pd.DataFrame({"x": [1, 2, 3]})
@@ -63,9 +78,10 @@ class TestCorrelationMatrix:
     def test_values_in_range(self, sample_dataframe):
         cols = ["age", "glucose", "cholesterol"]
         corr = compute_correlation_matrix(sample_dataframe, cols)
-        for a in cols:
-            for b in cols:
-                assert -1.0 <= corr[a][b] <= 1.0
+        for method in ("pearson", "spearman"):
+            for a in cols:
+                for b in cols:
+                    assert -1.0 <= corr[method][a][b] <= 1.0
 
 
 class TestRunDescriptiveAnalysis:
