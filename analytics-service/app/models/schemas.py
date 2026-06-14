@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -20,6 +20,15 @@ class DescriptiveResponse(BaseModel):
     row_count: int
     columns_analyzed: list
     results: dict
+
+
+class VisualizationResponse(BaseModel):
+    analysis_type: str = "graphical"
+    source_dataset_cid: str
+    chart_type: str
+    chart_config: Dict[str, Any]
+    image: str = Field(..., description="Base64-encoded PNG image")
+    row_count: int
 
 
 class ErrorResponse(BaseModel):
