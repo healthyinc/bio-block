@@ -7,8 +7,12 @@ python-multipart>=0.0.5
 # Data analysis
 pandas>=2.0.0,<3.0.0
 numpy>=1.24.0,<2.0.0
+matplotlib>=3.7.0,<4.0.0
+scipy>=1.10.0,<2.0.0
+openpyxl>=3.1.0
 
 # Testing
 pytest>=7.4.0
 pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
 httpx>=0.24.0

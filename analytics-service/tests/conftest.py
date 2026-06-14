@@ -1,3 +1,9 @@
+import os
+
+# Must be set BEFORE importing app modules so eip712's import-time
+# guard allows loading without web3.py.
+os.environ["APP_ENV"] = "test"
+
 import time
 
 import pytest
