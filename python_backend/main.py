@@ -334,6 +334,11 @@ async def ingest_file(
                     ),
                 )
 
+        file_content = None
+        if modality in {"dicom", "nifti"}:
+            await file.seek(0)
+            file_content = await file.read()
+
         await file.seek(0)
 
         return route_for_ingestion(
@@ -342,6 +347,7 @@ async def ingest_file(
             header=header,
             profile=profile,
             text_content=text_content,
+            file_content=file_content,
         )
     except IngestionError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)

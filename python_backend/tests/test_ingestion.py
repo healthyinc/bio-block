@@ -1,10 +1,16 @@
 import asyncio
 import os
 import sys
+import tempfile
 import unittest
 from io import BytesIO
 
+import nibabel as nib
+import numpy as np
 from fastapi.testclient import TestClient
+from pydicom.dataset import Dataset, FileDataset, FileMetaDataset
+from pydicom.sequence import Sequence
+from pydicom.uid import ExplicitVRLittleEndian, SecondaryCaptureImageStorage
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("BIOBLOCK_STUDY_SALT", "week2-test-salt")
@@ -51,6 +57,59 @@ def upload_file(
     )
 
 
+def build_dicom_bytes():
+    file_meta = FileMetaDataset()
+    file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+    file_meta.MediaStorageSOPClassUID = SecondaryCaptureImageStorage
+    file_meta.MediaStorageSOPInstanceUID = "1.2.826.0.1.3680043.8.498.11"
+    file_meta.ImplementationClassUID = "1.2.826.0.1.3680043.8.498.12"
+
+    dataset = FileDataset(
+        None,
+        {},
+        file_meta=file_meta,
+        preamble=b"\0" * 128,
+    )
+    dataset.SOPClassUID = SecondaryCaptureImageStorage
+    dataset.SOPInstanceUID = file_meta.MediaStorageSOPInstanceUID
+    dataset.PatientName = "SYN^ROUTE"
+    dataset.PatientID = "SYN-ROUTE-ID"
+
+    nested_item = Dataset()
+    nested_item.PatientName = "NEST^ROUTE"
+    dataset.ReferencedPatientSequence = Sequence([nested_item])
+
+    dataset.Rows = 2
+    dataset.Columns = 2
+    dataset.SamplesPerPixel = 1
+    dataset.PhotometricInterpretation = "MONOCHROME2"
+    dataset.BitsAllocated = 8
+    dataset.BitsStored = 8
+    dataset.HighBit = 7
+    dataset.PixelRepresentation = 0
+    dataset.PixelData = b"\x01\x02\x03\x04"
+
+    buffer = BytesIO()
+    dataset.save_as(buffer, enforce_file_format=True)
+    return buffer.getvalue()
+
+
+def build_nifti_bytes(suffix=".nii"):
+    data = np.arange(8, dtype=np.int16).reshape((2, 2, 2))
+    image = nib.Nifti1Image(data, np.eye(4))
+    image.header["descrip"] = b"SYNTHETIC_ROUTING_HEADER"
+
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
+        temp_path = temp_file.name
+
+    try:
+        nib.save(image, temp_path)
+        with open(temp_path, "rb") as saved_file:
+            return saved_file.read()
+    finally:
+        os.unlink(temp_path)
+
+
 class TestIngestionRouting(unittest.TestCase):
     def assert_routes_to(self, response, modality, handler):
         self.assertEqual(response.status_code, 200)
@@ -60,6 +119,20 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(body["handler"], handler)
         self.assertEqual(body["routing_status"], "handler_selected")
         self.assertEqual(body["anonymization_status"], "placeholder")
+        self.assertEqual(body["downstream"]["ipfs_chunking"], "pending")
+        self.assertEqual(body["downstream"]["cid_encryption"], "pending")
+        self.assertEqual(body["downstream"]["metadata_indexing"], "pending")
+        self.assertEqual(body["downstream"]["blockchain_transaction"], "pending")
+
+    def assert_completed_metadata_route(self, response, modality, handler):
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "success")
+        self.assertEqual(body["detected_modality"], modality)
+        self.assertEqual(body["handler"], handler)
+        self.assertEqual(body["routing_status"], "handler_selected")
+        self.assertEqual(body["anonymization_status"], "completed")
+        self.assertIn("metadata_summary", body)
         self.assertEqual(body["downstream"]["ipfs_chunking"], "pending")
         self.assertEqual(body["downstream"]["cid_encryption"], "pending")
         self.assertEqual(body["downstream"]["metadata_indexing"], "pending")
@@ -110,24 +183,24 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertIn("PATIENT_ID_", body["anonymized_text"])
 
     def test_dicom_extension_routes_to_dicom_handler(self):
-        response = upload_file("scan.dcm", b"not-real-dicom-routing-only")
-        self.assert_routes_to(response, "dicom", "anonymize_dicom")
+        response = upload_file("scan.dcm", build_dicom_bytes())
+        self.assert_completed_metadata_route(response, "dicom", "anonymize_dicom")
 
     def test_dicom_octet_stream_routes_by_extension(self):
         response = upload_file(
             "scan.dcm",
-            b"dicom routing scaffold",
+            build_dicom_bytes(),
             "application/octet-stream",
         )
-        self.assert_routes_to(response, "dicom", "anonymize_dicom")
+        self.assert_completed_metadata_route(response, "dicom", "anonymize_dicom")
 
     def test_nifti_nii_routes_to_nifti_handler(self):
-        response = upload_file("brain.nii", b"nifti routing scaffold")
-        self.assert_routes_to(response, "nifti", "anonymize_nifti")
+        response = upload_file("brain.nii", build_nifti_bytes(".nii"))
+        self.assert_completed_metadata_route(response, "nifti", "anonymize_nifti")
 
     def test_nifti_nii_gz_routes_to_nifti_handler(self):
-        response = upload_file("brain.nii.gz", b"compressed nifti scaffold")
-        self.assert_routes_to(response, "nifti", "anonymize_nifti")
+        response = upload_file("brain.nii.gz", build_nifti_bytes(".nii.gz"))
+        self.assert_completed_metadata_route(response, "nifti", "anonymize_nifti")
 
     def test_wsi_routes_to_wsi_handler(self):
         response = upload_file("slide.svs", b"wsi routing scaffold")
@@ -168,9 +241,12 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertIn("Text uploads must be", response.json()["detail"])
 
     def test_dicom_preamble_detection_routes_to_dicom_handler(self):
-        dicom_header = b"\x00" * 128 + b"DICM" + b"routing scaffold"
-        response = upload_file("scan.bin", dicom_header, "application/octet-stream")
-        self.assert_routes_to(response, "dicom", "anonymize_dicom")
+        response = upload_file(
+            "scan.bin",
+            build_dicom_bytes(),
+            "application/octet-stream",
+        )
+        self.assert_completed_metadata_route(response, "dicom", "anonymize_dicom")
 
     def test_endpoint_resets_upload_stream_after_header_read(self):
         fake_file = FakeUploadFile(
