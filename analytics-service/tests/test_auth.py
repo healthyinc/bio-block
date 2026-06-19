@@ -48,11 +48,22 @@ class TestVerifySignature:
 class TestProductionGuard:
     """Verify that production mode does NOT silently bypass crypto checks."""
 
+    def test_production_raises_not_implemented(self):
+        import app.auth.eip712 as mod
+
+        original_env = mod.APP_ENV
+        try:
+            mod.APP_ENV = "production"
+            clear_nonces()
+            with pytest.raises(NotImplementedError, match="not yet implemented"):
+                verify_signature(
+                    WALLET, "QmCID", "0xsig", int(time.time()), 999, "hash"
+                )
+        finally:
+            mod.APP_ENV = original_env
+
     def test_import_fails_without_web3_in_production(self):
-        """Importing eip712 in production without web3.py must raise
-        RuntimeError at import time (fail-fast)."""
         with mock.patch.dict(os.environ, {"APP_ENV": "production"}):
-            # Simulate web3 not being installed
             with mock.patch.dict("sys.modules", {"web3": None, "eth_account.messages": None}):
                 with pytest.raises(RuntimeError, match="web3.py is required"):
                     importlib.reload(importlib.import_module("app.auth.eip712"))
@@ -62,11 +73,8 @@ class TestProductionGuard:
             importlib.reload(importlib.import_module("app.auth.eip712"))
 
     def test_test_env_skips_crypto(self):
-        """In test env, verify_signature should succeed without real crypto."""
         import app.auth.eip712 as mod
 
         assert mod.APP_ENV in mod._SAFE_ENVS
         clear_nonces()
-        # This succeeds because APP_ENV=test skips signer recovery
         assert verify_signature(WALLET, "QmCID", "0xsig", int(time.time()), 777, "hash")
-
