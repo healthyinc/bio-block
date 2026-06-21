@@ -7,7 +7,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.dependencies import AuthenticatedWallet, require_eip712_auth
 from app.auth.rate_limiter import rate_limiter
-from app.models.schemas import DescriptiveResponse, HealthResponse, VisualizationResponse
+from app.models.schemas import (
+    DescriptiveResponse,
+    HealthResponse,
+    RegistryResultResponse,
+    RegistryDatasetResponse,
+    VisualizationResponse,
+)
 from app.services.descriptive import run_descriptive_analysis
 from app.services.visualization import VALID_CHART_TYPES, generate_chart
 from app.utils.csv_parser import parse_csv
@@ -128,6 +134,24 @@ async def visualize(
 @app.post("/analytics/infer")
 async def infer():
     raise HTTPException(501, "Not yet implemented.")
+
+
+@app.get("/analytics/results/{result_cid}", response_model=RegistryResultResponse)
+async def get_result(result_cid: str):
+    # Stub: will be integrated with IPFS controller
+    return RegistryResultResponse(
+        result_cid=result_cid,
+        data={"status": "mock", "note": "IPFS fetch not yet implemented"}
+    )
+
+
+@app.get("/analytics/dataset/{dataset_cid}", response_model=RegistryDatasetResponse)
+async def get_dataset_results(dataset_cid: str):
+    # Stub: will be integrated with AnalyticsRegistry contract
+    return RegistryDatasetResponse(
+        dataset_cid=dataset_cid,
+        result_cids=["QmPlaceholder1", "QmPlaceholder2"]
+    )
 
 
 if __name__ == "__main__":

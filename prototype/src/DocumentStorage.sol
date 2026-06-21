@@ -90,7 +90,8 @@ contract DocumentStorage {
     }
 
     function hasAccess(string memory ipfsHash, address user) public view returns (bool) {
-        return documentOwners[ipfsHash] == user || hasPurchased[ipfsHash][user];
+        bytes32 docId = keccak256(bytes(ipfsHash));
+        return documentOwners[docId] == user || hasPurchased[ipfsHash][user];
     }
 
     function getDocuments(address user) public view returns (string[] memory) {

@@ -33,3 +33,15 @@ class VisualizationResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+class RegistryResultResponse(BaseModel):
+    result_cid: str
+    data: dict
+    message: str = "Placeholder until IPFS integration is complete"
+
+
+class RegistryDatasetResponse(BaseModel):
+    dataset_cid: str
+    result_cids: List[str]
+    message: str = "Placeholder until IPFS/Contract integration is complete"
