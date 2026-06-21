@@ -67,11 +67,6 @@ class TestProductionGuard:
             with mock.patch.dict("sys.modules", {"web3": None, "eth_account.messages": None}):
                 with pytest.raises(RuntimeError, match="web3.py is required"):
                     importlib.reload(importlib.import_module("app.auth.eip712"))
-
-        # Restore the module with test env so other tests aren't broken
-        with mock.patch.dict(os.environ, {"APP_ENV": "test"}):
-            importlib.reload(importlib.import_module("app.auth.eip712"))
-
     def test_test_env_skips_crypto(self):
         import app.auth.eip712 as mod
 
