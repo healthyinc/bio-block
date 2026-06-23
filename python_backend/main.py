@@ -335,7 +335,7 @@ async def ingest_file(
                 )
 
         file_content = None
-        if modality in {"dicom", "nifti"}:
+        if modality in {"dicom", "nifti", "wsi"}:
             await file.seek(0)
             file_content = await file.read()
 

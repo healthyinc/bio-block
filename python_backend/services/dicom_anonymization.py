@@ -10,7 +10,7 @@ except ImportError:
 
 
 SUPPORTED_PROFILES = {"strict", "research"}
-PIXEL_REDACTION_STATUS = "not_started_week4"
+PIXEL_REDACTION_STATUS = "metadata_only"
 
 PHI_KEYWORDS = {
     "PatientName",

@@ -1,9 +1,11 @@
 import asyncio
+import json
 import os
 import sys
 import tempfile
 import unittest
 from io import BytesIO
+from unittest.mock import patch
 
 import nibabel as nib
 import numpy as np
@@ -19,6 +21,36 @@ from main import app, ingest_file  # noqa: E402
 from services.ingestion import TEXT_READ_LIMIT_BYTES  # noqa: E402
 
 client = TestClient(app)
+
+
+def fake_dicom_pixel_redaction(file_content, profile="strict"):
+    return {
+        "pixel_redaction_status": "completed",
+        "ocr_boxes_detected": 1,
+        "boxes_redacted": 1,
+        "frames_processed": 1,
+        "scanned_regions": 1,
+        "ocr_engine_status": "available",
+        "sanitized_dicom_bytes": b"internal-only",
+    }
+
+
+def fake_wsi_scan(file_content, filename):
+    return {
+        "pixel_redaction_status": "redaction_plan_ready",
+        "ocr_boxes_detected": 2,
+        "boxes_redacted": 0,
+        "redaction_plan_boxes": 2,
+        "tiles_scanned": 4,
+        "priority_regions_scanned": [
+            "corner_top_left",
+            "corner_top_right",
+        ],
+        "image_dimensions": {"width": 2048, "height": 2048},
+        "tile_size": 1024,
+        "ocr_engine_status": "available",
+        "wsi_rewrite_status": "not_supported_yet",
+    }
 
 
 class FakeUploadFile:
@@ -183,16 +215,23 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertIn("PATIENT_ID_", body["anonymized_text"])
 
     def test_dicom_extension_routes_to_dicom_handler(self):
-        response = upload_file("scan.dcm", build_dicom_bytes())
+        with patch("services.ingestion.redact_dicom_pixels", fake_dicom_pixel_redaction):
+            response = upload_file("scan.dcm", build_dicom_bytes())
         self.assert_completed_metadata_route(response, "dicom", "anonymize_dicom")
+        body = response.json()
+        self.assertEqual(body["pixel_redaction_status"], "completed")
+        self.assertEqual(body["ocr_boxes_detected"], 1)
+        self.assertNotIn("sanitized_dicom_bytes", body)
 
     def test_dicom_octet_stream_routes_by_extension(self):
-        response = upload_file(
-            "scan.dcm",
-            build_dicom_bytes(),
-            "application/octet-stream",
-        )
+        with patch("services.ingestion.redact_dicom_pixels", fake_dicom_pixel_redaction):
+            response = upload_file(
+                "scan.dcm",
+                build_dicom_bytes(),
+                "application/octet-stream",
+            )
         self.assert_completed_metadata_route(response, "dicom", "anonymize_dicom")
+        self.assertEqual(response.json()["pixel_redaction_status"], "completed")
 
     def test_nifti_nii_routes_to_nifti_handler(self):
         response = upload_file("brain.nii", build_nifti_bytes(".nii"))
@@ -203,8 +242,21 @@ class TestIngestionRouting(unittest.TestCase):
         self.assert_completed_metadata_route(response, "nifti", "anonymize_nifti")
 
     def test_wsi_routes_to_wsi_handler(self):
-        response = upload_file("slide.svs", b"wsi routing scaffold")
-        self.assert_routes_to(response, "wsi", "anonymize_wsi")
+        with patch("services.ingestion.scan_wsi_bytes", fake_wsi_scan):
+            response = upload_file("slide.svs", b"wsi routing scaffold")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "success")
+        self.assertEqual(body["detected_modality"], "wsi")
+        self.assertEqual(body["handler"], "anonymize_wsi")
+        self.assertEqual(body["routing_status"], "handler_selected")
+        self.assertEqual(body["anonymization_status"], "redaction_plan_ready")
+        self.assertEqual(body["pixel_redaction_status"], "redaction_plan_ready")
+        self.assertEqual(body["tiles_scanned"], 4)
+        self.assertEqual(body["boxes_redacted"], 0)
+        self.assertEqual(body["wsi_rewrite_status"], "not_supported_yet")
+        self.assertNotIn("ocr_text", json.dumps(body).lower())
 
     def test_unsupported_file_type_is_rejected(self):
         response = upload_file("archive.zip", b"zip scaffold")
@@ -241,12 +293,17 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertIn("Text uploads must be", response.json()["detail"])
 
     def test_dicom_preamble_detection_routes_to_dicom_handler(self):
-        response = upload_file(
-            "scan.bin",
-            build_dicom_bytes(),
-            "application/octet-stream",
-        )
+        with patch("services.ingestion.redact_dicom_pixels", fake_dicom_pixel_redaction):
+            response = upload_file(
+                "scan.bin",
+                build_dicom_bytes(),
+                "application/octet-stream",
+            )
         self.assert_completed_metadata_route(response, "dicom", "anonymize_dicom")
+        self.assertNotEqual(
+            response.json()["pixel_redaction_status"],
+            "not_started_week4",
+        )
 
     def test_endpoint_resets_upload_stream_after_header_read(self):
         fake_file = FakeUploadFile(

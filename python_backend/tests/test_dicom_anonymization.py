@@ -115,10 +115,23 @@ def test_dicom_pixel_data_is_not_modified():
 
     assert result["metadata_summary"]["pixel_data_present"] is True
     assert result["metadata_summary"]["pixel_data_preserved"] is True
-    assert result["pixel_redaction_status"] == "not_started_week4"
+    assert result["pixel_redaction_status"] == "metadata_only"
 
 
-def test_dicom_api_returns_completed_without_raw_phi():
+def test_dicom_api_returns_completed_without_raw_phi(monkeypatch):
+    monkeypatch.setattr(
+        "services.ingestion.redact_dicom_pixels",
+        lambda file_content, profile="strict": {
+            "pixel_redaction_status": "completed",
+            "ocr_boxes_detected": 1,
+            "boxes_redacted": 1,
+            "frames_processed": 1,
+            "scanned_regions": 1,
+            "ocr_engine_status": "available",
+            "sanitized_dicom_bytes": b"internal-only",
+        },
+    )
+
     response = client.post(
         "/api/v1/ingest",
         files={
@@ -136,7 +149,12 @@ def test_dicom_api_returns_completed_without_raw_phi():
     assert body["detected_modality"] == "dicom"
     assert body["handler"] == "anonymize_dicom"
     assert body["anonymization_status"] == "completed"
-    assert body["pixel_redaction_status"] == "not_started_week4"
+    assert body["pixel_redaction_status"] == "completed"
+    assert body["ocr_boxes_detected"] == 1
+    assert body["boxes_redacted"] == 1
+    assert body["ocr_engine_status"] == "available"
     assert TOP_LEVEL_NAME not in response_text
     assert PATIENT_ID not in response_text
+    assert "BURNED_IN_LABEL" not in response_text
+    assert "sanitized_dicom_bytes" not in body
     assert "file_bytes" not in body
