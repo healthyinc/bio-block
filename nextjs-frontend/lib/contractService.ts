@@ -1,8 +1,8 @@
 import { ethers, BrowserProvider, Contract } from 'ethers';
 import type { ContractABI, AnalyticsRecord } from './types';
 
-const CONTRACT_ADDRESS = '0xd58de64aac08d5412b8020c7c61b215fec0c9644';
-const ANALYTICS_REGISTRY_ADDRESS = '0x9148Cd47B9c166CC651F57B8BfA77bf66496A90f';
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
+const ANALYTICS_REGISTRY_ADDRESS = process.env.NEXT_PUBLIC_ANALYTICS_REGISTRY_ADDRESS!;
 
 const CONTRACT_ABI: ContractABI[] = [
   {
