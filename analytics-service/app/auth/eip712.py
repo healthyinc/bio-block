@@ -102,6 +102,8 @@ def verify_signature(
         return True
 
     if w3 is None:
+        if Web3 is None:
+            raise RuntimeError("web3.py is required in production.")
         w3 = Web3(Web3.HTTPProvider(SEPOLIA_RPC))
 
     # --- Signer recovery ---
