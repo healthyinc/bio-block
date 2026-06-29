@@ -7,8 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.dependencies import AuthenticatedWallet, require_eip712_auth
 from app.auth.rate_limiter import rate_limiter
-from app.models.schemas import DescriptiveResponse, HealthResponse
+from app.models.schemas import DescriptiveResponse, HealthResponse, VisualizationResponse
 from app.services.descriptive import run_descriptive_analysis
+from app.services.visualization import VALID_CHART_TYPES, generate_chart
 from app.utils.csv_parser import parse_csv
 
 APP_VERSION = "0.1.0"
@@ -44,8 +45,10 @@ async def descriptive_analysis(
 
     contents = await file.read()
     df = parse_csv(contents)
-    target_cols = columns.split(",") if columns else None
-    analysis = run_descriptive_analysis(df, columns=target_cols)
+    target_cols = None
+    if columns and columns.strip() and columns.strip() != "string":
+        target_cols = [c.strip() for c in columns.split(",") if c.strip() and c.strip() != "string"]
+    analysis = run_descriptive_analysis(df, columns=target_cols or None)
 
     return DescriptiveResponse(
         source_dataset_cid=auth.dataset_cid,
@@ -55,9 +58,71 @@ async def descriptive_analysis(
     )
 
 
-@app.post("/analytics/visualize")
-async def visualize():
-    raise HTTPException(501, "Not yet implemented.")
+@app.post("/analytics/visualize", response_model=VisualizationResponse)
+async def visualize(
+    auth: AuthenticatedWallet = Depends(require_eip712_auth),
+    file: UploadFile = File(...),
+    chart_type: str = Form(..., description=f"One of: {', '.join(VALID_CHART_TYPES)}"),
+    x_column: Optional[str] = Form(None),
+    y_column: Optional[str] = Form(None),
+    columns: Optional[str] = Form(None, description="Comma-separated column names for multi-column charts"),
+    group_column: Optional[str] = Form(None),
+    aggregation: Optional[str] = Form("count", description="Aggregation: count, mean, sum"),
+    bins: Optional[int] = Form(20, description="Number of bins for histograms"),
+):
+    # Per-wallet rate limiting
+    if not rate_limiter.check(auth.wallet_address):
+        raise HTTPException(429, "Rate limit exceeded. Try again shortly.")
+
+    contents = await file.read()
+
+    if chart_type not in VALID_CHART_TYPES:
+        raise HTTPException(
+            400,
+            f"Unsupported chart type '{chart_type}'. Valid types: {VALID_CHART_TYPES}",
+        )
+
+    df = parse_csv(contents)
+
+    # Swagger UI sends "string" as default placeholder — treat as empty
+    def _clean(val: Optional[str]) -> Optional[str]:
+        if val is None:
+            return None
+        val = val.strip()
+        if val == "" or val == "string":
+            return None
+        return val
+
+    x_col = _clean(x_column)
+    y_col = _clean(y_column)
+    grp_col = _clean(group_column)
+    cols_list = None
+    if columns and _clean(columns):
+        cols_list = [c.strip() for c in columns.split(",") if c.strip() and c.strip() != "string"]
+        if not cols_list:
+            cols_list = None
+
+    try:
+        result = generate_chart(
+            df=df,
+            chart_type=chart_type,
+            x_column=x_col,
+            y_column=y_col,
+            columns=cols_list,
+            group_column=grp_col,
+            aggregation=_clean(aggregation) or "count",
+            bins=bins or 20,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+    return VisualizationResponse(
+        source_dataset_cid=auth.dataset_cid,
+        chart_type=chart_type,
+        chart_config=result["chart_config"],
+        image=result["image"],
+        row_count=len(df),
+    )
 
 
 @app.post("/analytics/infer")
