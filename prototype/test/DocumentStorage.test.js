@@ -51,7 +51,8 @@ describe("DocumentStorage", function () {
 
       expect(receipt.events[0].event).to.equal("MetadataUpdated");
 
-      const price = await documentStorage.documentPrices(ipfsHash);
+      const docId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(ipfsHash));
+      const price = await documentStorage.documentPrices(docId);
       const metadata = await documentStorage.getMetadata(ipfsHash);
 
       expect(price.toString()).to.equal(newPrice.toString());
@@ -86,8 +87,9 @@ describe("DocumentStorage", function () {
 
       expect(receipt.events[0].event).to.equal("DocumentDeleted");
 
-      const owner_after = await documentStorage.documentOwners(ipfsHash);
-      const price_after = await documentStorage.documentPrices(ipfsHash);
+      const docId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(ipfsHash));
+      const owner_after = await documentStorage.documentOwners(docId);
+      const price_after = await documentStorage.documentPrices(docId);
       const metadata_after = await documentStorage.getMetadata(ipfsHash);
 
       expect(owner_after).to.equal(ethers.constants.AddressZero);
@@ -233,7 +235,8 @@ describe("DocumentStorage", function () {
           .storeDocument(ipfsHash, ethers.utils.parseEther("0.1"), "hijacked")
       ).to.be.revertedWith("Document already exists");
 
-      const storedOwner = await documentStorage.documentOwners(ipfsHash);
+      const docId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(ipfsHash));
+      const storedOwner = await documentStorage.documentOwners(docId);
       expect(storedOwner).to.equal(owner.address);
     });
 
@@ -248,7 +251,8 @@ describe("DocumentStorage", function () {
         .connect(buyer)
         .storeDocument(ipfsHash, ethers.utils.parseEther("2.0"), "new owner");
 
-      const newOwner = await documentStorage.documentOwners(ipfsHash);
+      const docId = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(ipfsHash));
+      const newOwner = await documentStorage.documentOwners(docId);
       expect(newOwner).to.equal(buyer.address);
     });
   });
