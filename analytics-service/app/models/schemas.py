@@ -20,6 +20,8 @@ class DescriptiveResponse(BaseModel):
     row_count: int
     columns_analyzed: list
     results: dict
+    result_cid: Optional[str] = None
+    tx_hash: Optional[str] = None
 
 
 class VisualizationResponse(BaseModel):
@@ -29,6 +31,8 @@ class VisualizationResponse(BaseModel):
     chart_config: Dict[str, Any]
     image: str = Field(..., description="Base64-encoded PNG image")
     row_count: int
+    result_cid: Optional[str] = None
+    tx_hash: Optional[str] = None
 
 
 class ErrorResponse(BaseModel):
@@ -38,10 +42,8 @@ class ErrorResponse(BaseModel):
 class RegistryResultResponse(BaseModel):
     result_cid: str
     data: dict
-    message: str = "Placeholder until IPFS integration is complete"
 
 
 class RegistryDatasetResponse(BaseModel):
     dataset_cid: str
     result_cids: List[str]
-    message: str = "Placeholder until IPFS/Contract integration is complete"

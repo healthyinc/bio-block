@@ -1,11 +1,12 @@
 const express = require("express");
 const router = express.Router();
 const { uploadToIPFS, upload } = require("../controllers/ipfsController");
+const { uploadAnalyticsResult } = require("../controllers/analyticsIpfsController");
 
-// POST /api/ipfs/upload - Upload encrypted files to IPFS
 router.post("/upload", upload.single("encryptedFile"), uploadToIPFS);
 
-// Error handling for multer
+router.post("/upload-analytics-result", express.json(), uploadAnalyticsResult);
+
 router.use((error, req, res, next) => {
   if (error.code === "LIMIT_FILE_SIZE") {
     return res.status(400).json({

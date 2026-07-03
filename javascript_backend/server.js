@@ -34,6 +34,7 @@ app.get("/", (req, res) => {
       "/api/health",
       "/api/anonymize",
       "/api/ipfs/upload",
+      "/api/ipfs/upload-analytics-result",
       "/api/preview/image",
       "/api/preview/spreadsheet",
       "/api/preview/pdf",

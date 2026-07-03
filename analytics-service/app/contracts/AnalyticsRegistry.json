@@ -1,0 +1,61 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "internalType": "address", "name": "analyst", "type": "address" },
+      { "indexed": false, "internalType": "string", "name": "sourceCID", "type": "string" },
+      { "indexed": false, "internalType": "string", "name": "resultCID", "type": "string" },
+      { "indexed": false, "internalType": "string", "name": "analysisType", "type": "string" },
+      { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+    ],
+    "name": "AnalyticsRegistered",
+    "type": "event"
+  },
+  {
+    "inputs": [{ "internalType": "string", "name": "sourceCID", "type": "string" }],
+    "name": "getAnalyticsForDataset",
+    "outputs": [{ "internalType": "string[]", "name": "", "type": "string[]" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "offset", "type": "uint256" },
+      { "internalType": "uint256", "name": "limit", "type": "uint256" }
+    ],
+    "name": "getMyAnalytics",
+    "outputs": [
+      {
+        "components": [
+          { "internalType": "string", "name": "sourceCID", "type": "string" },
+          { "internalType": "string", "name": "resultCID", "type": "string" },
+          { "internalType": "string", "name": "analysisType", "type": "string" },
+          { "internalType": "uint256", "name": "timestamp", "type": "uint256" }
+        ],
+        "internalType": "struct AnalyticsRegistry.AnalyticsRecord[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getMyAnalyticsCount",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "string", "name": "sourceCID", "type": "string" },
+      { "internalType": "string", "name": "resultCID", "type": "string" },
+      { "internalType": "string", "name": "analysisType", "type": "string" }
+    ],
+    "name": "registerAnalytics",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]
