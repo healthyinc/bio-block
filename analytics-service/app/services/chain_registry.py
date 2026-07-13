@@ -64,15 +64,27 @@ async def register_on_chain(
     source_cid: str,
     result_cid: str,
     analysis_type: str,
+    analyst_address: str,
 ) -> Optional[str]:
-    """Call registerAnalytics() on-chain. Returns tx hash or None."""
+    """Call registerAnalytics() on-chain.
+
+    The server wallet (ANALYTICS_PRIVATE_KEY) pays the gas, but the
+    ``analyst_address`` — obtained from EIP-712 authentication — is
+    forwarded to the contract so the on-chain record is attributed to
+    the real analyst, not the relayer.
+
+    Returns tx hash or None.
+    """
     if not _ensure_web3():
         return None
 
     try:
+        from web3 import Web3
+
+        analyst_checksum = Web3.to_checksum_address(analyst_address)
         nonce = _w3.eth.get_transaction_count(_account.address)
         tx = _contract.functions.registerAnalytics(
-            source_cid, result_cid, analysis_type
+            source_cid, result_cid, analysis_type, analyst_checksum
         ).build_transaction(
             {
                 "from": _account.address,
@@ -85,8 +97,9 @@ async def register_on_chain(
         tx_hash = _w3.eth.send_raw_transaction(signed.raw_transaction)
         hex_hash = tx_hash.hex()
         logger.info(
-            "On-chain registration sent  tx=%s  source=%s  result=%s",
+            "On-chain registration sent  tx=%s  analyst=%s  source=%s  result=%s",
             hex_hash,
+            analyst_address,
             source_cid[:16],
             result_cid[:16],
         )
@@ -97,7 +110,7 @@ async def register_on_chain(
             try:
                 nonce = _w3.eth.get_transaction_count(_account.address, "pending")
                 tx = _contract.functions.registerAnalytics(
-                    source_cid, result_cid, analysis_type
+                    source_cid, result_cid, analysis_type, analyst_checksum
                 ).build_transaction(
                     {
                         "from": _account.address,

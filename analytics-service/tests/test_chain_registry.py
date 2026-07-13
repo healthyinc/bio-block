@@ -21,6 +21,7 @@ class TestRegisterOnChain:
             source_cid="QmSource",
             result_cid="QmResult",
             analysis_type="descriptive",
+            analyst_address="0x0000000000000000000000000000000000000000",
         )
         assert result is None
 
@@ -34,7 +35,7 @@ class TestRegisterOnChain:
 
         class MockFunctions:
             @staticmethod
-            def registerAnalytics(source_cid, result_cid, analysis_type):
+            def registerAnalytics(source_cid, result_cid, analysis_type, analyst):
                 class _Tx:
                     @staticmethod
                     def build_transaction(params):
@@ -76,6 +77,7 @@ class TestRegisterOnChain:
             source_cid="QmSource",
             result_cid="QmResult",
             analysis_type="descriptive",
+            analyst_address="0x1234567890abcdef1234567890abcdef12345678",
         )
         assert result is not None
         assert isinstance(result, str)

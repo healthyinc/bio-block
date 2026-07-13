@@ -20,10 +20,11 @@
   },
   {
     "inputs": [
+      { "internalType": "address", "name": "analyst", "type": "address" },
       { "internalType": "uint256", "name": "offset", "type": "uint256" },
       { "internalType": "uint256", "name": "limit", "type": "uint256" }
     ],
-    "name": "getMyAnalytics",
+    "name": "getAnalyticsForAddress",
     "outputs": [
       {
         "components": [
@@ -41,9 +42,16 @@
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "getMyAnalyticsCount",
+    "inputs": [{ "internalType": "address", "name": "analyst", "type": "address" }],
+    "name": "getAnalyticsCount",
     "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "relayer",
+    "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
     "stateMutability": "view",
     "type": "function"
   },
@@ -51,7 +59,8 @@
     "inputs": [
       { "internalType": "string", "name": "sourceCID", "type": "string" },
       { "internalType": "string", "name": "resultCID", "type": "string" },
-      { "internalType": "string", "name": "analysisType", "type": "string" }
+      { "internalType": "string", "name": "analysisType", "type": "string" },
+      { "internalType": "address", "name": "analyst", "type": "address" }
     ],
     "name": "registerAnalytics",
     "outputs": [],

@@ -91,6 +91,7 @@ async def descriptive_analysis(
                 source_cid=auth.dataset_cid,
                 result_cid=result_cid,
                 analysis_type="descriptive",
+                analyst_address=auth.wallet_address,
             )
 
     return DescriptiveResponse(
@@ -200,6 +201,7 @@ async def visualize(
                 source_cid=auth.dataset_cid,
                 result_cid=result_cid,
                 analysis_type="graphical",
+                analyst_address=auth.wallet_address,
             )
 
     return VisualizationResponse(
