@@ -64,6 +64,16 @@ def _one_sample_csv(n=50, mean=110, std=10, seed=42):
     return buf.getvalue()
 
 
+def _chi_square_csv():
+    df = pd.DataFrame({
+        "treatment": ["Yes", "Yes", "No", "No"] * 25,
+        "recovered": ["Yes", "No", "Yes", "No"] * 25
+    })
+    buf = io.BytesIO()
+    df.to_csv(buf, index=False)
+    return buf.getvalue()
+
+
 @pytest_asyncio.fixture
 async def client():
     transport = ASGITransport(app=app)
@@ -421,31 +431,40 @@ class TestValidation:
         assert resp.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_unsupported_test_type_chi_square(self, client):
+    async def test_chi_square_endpoint(self, client):
         resp = await client.post(
             "/analytics/infer",
             data={
                 **_auth_form(nonce=31),
                 "test_type": "chi_square",
-                "numeric_column": "score",
+                "test_subtype": "independence",
+                "column_1": "treatment",
+                "column_2": "recovered",
             },
-            files={"file": ("data.csv", _two_group_csv(), "text/csv")},
+            files={"file": ("data.csv", _chi_square_csv(), "text/csv")},
         )
-        assert resp.status_code == 400
-        assert "not yet implemented" in resp.json()["detail"].lower()
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["test_used"] == "chi_square_independence"
+        assert "contingency_table" in body
 
     @pytest.mark.asyncio
-    async def test_unsupported_test_type_correlation(self, client):
+    async def test_correlation_endpoint(self, client):
         resp = await client.post(
             "/analytics/infer",
             data={
                 **_auth_form(nonce=32),
                 "test_type": "correlation",
-                "numeric_column": "score",
+                "test_subtype": "pearson",
+                "column_1": "before",
+                "column_2": "after",
             },
-            files={"file": ("data.csv", _two_group_csv(), "text/csv")},
+            files={"file": ("data.csv", _paired_csv(), "text/csv")},
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["test_used"] == "pearson"
+        assert "confidence_interval" in body
 
     @pytest.mark.asyncio
     async def test_invalid_subtype(self, client):
