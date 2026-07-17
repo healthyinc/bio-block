@@ -34,6 +34,10 @@ from services.ingestion import (
     detect_modality,
     route_for_ingestion,
 )
+from services.dicom_anonymization import (
+    DicomAnonymizationError,
+    anonymize_dicom_file_bytes,
+)
 
 # PDF extraction imports
 try:
@@ -682,73 +686,51 @@ DICOM_PHI_TAGS = {
 
 
 @app.post("/anonymize_dicom")
-async def anonymize_dicom(file: UploadFile = File(...)):
+async def anonymize_dicom(
+    file: UploadFile = File(...),
+    profile: str = Form("strict"),
+):
     """
-    Anonymize PHI in DICOM file metadata. Strips patient identifiers
-    following HIPAA Safe Harbor de-identification standards.
-    Returns the anonymized DICOM file for download.
+    Anonymize DICOM metadata and return a downloadable DICOM file.
+
+    The response is a valid .dcm attachment so it can be saved and opened
+    in a DICOM viewer. Raw PHI values are never returned in the response.
     """
-    if not pydicom_available:
-        raise HTTPException(
-            status_code=503,
-            detail="pydicom not available. Install with: pip install pydicom"
-        )
-
-    if not file.filename or not file.filename.lower().endswith(('.dcm', '.dicom')):
-        raise HTTPException(
-            status_code=400,
-            detail="File must be a DICOM file (.dcm or .dicom)"
-        )
-
     try:
         contents = await file.read()
+        result = anonymize_dicom_file_bytes(contents, profile=profile)
+    except DicomAnonymizationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to anonymize DICOM") from exc
 
-        with tempfile.NamedTemporaryFile(suffix=".dcm", delete=False) as tmp:
-            tmp.write(contents)
-            tmp_path = tmp.name
+    safe_name = (file.filename or "dicom.dcm").strip().replace("\\", "/").rsplit("/", 1)[-1]
+    if not safe_name:
+        safe_name = "dicom.dcm"
+    stem = safe_name.rsplit(".", 1)[0] if "." in safe_name else safe_name
+    download_name = f"anonymized_{stem}.dcm"
+    metadata_summary = result["metadata_summary"]
 
-        try:
-            ds = pydicom.dcmread(tmp_path)
-            stripped_fields = []
+    audit_logger.log_operation(
+        operation="ANONYMIZE",
+        details=(
+            f"dicom: {safe_name}, fields_scrubbed: "
+            f"{metadata_summary['fields_scrubbed']}, "
+            f"private_tags_removed: {metadata_summary['private_tags_removed']}"
+        ),
+    )
 
-            for tag, field_name in DICOM_PHI_TAGS.items():
-                if tag in ds:
-                    original_value = str(ds[tag].value)
-                    ds[tag].value = ""
-                    stripped_fields.append({
-                        "field": field_name,
-                        "tag": f"({tag[0]:04X},{tag[1]:04X})",
-                        "original_value": original_value
-                    })
-
-            # Save anonymized DICOM to buffer
-            anonymized_buffer = io.BytesIO()
-            ds.save_as(anonymized_buffer)
-            anonymized_buffer.seek(0)
-
-            audit_logger.log_operation(
-                operation="ANONYMIZE",
-                details=f"dicom: {file.filename}, fields_stripped: {len(stripped_fields)}",
-            )
-
-            return {
-                "filename": file.filename,
-                "fields_stripped": len(stripped_fields),
-                "stripped_details": stripped_fields,
-                "anonymized_file_base64": anonymized_buffer.getvalue().hex(),
-                "message": f"Successfully anonymized {len(stripped_fields)} PHI fields from DICOM metadata"
-            }
-
-        finally:
-            os.unlink(tmp_path)
-
-    except HTTPException:
-        raise
-    except InvalidDicomError:
-        raise HTTPException(status_code=400, detail="Invalid DICOM file format")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to anonymize DICOM: {str(e)}")
-
+    return StreamingResponse(
+        io.BytesIO(result["anonymized_dicom_bytes"]),
+        media_type="application/dicom",
+        headers={
+            "Content-Disposition": f'attachment; filename="{download_name}"',
+            "X-BioBlock-Anonymization-Status": result["anonymization_status"],
+            "X-BioBlock-Fields-Scrubbed": str(metadata_summary["fields_scrubbed"]),
+            "X-BioBlock-Private-Tags-Removed": str(metadata_summary["private_tags_removed"]),
+            "X-BioBlock-Pixel-Data-Preserved": str(metadata_summary["pixel_data_preserved"]).lower(),
+        },
+    )
 
 @app.post("/store")
 async def store_data(request: StoreWithContentRequest):
