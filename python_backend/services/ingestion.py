@@ -6,7 +6,7 @@ from services.text_anonymization import (
 )
 from services.dicom_anonymization import (
     DicomAnonymizationError,
-    anonymize_dicom_metadata,
+    anonymize_dicom_file_bytes,
 )
 from services.nifti_anonymization import (
     NiftiAnonymizationError,
@@ -139,12 +139,13 @@ def anonymize_text(
 
 def anonymize_dicom(file_content: bytes, profile: str) -> Dict[str, Any]:
     try:
-        metadata_result = anonymize_dicom_metadata(file_content, profile=profile)
+        metadata_result = anonymize_dicom_file_bytes(file_content, profile=profile)
     except DicomAnonymizationError as exc:
         raise IngestionError(exc.detail, status_code=exc.status_code) from exc
 
+    metadata_scrubbed_content = metadata_result["anonymized_dicom_bytes"]
     pixel_result = safe_ocr_response(
-        redact_dicom_pixels(file_content, profile=profile)
+        redact_dicom_pixels(metadata_scrubbed_content, profile=profile)
     )
 
     return {

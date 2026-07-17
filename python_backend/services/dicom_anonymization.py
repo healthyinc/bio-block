@@ -103,27 +103,17 @@ def _remove_private_tags(dataset: Any) -> int:
     return removed
 
 
-def anonymize_dicom_metadata(
-    file_bytes: bytes,
-    profile: str = "strict",
-) -> Dict[str, Any]:
-    if pydicom is None:
-        raise DicomAnonymizationError(
-            "DICOM metadata anonymization dependency is not available.",
-            status_code=503,
-        )
-    if not file_bytes:
-        raise DicomAnonymizationError("DICOM file is empty")
-
-    privacy_profile = _normalize_profile(profile)
-
+def _read_dataset(file_bytes: bytes) -> Any:
     try:
-        dataset = pydicom.dcmread(BytesIO(file_bytes), force=False)
+        return pydicom.dcmread(BytesIO(file_bytes), force=False)
     except InvalidDicomError as exc:
         raise DicomAnonymizationError("Invalid DICOM file format") from exc
     except Exception as exc:
         raise DicomAnonymizationError("Invalid DICOM file format") from exc
 
+
+def _anonymize_dataset(dataset: Any, profile: str) -> Dict[str, Any]:
+    privacy_profile = _normalize_profile(profile)
     original_pixel_data = bytes(dataset.PixelData) if "PixelData" in dataset else None
 
     scrubbed = _scrub_dataset(dataset)
@@ -145,3 +135,43 @@ def anonymize_dicom_metadata(
         },
         "pixel_redaction_status": PIXEL_REDACTION_STATUS,
     }
+
+
+def _dataset_to_bytes(dataset: Any) -> bytes:
+    output = BytesIO()
+    dataset.save_as(output, enforce_file_format=True)
+    return output.getvalue()
+
+
+def anonymize_dicom_metadata(
+    file_bytes: bytes,
+    profile: str = "strict",
+) -> Dict[str, Any]:
+    if pydicom is None:
+        raise DicomAnonymizationError(
+            "DICOM metadata anonymization dependency is not available.",
+            status_code=503,
+        )
+    if not file_bytes:
+        raise DicomAnonymizationError("DICOM file is empty")
+
+    dataset = _read_dataset(file_bytes)
+    return _anonymize_dataset(dataset, profile)
+
+
+def anonymize_dicom_file_bytes(
+    file_bytes: bytes,
+    profile: str = "strict",
+) -> Dict[str, Any]:
+    if pydicom is None:
+        raise DicomAnonymizationError(
+            "DICOM metadata anonymization dependency is not available.",
+            status_code=503,
+        )
+    if not file_bytes:
+        raise DicomAnonymizationError("DICOM file is empty")
+
+    dataset = _read_dataset(file_bytes)
+    result = _anonymize_dataset(dataset, profile)
+    result["anonymized_dicom_bytes"] = _dataset_to_bytes(dataset)
+    return result

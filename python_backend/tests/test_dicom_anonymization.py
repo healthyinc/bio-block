@@ -3,6 +3,7 @@ import os
 import sys
 from io import BytesIO
 
+import pydicom
 import pytest
 from fastapi.testclient import TestClient
 from pydicom.dataset import Dataset, FileDataset, FileMetaDataset
@@ -14,6 +15,7 @@ os.environ.setdefault("BIOBLOCK_STUDY_SALT", "week3-test-salt")
 
 from main import app  # noqa: E402
 from services.dicom_anonymization import (  # noqa: E402
+    anonymize_dicom_file_bytes,
     DicomAnonymizationError,
     anonymize_dicom_metadata,
 )
@@ -118,10 +120,29 @@ def test_dicom_pixel_data_is_not_modified():
     assert result["pixel_redaction_status"] == "metadata_only"
 
 
+def test_dicom_file_bytes_are_metadata_scrubbed_and_readable():
+    result = anonymize_dicom_file_bytes(build_dicom_bytes())
+    safe_result = {
+        key: value
+        for key, value in result.items()
+        if key != "anonymized_dicom_bytes"
+    }
+    dataset = pydicom.dcmread(BytesIO(result["anonymized_dicom_bytes"]))
+
+    assert dataset.PatientName == ""
+    assert dataset.PatientID == ""
+    assert dataset.PixelData == PIXEL_BYTES
+    assert TOP_LEVEL_NAME not in json.dumps(safe_result)
+    assert PATIENT_ID not in json.dumps(safe_result)
+    assert result["metadata_summary"]["pixel_data_preserved"] is True
+
 def test_dicom_api_returns_completed_without_raw_phi(monkeypatch):
-    monkeypatch.setattr(
-        "services.ingestion.redact_dicom_pixels",
-        lambda file_content, profile="strict": {
+    def fake_pixel_redaction(file_content, profile="strict"):
+        dataset = pydicom.dcmread(BytesIO(file_content))
+        assert dataset.PatientName == ""
+        assert dataset.PatientID == ""
+        assert dataset.PixelData == PIXEL_BYTES
+        return {
             "pixel_redaction_status": "completed",
             "ocr_boxes_detected": 1,
             "boxes_redacted": 1,
@@ -129,7 +150,11 @@ def test_dicom_api_returns_completed_without_raw_phi(monkeypatch):
             "scanned_regions": 1,
             "ocr_engine_status": "available",
             "sanitized_dicom_bytes": b"internal-only",
-        },
+        }
+
+    monkeypatch.setattr(
+        "services.ingestion.redact_dicom_pixels",
+        fake_pixel_redaction,
     )
 
     response = client.post(
