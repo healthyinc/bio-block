@@ -2,6 +2,7 @@ import unittest
 from fastapi.testclient import TestClient
 import sys
 import os
+from io import BytesIO
 
 # Add parent directory to path to import main
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -176,7 +177,7 @@ class TestAPI(unittest.TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_anonymize_dicom_with_phi(self):
-        """Test DICOM anonymization strips PHI metadata tags"""
+        """Test DICOM anonymization replaces PHI metadata tags with safe placeholders"""
         try:
             import pydicom
             from pydicom.dataset import Dataset, FileDataset
@@ -205,14 +206,19 @@ class TestAPI(unittest.TestCase):
             os.unlink(tmp.name)
 
             self.assertEqual(resp.status_code, 200)
-            result = resp.json()
-            self.assertIn("fields_stripped", result)
-            self.assertGreater(result["fields_stripped"], 0)
-            # Verify known PHI fields were stripped
-            stripped_names = [s["field"] for s in result["stripped_details"]]
-            self.assertIn("PatientName", stripped_names)
-            self.assertIn("PatientID", stripped_names)
-            self.assertIn("PatientBirthDate", stripped_names)
+            self.assertTrue(resp.headers["content-type"].startswith("application/dicom"))
+            self.assertIn("anonymized_test.dcm", resp.headers["content-disposition"])
+            self.assertGreater(int(resp.headers["x-bioblock-fields-scrubbed"]), 0)
+
+            downloaded = pydicom.dcmread(BytesIO(resp.content), force=False)
+            self.assertEqual(str(downloaded.PatientName), "")
+            self.assertEqual(str(downloaded.PatientID), "")
+            self.assertEqual(str(downloaded.PatientBirthDate), "19000101")
+            self.assertEqual(str(downloaded.ReferringPhysicianName), "")
+            self.assertEqual(str(downloaded.InstitutionName), "")
+            self.assertEqual(str(downloaded.PatientIdentityRemoved), "YES")
+            self.assertNotIn(b"John Smith", resp.content)
+            self.assertNotIn(b"PAT12345", resp.content)
         except ImportError:
             self.skipTest("pydicom not installed, skipping DICOM test")
 
@@ -241,10 +247,15 @@ class TestAPI(unittest.TestCase):
             os.unlink(tmp.name)
 
             self.assertEqual(resp.status_code, 200)
-            result = resp.json()
-            self.assertEqual(result["fields_stripped"], 0)
+            self.assertTrue(resp.headers["content-type"].startswith("application/dicom"))
+            self.assertIn("anonymized_clean.dcm", resp.headers["content-disposition"])
+            self.assertEqual(int(resp.headers["x-bioblock-fields-scrubbed"]), 0)
+
+            downloaded = pydicom.dcmread(BytesIO(resp.content), force=False)
+            self.assertEqual(downloaded.Modality, "CT")
         except ImportError:
             self.skipTest("pydicom not installed, skipping DICOM test")
 
 if __name__ == "__main__":
     unittest.main()
+

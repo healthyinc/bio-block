@@ -107,3 +107,22 @@ def test_nifti_api_returns_completed_for_supported_extensions(filename, suffix):
     assert HEADER_TEXT.decode("ascii") not in response_text
     assert AUX_TEXT.decode("ascii") not in response_text
     assert "file_bytes" not in body
+
+
+def test_nifti_research_profile_removes_extensions_and_preserves_safe_metadata():
+    result = anonymize_nifti_metadata(
+        build_nifti_bytes(".nii"),
+        "scan.nii",
+        profile="research",
+    )
+    summary = result["metadata_summary"]
+
+    assert summary["profile"] == "research"
+    assert summary["remove_nifti_extensions"] is True
+    assert summary["extensions_removed"] == 1
+    assert summary["extensions_preserved"] == 0
+    assert summary["shape_preserved"] is True
+    assert summary["affine_preserved"] is True
+    assert summary["datatype_preserved"] is True
+
+
