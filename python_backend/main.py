@@ -38,6 +38,10 @@ from services.dicom_anonymization import (
     DicomAnonymizationError,
     anonymize_dicom_file_bytes,
 )
+from services.tabular_anonymization import (
+    TabularAnonymizationError,
+    anonymize_tabular_csv,
+)
 
 # PDF extraction imports
 try:
@@ -294,6 +298,7 @@ async def root():
             "/anonymize_text": "Anonymize PHI in plain text (Presidio + spaCy fallback)",
             "/anonymize_pdf": "Anonymize PHI in PDF documents (per-page extraction and redaction)",
             "/anonymize_dicom": "Anonymize DICOM files with strict/research privacy profiles",
+            "/anonymize_csv": "Anonymize CSV files and return a downloadable CSV",
             "/api/v1/ingest": "Route uploaded biomedical files through profile-aware anonymization handlers"
         },
         "status": {
@@ -339,7 +344,7 @@ async def ingest_file(
                 )
 
         file_content = None
-        if modality in {"dicom", "nifti", "wsi"}:
+        if modality in {"csv", "dicom", "nifti", "wsi"}:
             await file.seek(0)
             file_content = await file.read()
 
@@ -731,6 +736,132 @@ async def anonymize_dicom(
             "X-BioBlock-Pixel-Data-Preserved": str(metadata_summary["pixel_data_preserved"]).lower(),
         },
     )
+
+def _parse_optional_csv_columns(columns: Optional[str]) -> Optional[List[str]]:
+    if columns is None:
+        return None
+    if columns.strip().lower() == "string":
+        return None
+    parsed = [column.strip() for column in columns.split(",") if column.strip()]
+    return parsed or None
+
+
+def _parse_optional_csv_column(column: Optional[str]) -> Optional[str]:
+    if column is None:
+        return None
+    parsed = column.strip()
+    if not parsed or parsed.lower() == "string":
+        return None
+    return parsed
+
+
+def _parse_safe_harbor_mappings(
+    mappings: Optional[str],
+) -> Optional[Dict[str, List[str]]]:
+    if mappings is None or not mappings.strip() or mappings.strip().lower() == "string":
+        return None
+    try:
+        parsed = json.loads(mappings)
+    except json.JSONDecodeError as exc:
+        raise TabularAnonymizationError(
+            "safe_harbor_mappings must be a valid JSON object"
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise TabularAnonymizationError(
+            "safe_harbor_mappings must be a JSON object"
+        )
+    normalized: Dict[str, List[str]] = {}
+    for category, columns in parsed.items():
+        if isinstance(columns, str):
+            columns = [columns]
+        if not isinstance(columns, list) or not all(
+            isinstance(column, str) for column in columns
+        ):
+            raise TabularAnonymizationError(
+                "Safe Harbor mapping values must be column-name lists"
+            )
+        normalized[str(category)] = columns
+    return normalized
+
+
+@app.post("/anonymize_csv")
+async def anonymize_csv_file(
+    file: UploadFile = File(...),
+    k: int = Form(5),
+    l: int = Form(2),
+    direct_identifiers: Optional[str] = Form(None),
+    quasi_identifiers: Optional[str] = Form(None),
+    sensitive_column: Optional[str] = Form(None),
+    safe_harbor_mappings: Optional[str] = Form(None),
+):
+    """
+    Anonymize a CSV file and return a downloadable anonymized CSV.
+
+    Use this endpoint for local before/after demos. The general ingestion route
+    remains summary-only and does not return raw uploaded rows.
+    """
+    try:
+        contents = await file.read()
+        result = anonymize_tabular_csv(
+            contents,
+            k=k,
+            l=l,
+            direct_identifiers=_parse_optional_csv_columns(direct_identifiers),
+            quasi_identifiers=_parse_optional_csv_columns(quasi_identifiers),
+            sensitive_column=_parse_optional_csv_column(sensitive_column),
+            safe_harbor_mappings=_parse_safe_harbor_mappings(
+                safe_harbor_mappings
+            ),
+            include_anonymized_csv=True,
+        )
+    except TabularAnonymizationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to anonymize CSV")
+
+    safe_name = (
+        (file.filename or "dataset.csv")
+        .strip()
+        .replace("\\", "/")
+        .rsplit("/", 1)[-1]
+    )
+    if not safe_name:
+        safe_name = "dataset.csv"
+    stem = safe_name.rsplit(".", 1)[0] if "." in safe_name else safe_name
+    download_name = "anonymized_dataset.csv"
+    anonymized_csv = result.pop("_internal_anonymized_csv")
+
+    audit_logger.log_operation(
+        operation="ANONYMIZE",
+        details=(
+            f"csv upload, rows_in: {result['rows_in']}, "
+            f"rows_out: {result['rows_out']}, k_satisfied: "
+            f"{result['k_anonymity_satisfied']}"
+        ),
+    )
+
+    return StreamingResponse(
+        io.BytesIO(anonymized_csv.encode("utf-8")),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{download_name}"',
+            "X-BioBlock-Anonymization-Status": result["anonymization_status"],
+            "X-BioBlock-Rows-In": str(result["rows_in"]),
+            "X-BioBlock-Rows-Out": str(result["rows_out"]),
+            "X-BioBlock-K-Anonymity-Satisfied": str(
+                result["k_anonymity_satisfied"]
+            ).lower(),
+            "X-BioBlock-L-Diversity-Satisfied": str(
+                result["l_diversity_satisfied"]
+            ).lower(),
+            "X-BioBlock-Equivalence-Classes": str(result["equivalence_classes"]),
+            "X-BioBlock-Min-Group-Size": str(result["min_group_size"]),
+            "X-BioBlock-Safe-Harbor-Status": result["safe_harbor_report"][
+                "safe_harbor_validation_status"
+            ],
+        },
+    )
+
 
 @app.post("/store")
 async def store_data(request: StoreWithContentRequest):

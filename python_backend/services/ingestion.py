@@ -13,6 +13,10 @@ from services.nifti_anonymization import (
     anonymize_nifti_metadata,
 )
 from services.ocr_redaction import redact_dicom_pixels, safe_ocr_response
+from services.tabular_anonymization import (
+    TabularAnonymizationError,
+    anonymize_tabular_csv,
+)
 from services.wsi_tiling import scan_wsi_bytes
 from services.privacy_profiles import (
     PrivacyProfileError,
@@ -23,6 +27,28 @@ SUPPORTED_PROFILES = {"strict", "research"}
 SUPPORTED_MODALITIES = {"csv", "text", "dicom", "nifti", "wsi"}
 HEADER_READ_LIMIT = 4096
 TEXT_READ_LIMIT_BYTES = 256 * 1024
+TABULAR_SUMMARY_KEYS = (
+    "rows_in",
+    "rows_out",
+    "k",
+    "l",
+    "direct_identifiers_removed",
+    "precise_geography_columns_removed",
+    "columns_removed",
+    "quasi_identifiers_used",
+    "sensitive_column",
+    "output_columns",
+    "safe_harbor_report",
+    "equivalence_classes",
+    "min_group_size",
+    "k_anonymity_satisfied",
+    "l_diversity_satisfied",
+    "generalized_cells_count",
+    "suppressed_cells_count",
+    "generalization_rate",
+    "suppression_rate",
+    "warnings",
+)
 
 
 class IngestionError(ValueError):
@@ -106,8 +132,33 @@ def _placeholder_result(handler_name: str) -> Dict[str, str]:
     }
 
 
-def anonymize_csv() -> Dict[str, str]:
-    return _placeholder_result("anonymize_csv")
+def anonymize_csv(
+    file_content: bytes,
+    k: int = 5,
+    l: int = 2,
+    direct_identifiers: Optional[list[str]] = None,
+    quasi_identifiers: Optional[list[str]] = None,
+    sensitive_column: Optional[str] = None,
+    safe_harbor_mappings: Optional[dict[str, list[str]]] = None,
+) -> Dict[str, Any]:
+    try:
+        result = anonymize_tabular_csv(
+            file_content,
+            k=k,
+            l=l,
+            direct_identifiers=direct_identifiers,
+            quasi_identifiers=quasi_identifiers,
+            sensitive_column=sensitive_column,
+            safe_harbor_mappings=safe_harbor_mappings,
+        )
+    except TabularAnonymizationError as exc:
+        raise IngestionError(exc.detail, status_code=exc.status_code) from exc
+    return {
+        "handler": "anonymize_csv",
+        "routing_status": "handler_selected",
+        "message": "CSV tabular anonymization completed.",
+        **result,
+    }
 
 
 def anonymize_text(
@@ -223,6 +274,12 @@ def route_for_ingestion(
     text_content: Optional[bytes] = None,
     file_content: Optional[bytes] = None,
     study_salt: Optional[str] = None,
+    csv_k: int = 5,
+    csv_l: int = 2,
+    csv_direct_identifiers: Optional[list[str]] = None,
+    csv_quasi_identifiers: Optional[list[str]] = None,
+    csv_sensitive_column: Optional[str] = None,
+    csv_safe_harbor_mappings: Optional[dict[str, list[str]]] = None,
 ) -> Dict[str, Any]:
     safe_name = _safe_filename(filename)
     privacy_profile = validate_privacy_profile(profile)
@@ -235,7 +292,22 @@ def route_for_ingestion(
             status_code=500,
         )
 
-    if modality == "text":
+    if modality == "csv":
+        if file_content is None:
+            raise IngestionError(
+                "CSV content was not provided for anonymization",
+                status_code=500,
+            )
+        handler_result = handler(
+            file_content,
+            csv_k,
+            csv_l,
+            csv_direct_identifiers,
+            csv_quasi_identifiers,
+            csv_sensitive_column,
+            csv_safe_harbor_mappings,
+        )
+    elif modality == "text":
         if text_content is None:
             raise IngestionError(
                 "Text content was not provided for anonymization",
@@ -292,6 +364,12 @@ def route_for_ingestion(
         response["detected_entities"] = handler_result["detected_entities"]
     if "metadata_summary" in handler_result:
         response["metadata_summary"] = handler_result["metadata_summary"]
+    if "rows_in" in handler_result:
+        response["tabular_summary"] = {
+            key: handler_result[key]
+            for key in TABULAR_SUMMARY_KEYS
+            if key in handler_result
+        }
     if "pixel_redaction_status" in handler_result:
         response["pixel_redaction_status"] = handler_result["pixel_redaction_status"]
     for safe_key in (
