@@ -35,6 +35,16 @@ class VisualizationResponse(BaseModel):
     tx_hash: Optional[str] = None
 
 
+class InferentialResponse(BaseModel):
+    analysis_type: str = "inferential"
+    source_dataset_cid: str
+    test_type: str
+    row_count: int
+    results: Dict[str, Any]
+    result_cid: Optional[str] = None
+    tx_hash: Optional[str] = None
+
+
 class ErrorResponse(BaseModel):
     detail: str
 
