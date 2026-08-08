@@ -36,6 +36,10 @@ from app.services.inferential import (
 )
 from app.utils.csv_parser import parse_csv
 
+# Demo: Hypothesis Lab prototype
+from app.routers.demo_router import router as demo_router
+from app.services.demo_sessions import session_store
+
 APP_VERSION = "0.1.0"
 
 app = FastAPI(
@@ -45,11 +49,24 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://localhost:5174"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount the hypothesis-tree demo router
+app.include_router(demo_router)
+
+
+@app.on_event("startup")
+async def startup_event():
+    await session_store.start_cleanup_loop()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await session_store.stop_cleanup_loop()
 
 
 @app.get("/health", response_model=HealthResponse)
