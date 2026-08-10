@@ -385,11 +385,8 @@ def _validate_numeric_col(df, col):
         raise ValueError(f"Column '{col}' is not numeric (dtype: {df[col].dtype}).")
 
 
-def run_two_group_test(df, numeric_col, group_col, alpha=0.05, alternative="two-sided"):
-    """Independent 2-group comparison with automatic test selection.
-
-    Shapiro-Wilk/KS → Levene's → Student's t / Welch's t / Mann-Whitney U.
-    """
+def run_two_group_test(df, numeric_col, group_col, alpha=0.05, alternative="two-sided", force_test=None):
+    """Independent 2-group comparison with test selection or explicit force_test."""
     _validate_numeric_col(df, numeric_col)
     if group_col not in df.columns:
         raise ValueError(f"Column '{group_col}' not found in dataset.")
@@ -440,17 +437,19 @@ def run_two_group_test(df, numeric_col, group_col, alpha=0.05, alternative="two-
     if note:
         assumptions["normality"]["note"] = note
 
-    if not both_normal:
+    if force_test == "mann_whitney_u" or (force_test is None and not both_normal):
         test_result = run_mann_whitney(group1, group2, alpha, alternative)
         reason = (
-            f"Data is NOT normally distributed "
+            f"Non-parametric Mann-Whitney U test selected. "
             f"({norm1['test']}: group '{groups[0]}' p={norm1['p_value']}, "
-            f"group '{groups[1]}' p={norm2['p_value']}). "
-            f"Using non-parametric Mann-Whitney U test instead of t-test."
+            f"group '{groups[1]}' p={norm2['p_value']})."
         )
     else:
         variance_check = check_equal_variance(group1, group2, alpha)
         assumptions["equal_variance"] = variance_check
+
+        if not both_normal:
+            warnings.append("Normality assumption violated (group distributions non-normal); consider Mann-Whitney U test.")
 
         if variance_check["equal_variance"]:
             test_result = run_students_ttest(group1, group2, alpha, alternative)
@@ -470,6 +469,7 @@ def run_two_group_test(df, numeric_col, group_col, alpha=0.05, alternative="two-
                 f"but has UNEQUAL variances (Levene's p={variance_check['p_value']}). "
                 f"Using Welch's t-test."
             )
+
 
     group_stats = {
         str(groups[0]): {
@@ -823,6 +823,13 @@ def _build_anova_response(
         column_name=column_name,
         alpha=alpha,
     )
+
+    if post_hoc and "bonferroni" in str(post_hoc.get("method", "")).lower():
+        n_comp = post_hoc.get("n_comparisons", 1)
+        adj_a = post_hoc.get("adjusted_alpha", alpha / max(n_comp, 1))
+        bonf_warning = f"Bonferroni correction applied across {n_comp} pairwise comparison(s) to control Family-Wise Error Rate (adjusted α = {adj_a:.4f})."
+        if bonf_warning not in warnings:
+            warnings.append(bonf_warning)
 
     if post_hoc and test_result["significant"]:
         sig_pairs = [
@@ -1198,11 +1205,128 @@ def run_two_way_anova(
             "std": round(float(np.std(vals, ddof=1)), 4) if len(vals) > 1 else 0.0,
         }
     group_stats["_effects"] = effects
-
     return _build_anova_response(
         test_result, reason, assumptions, group_stats,
         numeric_col, alpha, warnings, None,
     )
+
+
+
+def run_ancova(
+    df: pd.DataFrame,
+    numeric_col: str,
+    group_col: str,
+    covariate_col: str,
+    alpha: float = 0.05,
+) -> Dict[str, Any]:
+    """Analysis of Covariance (ANCOVA) combining group comparison with a covariate."""
+    _validate_numeric_col(df, numeric_col)
+    for col in (group_col, covariate_col):
+        if col not in df.columns:
+            raise ValueError(f"Column '{col}' not found in dataset.")
+
+    clean = df[[numeric_col, group_col, covariate_col]].dropna()
+    n = len(clean)
+    warnings: List[str] = []
+    sdc = check_sdc(n)
+    if sdc["status"] == "suppress":
+        return _suppressed_response(sdc, alpha, "two-sided", {"total_n": n})
+    if sdc["status"] == "warn":
+        warnings.append(sdc["message"])
+
+    # Sanitize formula column names
+    _safe = {
+        numeric_col: numeric_col.replace(" ", "_").replace("-", "_").replace(".", "_"),
+        group_col: group_col.replace(" ", "_").replace("-", "_").replace(".", "_"),
+        covariate_col: covariate_col.replace(" ", "_").replace("-", "_").replace(".", "_"),
+    }
+    safe_df = clean.rename(columns=_safe)
+
+    # Check if covariate is numeric vs categorical
+    is_covariate_numeric = pd.api.types.is_numeric_dtype(clean[covariate_col])
+
+    if is_covariate_numeric:
+        formula = f"Q('{_safe[numeric_col]}') ~ C(Q('{_safe[group_col]}')) + Q('{_safe[covariate_col]}')"
+    else:
+        formula = f"Q('{_safe[numeric_col]}') ~ C(Q('{_safe[group_col]}')) + C(Q('{_safe[covariate_col]}'))"
+
+    try:
+        model = sm_ols(formula, data=safe_df).fit()
+        anova_table = anova_lm(model, typ=2)
+    except Exception as exc:
+        raise ValueError(f"ANCOVA model fit failed: {exc}")
+
+    residuals = model.resid.values
+    norm_residuals = check_normality(residuals, alpha)
+
+    # Find rows matching group and covariate
+    group_row = [k for k in anova_table.index if _safe[group_col] in k][0]
+    cov_row = [k for k in anova_table.index if _safe[covariate_col] in k][0]
+
+    group_f = float(anova_table.loc[group_row, "F"])
+    group_p = float(anova_table.loc[group_row, "PR(>F)"])
+    cov_f = float(anova_table.loc[cov_row, "F"])
+    cov_p = float(anova_table.loc[cov_row, "PR(>F)"])
+
+    ss_group = float(anova_table.loc[group_row, "sum_sq"])
+    ss_total = float(anova_table["sum_sq"].sum())
+    eta_sq = ss_group / ss_total if ss_total > 0 else 0.0
+
+    is_sig = group_p < alpha
+    cov_sig = cov_p < alpha
+
+    interp = (
+        f"ANCOVA analyzing '{numeric_col}' across groups of '{group_col}' "
+        f"controlling for covariate '{covariate_col}'.\n"
+        f"• Group Effect ({group_col}): F={group_f:.4f}, p={group_p:.6f} "
+        f"({'Significant' if is_sig else 'Not Significant'}).\n"
+        f"• Covariate Effect ({covariate_col}): F={cov_f:.4f}, p={cov_p:.6f} "
+        f"({'Significant' if cov_sig else 'Not Significant'}).\n"
+        f"• Partial Eta Squared (Group): η²={eta_sq:.4f} ({classify_effect_size(eta_sq, 'eta_squared')} effect)."
+    )
+
+    return {
+        "test_used": f"ANCOVA ({group_col} + covariate: {covariate_col})",
+        "result": {
+            "statistic": round(group_f, 4),
+            "p_value": round(group_p, 6),
+            "covariate_p_value": round(cov_p, 6),
+            "covariate_f_statistic": round(cov_f, 4),
+            "significant": is_sig,
+        },
+        "effect_size": {
+            "metric": "eta_squared",
+            "value": round(eta_sq, 4),
+            "magnitude": classify_effect_size(eta_sq, "eta_squared"),
+        },
+        "assumptions": {
+            "residual_normality": norm_residuals,
+        },
+        "interpretation": interp,
+        "warnings": warnings,
+        "applied_followups": [f"Added covariate: {covariate_col}"],
+    }
+
+
+def run_subgroup_analysis(
+    df: pd.DataFrame,
+    numeric_col: str,
+    group_col: str,
+    subgroup_col: str,
+    alpha: float = 0.05,
+) -> Dict[str, Any]:
+    """Subgroup / Interaction analysis using 2-way ANOVA."""
+    res = run_two_way_anova(
+        df=df,
+        numeric_col=numeric_col,
+        factor_col_1=group_col,
+        factor_col_2=subgroup_col,
+        alpha=alpha,
+    )
+    res["test_used"] = f"Subgroup Analysis ({group_col} × {subgroup_col})"
+    res["applied_followups"] = [f"Tested subgroup: {subgroup_col}"]
+    return res
+
 
 
 # -- Repeated-Measures ANOVA / Friedman --
