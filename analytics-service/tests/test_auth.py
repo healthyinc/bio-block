@@ -48,15 +48,20 @@ class TestVerifySignature:
 class TestProductionGuard:
     """Verify that production mode does NOT silently bypass crypto checks."""
 
-    def test_production_raises_not_implemented(self):
+    def test_production_enforces_verification(self):
         import app.auth.eip712 as mod
 
         original_env = mod.APP_ENV
         try:
             mod.APP_ENV = "production"
             clear_nonces()
-            with pytest.raises(NotImplementedError, match="not yet implemented"):
-                verify_signature(
+            if mod.Web3 is None:
+                with pytest.raises(RuntimeError, match="web3.py is required"):
+                    verify_signature(
+                        WALLET, "QmCID", "0xsig", int(time.time()), 999, "hash"
+                    )
+            else:
+                assert not verify_signature(
                     WALLET, "QmCID", "0xsig", int(time.time()), 999, "hash"
                 )
         finally:

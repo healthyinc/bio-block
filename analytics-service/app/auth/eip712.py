@@ -9,7 +9,7 @@ from typing import Dict, Optional, Set
 
 try:
     from web3 import Web3
-    from eth_account.messages import encode_structured_data
+    from eth_account.messages import encode_typed_data
 except ImportError:
     Web3 = None  # type: ignore[misc, assignment]
 
@@ -93,7 +93,7 @@ def verify_signature(
         return False
 
     # ── Environment gate ───────────────────────────────────────────────
-    if Web3 is None and APP_ENV in _SAFE_ENVS:
+    if APP_ENV in _SAFE_ENVS:
         logger.debug(
             "APP_ENV=%s — skipping crypto verification (non-production)",
             APP_ENV,
@@ -102,6 +102,8 @@ def verify_signature(
         return True
 
     if w3 is None:
+        if Web3 is None:
+            raise RuntimeError("web3.py is required in production.")
         w3 = Web3(Web3.HTTPProvider(SEPOLIA_RPC))
 
     # --- Signer recovery ---
@@ -124,7 +126,7 @@ def verify_signature(
         },
     }
     try:
-        encoded = encode_structured_data(primitive=typed_data)
+        encoded = encode_typed_data(full_message=typed_data)
         signer = w3.eth.account.recover_message(encoded, signature=signature)
     except Exception:
         return False  # malformed signature

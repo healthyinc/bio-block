@@ -111,6 +111,8 @@ class TestCategoricalEncoding:
         assert codes.notna().all()
 
     def test_encoding_preserves_mapping(self):
+        s = pd.Series(["X", "Y", "X"])
+        codes, labels, cat_map = _encode_categorical_axis(s)
         assert codes.iloc[0] == codes.iloc[2]
         assert codes.iloc[0] != codes.iloc[1]
 
