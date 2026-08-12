@@ -4,6 +4,16 @@ from services.text_anonymization import (
     TextAnonymizationError,
     anonymize_clinical_text,
 )
+from services.dicom_anonymization import (
+    DicomAnonymizationError,
+    anonymize_dicom_file_bytes,
+)
+from services.nifti_anonymization import (
+    NiftiAnonymizationError,
+    anonymize_nifti_metadata,
+)
+from services.ocr_redaction import redact_dicom_pixels, safe_ocr_response
+from services.wsi_tiling import scan_wsi_bytes
 
 SUPPORTED_PROFILES = {"strict", "research"}
 SUPPORTED_MODALITIES = {"csv", "text", "dicom", "nifti", "wsi"}
@@ -127,16 +137,69 @@ def anonymize_text(
     }
 
 
-def anonymize_dicom() -> Dict[str, str]:
-    return _placeholder_result("anonymize_dicom")
+def anonymize_dicom(file_content: bytes, profile: str) -> Dict[str, Any]:
+    try:
+        metadata_result = anonymize_dicom_file_bytes(file_content, profile=profile)
+    except DicomAnonymizationError as exc:
+        raise IngestionError(exc.detail, status_code=exc.status_code) from exc
+
+    metadata_scrubbed_content = metadata_result["anonymized_dicom_bytes"]
+    pixel_result = safe_ocr_response(
+        redact_dicom_pixels(metadata_scrubbed_content, profile=profile)
+    )
+
+    return {
+        "handler": "anonymize_dicom",
+        "routing_status": "handler_selected",
+        "anonymization_status": metadata_result["anonymization_status"],
+        "message": "DICOM metadata anonymization and pixel redaction completed.",
+        "metadata_summary": metadata_result["metadata_summary"],
+        **pixel_result,
+    }
 
 
-def anonymize_nifti() -> Dict[str, str]:
-    return _placeholder_result("anonymize_nifti")
+def anonymize_nifti(
+    file_content: bytes,
+    filename: str,
+    profile: str,
+) -> Dict[str, Any]:
+    try:
+        result = anonymize_nifti_metadata(
+            file_content,
+            filename=filename,
+            profile=profile,
+        )
+    except NiftiAnonymizationError as exc:
+        raise IngestionError(exc.detail, status_code=exc.status_code) from exc
+
+    return {
+        "handler": "anonymize_nifti",
+        "routing_status": "handler_selected",
+        "anonymization_status": result["anonymization_status"],
+        "message": "NIfTI metadata anonymization completed.",
+        "metadata_summary": result["metadata_summary"],
+    }
 
 
-def anonymize_wsi() -> Dict[str, str]:
-    return _placeholder_result("anonymize_wsi")
+def anonymize_wsi(
+    file_content: bytes,
+    filename: str,
+    profile: str,
+) -> Dict[str, Any]:
+    result = scan_wsi_bytes(file_content, filename=filename)
+    anonymization_status = (
+        "redaction_plan_ready"
+        if result["pixel_redaction_status"] == "redaction_plan_ready"
+        else "pending"
+    )
+
+    return {
+        "handler": "anonymize_wsi",
+        "routing_status": "handler_selected",
+        "anonymization_status": anonymization_status,
+        "message": "WSI priority OCR tiling evaluated.",
+        **result,
+    }
 
 
 HANDLER_REGISTRY: Dict[str, Callable[..., Dict[str, Any]]] = {
@@ -154,6 +217,7 @@ def route_for_ingestion(
     header: bytes,
     profile: str,
     text_content: Optional[bytes] = None,
+    file_content: Optional[bytes] = None,
     study_salt: Optional[str] = None,
 ) -> Dict[str, Any]:
     safe_name = _safe_filename(filename)
@@ -174,6 +238,27 @@ def route_for_ingestion(
                 status_code=500,
             )
         handler_result = handler(text_content, privacy_profile, study_salt)
+    elif modality == "dicom":
+        if file_content is None:
+            raise IngestionError(
+                "DICOM content was not provided for anonymization",
+                status_code=500,
+            )
+        handler_result = handler(file_content, privacy_profile)
+    elif modality == "nifti":
+        if file_content is None:
+            raise IngestionError(
+                "NIfTI content was not provided for anonymization",
+                status_code=500,
+            )
+        handler_result = handler(file_content, safe_name, privacy_profile)
+    elif modality == "wsi":
+        if file_content is None:
+            raise IngestionError(
+                "WSI content was not provided for OCR scan planning",
+                status_code=500,
+            )
+        handler_result = handler(file_content, safe_name, privacy_profile)
     else:
         handler_result = handler()
 
@@ -197,5 +282,24 @@ def route_for_ingestion(
         response["anonymized_text"] = handler_result["anonymized_text"]
     if "detected_entities" in handler_result:
         response["detected_entities"] = handler_result["detected_entities"]
+    if "metadata_summary" in handler_result:
+        response["metadata_summary"] = handler_result["metadata_summary"]
+    if "pixel_redaction_status" in handler_result:
+        response["pixel_redaction_status"] = handler_result["pixel_redaction_status"]
+    for safe_key in (
+        "ocr_boxes_detected",
+        "boxes_redacted",
+        "frames_processed",
+        "scanned_regions",
+        "ocr_engine_status",
+        "tiles_scanned",
+        "priority_regions_scanned",
+        "image_dimensions",
+        "tile_size",
+        "wsi_rewrite_status",
+        "redaction_plan_boxes",
+    ):
+        if safe_key in handler_result:
+            response[safe_key] = handler_result[safe_key]
 
     return response
