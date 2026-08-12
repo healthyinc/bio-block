@@ -171,3 +171,24 @@ def test_dicom_safe_response_does_not_expose_ocr_text_or_bytes():
 
     assert "sanitized_dicom_bytes" not in safe
     assert RAW_OCR_TEXT not in json.dumps(safe)
+
+
+def test_dicom_pixel_redaction_uses_profile_confidence_thresholds():
+    dicom_bytes = build_grayscale_dicom(np.full((6, 6), 255, dtype=np.uint8))
+    backend = FakeOCRBackend([OCRBox(RAW_OCR_TEXT, 0.4, 1, 1, 3, 3)])
+
+    strict = redact_dicom_pixels(
+        dicom_bytes,
+        profile="strict",
+        ocr_backend=backend,
+    )
+    research = redact_dicom_pixels(
+        dicom_bytes,
+        profile="research",
+        ocr_backend=backend,
+    )
+
+    assert strict["ocr_confidence_threshold"] == 0.3
+    assert strict["boxes_redacted"] == 1
+    assert research["ocr_confidence_threshold"] == 0.5
+    assert research["boxes_redacted"] == 0

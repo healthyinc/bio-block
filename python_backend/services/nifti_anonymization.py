@@ -4,13 +4,18 @@ from typing import Any, Dict
 
 import numpy as np
 
+from services.privacy_profiles import (
+    PrivacyProfileError,
+    get_privacy_profile,
+    validate_privacy_profile,
+)
+
 try:
     import nibabel as nib
 except ImportError:
     nib = None
 
 
-SUPPORTED_PROFILES = {"strict", "research"}
 SUPPORTED_EXTENSIONS = {".nii", ".nii.gz"}
 TEXT_HEADER_FIELDS = ("descrip", "aux_file", "intent_name", "db_name")
 
@@ -22,13 +27,12 @@ class NiftiAnonymizationError(ValueError):
         self.status_code = status_code
 
 
-def _normalize_profile(profile: str) -> str:
-    normalized = (profile or "").strip().lower()
-    if normalized not in SUPPORTED_PROFILES:
-        raise NiftiAnonymizationError(
-            "Invalid privacy profile. Supported profiles: strict, research"
-        )
-    return normalized
+def _profile_settings(profile: str) -> tuple[str, Dict[str, Any]]:
+    try:
+        normalized = validate_privacy_profile(profile)
+        return normalized, get_privacy_profile(normalized)
+    except PrivacyProfileError as exc:
+        raise NiftiAnonymizationError(exc.detail, status_code=exc.status_code) from exc
 
 
 def _nifti_suffix(filename: str) -> str:
@@ -100,7 +104,7 @@ def anonymize_nifti_metadata(
     if not file_bytes:
         raise NiftiAnonymizationError("NIfTI file is empty")
 
-    privacy_profile = _normalize_profile(profile)
+    privacy_profile, settings = _profile_settings(profile)
     suffix = _nifti_suffix(filename)
 
     temp_path = None
@@ -113,12 +117,13 @@ def anonymize_nifti_metadata(
         original_shape = tuple(int(dimension) for dimension in image.shape)
         original_affine = np.array(image.affine, copy=True)
         original_dtype = str(image.get_data_dtype())
+        original_extensions = len(image.header.extensions)
 
         scrubbed_header = image.header.copy()
         scrubbed = _scrub_header_fields(scrubbed_header)
 
         extensions_removed = 0
-        if privacy_profile == "strict":
+        if settings["remove_nifti_extensions"]:
             extensions_removed = len(scrubbed_header.extensions)
             scrubbed_header.extensions.clear()
 
@@ -132,9 +137,12 @@ def anonymize_nifti_metadata(
             "anonymization_status": "completed",
             "metadata_summary": {
                 "profile": privacy_profile,
+                "remove_nifti_extensions": settings["remove_nifti_extensions"],
                 "fields_scrubbed": scrubbed["fields_scrubbed"],
                 "scrubbed_field_counts": scrubbed["scrubbed_field_counts"],
+                "extensions_present_before": original_extensions,
                 "extensions_removed": extensions_removed,
+                "extensions_preserved": original_extensions - extensions_removed,
                 "image_shape": list(original_shape),
                 "shape_preserved": tuple(scrubbed_image.shape) == original_shape,
                 "affine_preserved": np.array_equal(
@@ -145,6 +153,12 @@ def anonymize_nifti_metadata(
                     str(scrubbed_image.get_data_dtype()) == original_dtype
                 ),
                 "image_data_preserved": True,
+                "safe_technical_metadata_preserved": [
+                    "shape",
+                    "affine",
+                    "datatype",
+                    "image_data",
+                ],
             },
         }
     finally:

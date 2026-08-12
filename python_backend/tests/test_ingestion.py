@@ -190,7 +190,9 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(body["anonymization_status"], "completed")
         self.assertNotIn("123456", body["anonymized_text"])
         self.assertNotIn("john.doe@example.com", body["anonymized_text"])
-        self.assertIn("MRN_", body["anonymized_text"])
+        self.assertEqual(body["date_strategy"], "redact")
+        self.assertEqual(body["text_identifier_strategy"], "redact")
+        self.assertIn("<REDACTED_MRN>", body["anonymized_text"])
         self.assertIn("<REDACTED_EMAIL>", body["anonymized_text"])
         self.assertIn("diabetes", body["anonymized_text"])
         self.assertEqual(body["detected_entities"]["MEDICAL_RECORD_NUMBER"], 1)
@@ -212,7 +214,7 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(body["detected_modality"], "text")
         self.assertEqual(body["anonymization_status"], "completed")
         self.assertNotIn("PT-1001", body["anonymized_text"])
-        self.assertIn("PATIENT_ID_", body["anonymized_text"])
+        self.assertIn("<REDACTED_PATIENT_ID>", body["anonymized_text"])
 
     def test_dicom_extension_routes_to_dicom_handler(self):
         with patch("services.ingestion.redact_dicom_pixels", fake_dicom_pixel_redaction):
@@ -322,3 +324,5 @@ class TestIngestionRouting(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

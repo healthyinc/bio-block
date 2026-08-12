@@ -1,9 +1,16 @@
 import hashlib
 import os
 import re
+from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Tuple
+
+from services.privacy_profiles import (
+    PrivacyProfileError,
+    get_privacy_profile,
+    validate_privacy_profile,
+)
 
 SUPPORTED_PROFILES = {"strict", "research"}
 STUDY_SALT_ENV_VAR = "BIOBLOCK_STUDY_SALT"
@@ -18,6 +25,16 @@ _ID_ENTITY_TYPES = {
     "DEVICE_ID",
 }
 _IDENTIFIER_AT_END = re.compile(r"([A-Z0-9][A-Z0-9-]{3,30})\b", re.IGNORECASE)
+DIRECT_IDENTIFIER_REDACTIONS = {
+    "PERSON": "<REDACTED_NAME>",
+    "MEDICAL_RECORD_NUMBER": "<REDACTED_MRN>",
+    "PATIENT_ID": "<REDACTED_PATIENT_ID>",
+    "HEALTH_PLAN_ID": "<REDACTED_HEALTH_PLAN>",
+    "INSURANCE_ID": "<REDACTED_HEALTH_PLAN>",
+    "ACCESSION_NUMBER": "<REDACTED_ACCESSION>",
+    "DEVICE_ID": "<REDACTED_DEVICE_ID>",
+}
+
 
 
 class TextAnonymizationError(ValueError):
@@ -242,6 +259,18 @@ def _common_phi_recognizers() -> List[Any]:
 
     return [
         PatternRecognizer(
+            supported_entity="PERSON",
+            name="Patient Context Name Recognizer",
+            patterns=[
+                _pattern(
+                    "patient_context_name",
+                    r"(?<=\bPatient\s)(?-i:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,3})\b",
+                    0.75,
+                )
+            ],
+            context=["patient", "name"],
+        ),
+        PatternRecognizer(
             supported_entity="EMAIL_ADDRESS",
             name="Email Address Recognizer",
             patterns=[
@@ -316,13 +345,16 @@ def _get_analyzer():
         ) from exc
 
 
+def _profile_settings(profile: str) -> tuple[str, Dict[str, Any]]:
+    try:
+        normalized = validate_privacy_profile(profile)
+        return normalized, get_privacy_profile(normalized)
+    except PrivacyProfileError as exc:
+        raise TextAnonymizationError(exc.detail, status_code=exc.status_code) from exc
+
+
 def _normalize_profile(profile: str) -> str:
-    normalized = (profile or "").strip().lower()
-    if normalized not in SUPPORTED_PROFILES:
-        raise TextAnonymizationError(
-            "Invalid privacy profile. Supported profiles: strict, research"
-        )
-    return normalized
+    return _profile_settings(profile)[0]
 
 
 def _select_non_overlapping(results: Iterable[Any]) -> List[Any]:
@@ -359,7 +391,41 @@ def _hash_value(entity_type: str, value: str) -> str:
     return value
 
 
-def _replacement_for(entity_type: str, value: str, salt: str) -> str:
+def _date_shift_days(salt: str) -> int:
+    value = int(stable_hash("date-shift", salt, length=6), 16)
+    days = value % 731 - 365
+    return days or 17
+
+
+def _shift_date_text(value: str, salt: str) -> str:
+    cleaned = value.strip()
+    formats = [
+        ("%Y-%m-%d", "%Y-%m-%d"),
+        ("%m/%d/%Y", "%m/%d/%Y"),
+        ("%m/%d/%y", "%m/%d/%Y"),
+    ]
+    for input_format, output_format in formats:
+        try:
+            shifted = datetime.strptime(cleaned, input_format) + timedelta(
+                days=_date_shift_days(salt)
+            )
+            return shifted.strftime(output_format)
+        except ValueError:
+            continue
+    return "<REDACTED_DATE>"
+
+def _replacement_for(
+    entity_type: str,
+    value: str,
+    salt: str,
+    settings: Dict[str, Any],
+) -> str:
+    if (
+        entity_type in DIRECT_IDENTIFIER_REDACTIONS
+        and settings["text_identifier_strategy"] == "redact"
+    ):
+        return DIRECT_IDENTIFIER_REDACTIONS[entity_type]
+
     hash_value = _hash_value(entity_type, value)
     if entity_type == "PERSON":
         return pseudonymize_person(hash_value, salt)
@@ -380,11 +446,18 @@ def _replacement_for(entity_type: str, value: str, salt: str) -> str:
     if entity_type in {"US_SSN", "SSN"}:
         return "<REDACTED_SSN>"
     if entity_type == "DATE_TIME":
+        if settings["date_strategy"] == "shift":
+            return _shift_date_text(value, salt)
         return "<REDACTED_DATE>"
     return f"<REDACTED_{entity_type}>"
 
 
-def _replace_entities(text: str, results: List[Any], salt: str) -> str:
+def _replace_entities(
+    text: str,
+    results: List[Any],
+    salt: str,
+    settings: Dict[str, Any],
+) -> str:
     anonymized_parts = []
     cursor = 0
 
@@ -392,7 +465,7 @@ def _replace_entities(text: str, results: List[Any], salt: str) -> str:
         anonymized_parts.append(text[cursor : result.start])
         original_value = text[result.start : result.end]
         anonymized_parts.append(
-            _replacement_for(result.entity_type, original_value, salt)
+            _replacement_for(result.entity_type, original_value, salt, settings)
         )
         cursor = result.end
 
@@ -448,7 +521,7 @@ def anonymize_clinical_text(
     if not text.strip():
         raise TextAnonymizationError("Text input is empty")
 
-    _normalize_profile(profile)
+    privacy_profile, settings = _profile_settings(profile)
     salt = _resolve_study_salt(study_salt)
 
     analyzer = _get_analyzer()
@@ -479,6 +552,13 @@ def anonymize_clinical_text(
     selected_results = _select_non_overlapping(results)
     return {
         "anonymization_status": "completed",
-        "anonymized_text": _replace_entities(text, selected_results, salt),
+        "privacy_profile": privacy_profile,
+        "date_strategy": settings["date_strategy"],
+        "text_identifier_strategy": settings["text_identifier_strategy"],
+        "anonymized_text": _replace_entities(text, selected_results, salt, settings),
         "detected_entities": _entity_summary(selected_results),
     }
+
+
+
+

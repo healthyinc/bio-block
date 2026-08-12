@@ -20,7 +20,7 @@ def test_mrn_with_context_is_detected_and_replaced():
 
     assert result["anonymization_status"] == "completed"
     assert "123456" not in result["anonymized_text"]
-    assert "MRN_" in result["anonymized_text"]
+    assert "<REDACTED_MRN>" in result["anonymized_text"]
     assert result["detected_entities"]["MEDICAL_RECORD_NUMBER"] == 1
 
 
@@ -50,7 +50,7 @@ def test_patient_id_is_detected_and_replaced():
     )
 
     assert "PT-1001" not in result["anonymized_text"]
-    assert "PATIENT_ID_" in result["anonymized_text"]
+    assert "<REDACTED_PATIENT_ID>" in result["anonymized_text"]
     assert result["detected_entities"]["PATIENT_ID"] == 1
 
 
@@ -61,15 +61,15 @@ def test_health_plan_id_is_detected_and_replaced():
     )
 
     assert "ABC123456789" not in result["anonymized_text"]
-    assert "HEALTH_PLAN_" in result["anonymized_text"]
+    assert "<REDACTED_HEALTH_PLAN>" in result["anonymized_text"]
     assert result["detected_entities"]["HEALTH_PLAN_ID"] == 1
 
 
 def test_deterministic_surrogate_consistency_with_same_salt():
     text = "Patient has MRN: 123456."
 
-    first = anonymize_clinical_text(text, study_salt="study-a")
-    second = anonymize_clinical_text(text, study_salt="study-a")
+    first = anonymize_clinical_text(text, profile="research", study_salt="study-a")
+    second = anonymize_clinical_text(text, profile="research", study_salt="study-a")
 
     assert first["anonymized_text"] == second["anonymized_text"]
 
@@ -77,8 +77,8 @@ def test_deterministic_surrogate_consistency_with_same_salt():
 def test_different_salt_changes_surrogate():
     text = "Patient has MRN: 123456."
 
-    first = anonymize_clinical_text(text, study_salt="study-a")
-    second = anonymize_clinical_text(text, study_salt="study-b")
+    first = anonymize_clinical_text(text, profile="research", study_salt="study-a")
+    second = anonymize_clinical_text(text, profile="research", study_salt="study-b")
 
     assert first["anonymized_text"] != second["anonymized_text"]
     assert "123456" not in first["anonymized_text"]
@@ -165,3 +165,38 @@ def test_overlapping_email_text_does_not_leave_email_exposed():
 
     assert "john.doe@example.com" not in result["anonymized_text"]
     assert "<REDACTED_EMAIL>" in result["anonymized_text"]
+
+
+def test_research_profile_shifts_dates_and_removes_patient_context_name():
+    result = anonymize_clinical_text(
+        "Patient John Doe, MRN 123456, visited on 2026-06-16.",
+        profile="research",
+        study_salt="study-a",
+    )
+
+    assert result["privacy_profile"] == "research"
+    assert result["date_strategy"] == "shift"
+    assert result["text_identifier_strategy"] == "pseudonymize"
+    assert "John Doe" not in result["anonymized_text"]
+    assert "123456" not in result["anonymized_text"]
+    assert "2026-06-16" not in result["anonymized_text"]
+    assert "<REDACTED_DATE>" not in result["anonymized_text"]
+    assert result["detected_entities"]["PERSON"] == 1
+    assert result["detected_entities"]["DATE_TIME"] == 1
+
+
+def test_strict_profile_redacts_dates():
+    result = anonymize_clinical_text(
+        "Patient John Doe, MRN 123456, visited on 2026-06-16.",
+        profile="strict",
+        study_salt="study-a",
+    )
+
+    assert result["privacy_profile"] == "strict"
+    assert result["date_strategy"] == "redact"
+    assert result["text_identifier_strategy"] == "redact"
+    assert "<REDACTED_NAME>" in result["anonymized_text"]
+    assert "<REDACTED_MRN>" in result["anonymized_text"]
+    assert "2026-06-16" not in result["anonymized_text"]
+    assert "<REDACTED_DATE>" in result["anonymized_text"]
+

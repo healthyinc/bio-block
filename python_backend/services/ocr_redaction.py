@@ -9,6 +9,8 @@ from typing import Any, Dict, Iterable, List, Optional, Protocol, Sequence, Tupl
 import numpy as np
 from PIL import Image, ImageDraw
 
+from services.privacy_profiles import PrivacyProfileError, get_privacy_profile
+
 try:
     import pydicom
     from pydicom.errors import InvalidDicomError
@@ -234,7 +236,7 @@ def redact_dicom_pixels(
     file_bytes: bytes,
     profile: str = "strict",
     ocr_backend: Optional[OCRBackend] = None,
-    min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    min_confidence: Optional[float] = None,
     include_sanitized_bytes: bool = True,
 ) -> Dict[str, Any]:
     if pydicom is None:
@@ -249,6 +251,21 @@ def redact_dicom_pixels(
             ocr_engine_status="not_applicable",
             include_sanitized_bytes=include_sanitized_bytes,
         )
+
+    try:
+        profile_settings = get_privacy_profile(profile)
+    except PrivacyProfileError:
+        return _dicom_result(
+            pixel_redaction_status="invalid_profile",
+            ocr_engine_status="not_applicable",
+            include_sanitized_bytes=include_sanitized_bytes,
+        )
+
+    effective_min_confidence = (
+        float(min_confidence)
+        if min_confidence is not None
+        else float(profile_settings["ocr_confidence_threshold"])
+    )
 
     backend = ocr_backend or get_default_ocr_backend()
     engine_status = _backend_status(backend)
@@ -308,7 +325,7 @@ def redact_dicom_pixels(
 
             image_width, image_height = ocr_image.size
             for box in boxes:
-                if box.confidence < min_confidence:
+                if box.confidence < effective_min_confidence:
                     continue
 
                 clipped = clip_box_to_image(box, image_width, image_height)
@@ -357,6 +374,7 @@ def redact_dicom_pixels(
         ocr_engine_status=engine_status,
         sanitized_bytes=sanitized_bytes,
         include_sanitized_bytes=include_sanitized_bytes,
+        ocr_confidence_threshold=effective_min_confidence,
     )
 
 
@@ -473,6 +491,7 @@ def _dicom_result(
     ocr_engine_status: str = "not_applicable",
     sanitized_bytes: Optional[bytes] = None,
     include_sanitized_bytes: bool = True,
+    ocr_confidence_threshold: Optional[float] = None,
 ) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "pixel_redaction_status": pixel_redaction_status,
@@ -482,6 +501,9 @@ def _dicom_result(
         "scanned_regions": scanned_regions,
         "ocr_engine_status": ocr_engine_status,
     }
+    if ocr_confidence_threshold is not None:
+        result["ocr_confidence_threshold"] = ocr_confidence_threshold
     if include_sanitized_bytes and sanitized_bytes is not None:
         result["sanitized_dicom_bytes"] = sanitized_bytes
     return result
+
