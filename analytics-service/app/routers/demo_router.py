@@ -1,11 +1,20 @@
-"""Hypothesis Lab demo router. No auth required."""
+"""Hypothesis Lab demo router — no auth except attestation."""
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
-from typing import Optional
+import time
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, UploadFile
+from pydantic import BaseModel, Field
+
+from app.auth.eip712 import verify_signature
+from app.services.ipfs_uploader import upload_result_to_ipfs
+from app.services.chain_registry import register_on_chain
+from app.services.result_serializer import serialize_analytics_result
 
 from app.models.demo_schemas import (
     AnalysisRequest,
@@ -120,6 +129,7 @@ def _get_active_analysis_result(session, branch_id: str) -> Optional[AnalysisRes
         result=result_data.get("result", {}),
         effect_size=result_data.get("effect_size", {}),
         assumptions=result_data.get("assumptions", {}),
+        group_stats=result_data.get("group_stats", {}),
         interpretation=result_data.get("interpretation", ""),
         warnings=result_data.get("warnings", []),
         follow_up_options=[
@@ -533,6 +543,7 @@ async def run_analysis(session_id: str, body: AnalysisRequest):
         result=result_data.get("result", {}),
         effect_size=result_data.get("effect_size", {}),
         assumptions=result_data.get("assumptions", {}),
+        group_stats=result_data.get("group_stats", {}),
         interpretation=result_data.get("interpretation", ""),
         warnings=result_data.get("warnings", []),
         follow_up_options=[
@@ -584,6 +595,10 @@ def _execute_analysis(
     elif test_name in ("one_way_anova", "kruskal_wallis"):
         if not outcome_col or not group_col:
             raise ValueError("outcome and group columns are required.")
+        unique_groups = df[group_col].dropna().nunique()
+        if unique_groups == 2:
+            force = "mann_whitney_u" if test_name == "kruskal_wallis" else "independent_ttest"
+            return run_two_group_test(df, outcome_col, group_col, force_test=force)
         return run_multi_group_test(df, outcome_col, group_col)
 
     elif test_name in ("paired_ttest", "wilcoxon_signed_rank"):
@@ -699,3 +714,160 @@ def _execute_analysis(
 
     else:
         raise ValueError(f"Unsupported analysis: {test_name}")
+
+
+# ── Attestation models ─────────────────────────────────────────────────
+
+class AttestRequest(BaseModel):
+    wallet_address: str = Field(...)
+    signature: str = Field(...)
+    timestamp: int = Field(...)
+    nonce: int = Field(...)
+    request_hash: str = Field(...)
+    source_cid: Optional[str] = None
+    branch_id: Optional[str] = None
+
+
+class AttestResponse(BaseModel):
+    result_cid: Optional[str] = None
+    tx_hash: Optional[str] = None
+    etherscan_url: Optional[str] = None
+    analysis_type: str = "hypothesis-tree"
+    timestamp: int = 0
+
+
+class AttestationEntry(BaseModel):
+    result_cid: Optional[str] = None
+    tx_hash: Optional[str] = None
+    etherscan_url: Optional[str] = None
+    analysis_type: str = "hypothesis-tree"
+    timestamp: int = 0
+    branch_id: Optional[str] = None
+
+
+# ── Attestation endpoints ──────────────────────────────────────────────
+
+@router.post("/sessions/{session_id}/attest", response_model=AttestResponse)
+async def attest_session(session_id: str, req: AttestRequest):
+    """Verify sig → serialize branch → IPFS → on-chain."""
+    session = _get_session(session_id)
+
+    # verify sig — fall back to session id for local uploads
+    dataset_cid = req.source_cid or f"local-session-{session_id}"
+
+    if not verify_signature(
+        wallet_address=req.wallet_address,
+        dataset_cid=dataset_cid,
+        signature=req.signature,
+        timestamp=req.timestamp,
+        nonce=req.nonce,
+        request_hash=req.request_hash,
+    ):
+        raise HTTPException(401, "Invalid or expired EIP-712 signature.")
+
+    # resolve branch
+    branch_id = req.branch_id or session.tree.active_branch_id
+    branch = session.tree.branches.get(branch_id)
+    if not branch:
+        raise HTTPException(404, f"Branch '{branch_id}' not found in session.")
+
+    # build audit trail
+    decision_trail = []
+    result_data = None
+    for nid in branch.node_ids:
+        node = session.tree.nodes.get(nid)
+        if not node:
+            continue
+        if node.kind == NodeKind.ANSWER:
+            decision_trail.append({
+                "kind": "answer",
+                "answer": node.answer or node.answer_option_id,
+            })
+        elif node.kind == NodeKind.QUESTION:
+            decision_trail.append({
+                "kind": "question",
+                "prompt": node.prompt,
+            })
+        elif node.kind == NodeKind.RESULT:
+            result_data = node.context or {}
+            decision_trail.append({
+                "kind": "result",
+                "test_used": (node.context or {}).get("test_used", "unknown"),
+            })
+
+
+    analysis_type = "hypothesis-tree"
+    if result_data:
+        analysis_type = result_data.get("test_used", "hypothesis-tree")
+
+    # serialize + upload + register
+    result_doc = serialize_analytics_result(
+        analysis_type=analysis_type,
+        source_cid=dataset_cid,
+        wallet_address=req.wallet_address,
+        results={
+            "decision_trail": decision_trail,
+            "statistical_result": result_data,
+            "branch_id": branch_id,
+        },
+        row_count=len(session.df),
+        columns=list(session.df.columns),
+        parameters={
+            "session_id": session_id,
+            "branch_status": branch.status.value if hasattr(branch.status, "value") else str(branch.status),
+        },
+    )
+
+
+    result_cid = await upload_result_to_ipfs(
+        result_data=result_doc,
+        analysis_type=analysis_type,
+        source_cid=dataset_cid,
+    )
+
+
+    tx_hash = None
+    etherscan_url = None
+    if result_cid:
+        tx_hash = await register_on_chain(
+            source_cid=dataset_cid,
+            result_cid=result_cid,
+            analysis_type=analysis_type,
+            analyst_address=req.wallet_address,
+        )
+        if tx_hash:
+            etherscan_url = f"https://sepolia.etherscan.io/tx/{tx_hash}"
+
+    # stash in session
+    entry = {
+        "result_cid": result_cid,
+        "tx_hash": tx_hash,
+        "etherscan_url": etherscan_url,
+        "analysis_type": analysis_type,
+        "timestamp": int(time.time()),
+        "branch_id": branch_id,
+    }
+    if not hasattr(session, "attestations"):
+        session.attestations = []
+    session.attestations.append(entry)
+
+    logger.info(
+        "Attestation complete  session=%s  branch=%s  cid=%s  tx=%s",
+        session_id, branch_id, result_cid, tx_hash,
+    )
+
+    return AttestResponse(
+        result_cid=result_cid,
+        tx_hash=tx_hash,
+        etherscan_url=etherscan_url,
+        analysis_type=analysis_type,
+        timestamp=int(time.time()),
+    )
+
+
+@router.get("/sessions/{session_id}/attestations", response_model=List[AttestationEntry])
+async def get_attestations(session_id: str):
+    """Fetch all attestations made during this session."""
+    session = _get_session(session_id)
+    entries = getattr(session, "attestations", [])
+    return [AttestationEntry(**e) for e in entries]

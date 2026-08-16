@@ -749,20 +749,74 @@ def get_candidate_hypotheses(
 
 
 def _is_column_non_normal(profile: DatasetProfile, col_name: str) -> bool:
-    """Check if column looks non-normal."""
+    """Check if column looks non-normal using evidence-based heuristics.
+
+    Parametric tests (t-tests, ANOVA) are robust to moderate departures from normality,
+    especially in moderate to large samples by the Central Limit Theorem (CLT).
+    Therefore, parametric tests (which auto-handle heteroscedasticity via Welch's correction)
+    are recommended by default unless:
+      - The sample size is small (< 500) and formal tests/heuristics show non-normality.
+      - The sample is substantially skewed (|skewness| > 1.5).
+      - The user explicitly requested a non-parametric alternative.
+    """
     if not col_name:
         return False
+    
+    n_rows = profile.row_count
+
     for col in profile.columns:
         if col.name == col_name:
+            # Large samples (n >= 500): CLT guarantees asymptotic normality of sample means.
+            # Only extreme skewness (|skew| > 1.5) warrants a non-parametric default suggestion.
+            if n_rows >= 500:
+                if col.skewness is not None and abs(col.skewness) > 1.5:
+                    return True
+                return False
+
+            # Moderate / small samples (n < 500)
             if col.normality_hint == "likely_non_normal":
                 return True
-            if col.skewness is not None and abs(col.skewness) > 0.5:
+            if col.normality_hint == "appears_normal":
+                return False
+
+            # Substantial skewness threshold (|skewness| > 1.0)
+            # Bulmer (1979): |skew| < 0.5 is approx symmetric, 0.5-1.0 is moderate, > 1.0 is highly skewed.
+            if col.skewness is not None and abs(col.skewness) > 1.0:
                 return True
-            if col.kurtosis is not None and abs(col.kurtosis) > 2.0:
+
+            # Substantial kurtosis threshold (|excess kurtosis| > 3.0)
+            if col.kurtosis is not None and abs(col.kurtosis) > 3.0:
                 return True
-            if col.normality_hint and col.normality_hint != "appears_normal":
-                return True
+
+            return False
     return False
+
+
+def _normality_confidence(profile: DatasetProfile, col_name: str) -> str:
+    """Return normality confidence: 'normal', 'borderline', or 'non_normal'."""
+    if not col_name:
+        return "normal"
+    n_rows = profile.row_count
+    for col in profile.columns:
+        if col.name == col_name:
+            if n_rows >= 500:
+                if col.skewness is not None and abs(col.skewness) > 1.5:
+                    return "non_normal"
+                if col.skewness is not None and abs(col.skewness) > 0.8:
+                    return "borderline"
+                return "normal"
+            if col.normality_hint == "likely_non_normal":
+                return "non_normal"
+            if col.normality_hint == "appears_normal":
+                return "normal"
+            if col.skewness is not None and abs(col.skewness) > 1.0:
+                return "non_normal"
+            if col.kurtosis is not None and abs(col.kurtosis) > 3.0:
+                return "non_normal"
+            if (col.skewness is not None and abs(col.skewness) > 0.5) or (col.kurtosis is not None and abs(col.kurtosis) > 2.0):
+                return "borderline"
+            return "normal"
+    return "normal"
 
 
 
@@ -799,11 +853,11 @@ def get_candidate_analyses(
                 hypothesis_id=hypothesis.id,
                 test_name="independent_ttest",
                 display_name="Independent samples t-test",
-                description="Compares means of two groups assuming normal distributions.",
+                description="Compares means of two groups. Automatically runs Levene's test to apply Student's t-test (equal variances) or Welch's t-test (unequal variances).",
                 is_suggested=not use_nonparametric,
-                suggestion_reason=None if use_nonparametric else "Standard parametric test for two-group mean comparisons.",
+                suggestion_reason=None if use_nonparametric else "Standard parametric test for two-group comparisons. Evaluates equality of variances via Levene's test to select Student's or Welch's t-test.",
                 tradeoffs=[
-                    AnalysisTradeoff(label="Assumes normality", description="May be inaccurate if data is heavily skewed."),
+                    AnalysisTradeoff(label="Assumes normality & checks variance", description="Robust for moderate/large samples under CLT; auto-corrects for unequal variances via Welch's t-test."),
                     AnalysisTradeoff(label="More statistical power", description="Detects smaller differences than non-parametric alternatives."),
                 ],
             ))
@@ -828,18 +882,19 @@ def get_candidate_analyses(
         elif group_count in ("groups_multi", "multi"):
             outcome_col = answers.get("outcome", "")
             non_normal = _is_column_non_normal(profile, outcome_col)
+            use_nonparametric = non_normal or prefer_nonparametric
 
             analyses.append(CandidateAnalysis(
                 id=_stable_id("ana", hypothesis.id, "one_way_anova"),
                 hypothesis_id=hypothesis.id,
                 test_name="one_way_anova",
                 display_name="One-way ANOVA",
-                description="Compares means across three or more groups assuming normality and equal variance.",
-                is_suggested=not non_normal,
-                suggestion_reason=None if non_normal else "Standard parametric test for multi-group comparisons with post-hoc testing.",
+                description="Compares means across three or more groups. Automatically applies standard Fisher's ANOVA or Welch's ANOVA based on Levene's test.",
+                is_suggested=not use_nonparametric,
+                suggestion_reason=None if use_nonparametric else "Standard parametric test for multi-group comparisons with post-hoc testing (auto-handles unequal variances via Welch's ANOVA).",
                 tradeoffs=[
-                    AnalysisTradeoff(label="Assumes normality & equal variance", description="Violations may inflate error rates."),
-                    AnalysisTradeoff(label="Post-hoc tests available", description="Can identify which specific groups differ."),
+                    AnalysisTradeoff(label="Assumes normality & checks variance", description="Auto-falls back to Welch's ANOVA if variances are unequal across groups."),
+                    AnalysisTradeoff(label="Post-hoc tests available", description="Can identify which specific groups differ via Tukey HSD or Games-Howell."),
                 ],
             ))
             analyses.append(CandidateAnalysis(
@@ -848,8 +903,12 @@ def get_candidate_analyses(
                 test_name="kruskal_wallis",
                 display_name="Kruskal-Wallis H test",
                 description="Non-parametric alternative for comparing distributions across 3+ groups.",
-                is_suggested=non_normal,
-                suggestion_reason="Suggested fallback because the outcome variable appears to be non-normally distributed." if non_normal else None,
+                is_suggested=use_nonparametric,
+                suggestion_reason=(
+                    "Suggested non-parametric alternative requested by researcher."
+                    if prefer_nonparametric
+                    else ("Suggested fallback because the outcome variable appears to be non-normally distributed." if non_normal else None)
+                ),
                 tradeoffs=[
                     AnalysisTradeoff(label="No normality assumption", description="Works with skewed or ordinal data."),
                     AnalysisTradeoff(label="Less specific", description="Tests whether distributions differ, not specifically means."),
@@ -861,6 +920,7 @@ def get_candidate_analyses(
         outcome_col = answers.get("outcome", "")
         paired_col = answers.get("paired", "")
         non_normal = _is_column_non_normal(profile, outcome_col) or _is_column_non_normal(profile, paired_col)
+        use_nonparametric = non_normal or prefer_nonparametric
 
         analyses.append(CandidateAnalysis(
             id=_stable_id("ana", hypothesis.id, "paired_ttest"),
@@ -868,8 +928,8 @@ def get_candidate_analyses(
             test_name="paired_ttest",
             display_name="Paired t-test",
             description="Compares two related measurements assuming normal distribution of differences.",
-            is_suggested=not non_normal,
-            suggestion_reason=None if non_normal else "Standard test for before/after or matched-pairs designs.",
+            is_suggested=not use_nonparametric,
+            suggestion_reason=None if use_nonparametric else "Standard test for before/after or matched-pairs designs.",
             tradeoffs=[
                 AnalysisTradeoff(label="Assumes normal differences", description="The differences (not raw scores) must be approximately normal."),
             ],
@@ -880,8 +940,12 @@ def get_candidate_analyses(
             test_name="wilcoxon_signed_rank",
             display_name="Wilcoxon signed-rank test",
             description="Non-parametric paired comparison.",
-            is_suggested=non_normal,
-            suggestion_reason="Suggested fallback because one or both paired variables appear to be non-normally distributed." if non_normal else None,
+            is_suggested=use_nonparametric,
+            suggestion_reason=(
+                "Suggested non-parametric alternative requested by researcher."
+                if prefer_nonparametric
+                else ("Suggested fallback because one or both paired variables appear to be non-normally distributed." if non_normal else None)
+            ),
             tradeoffs=[
                 AnalysisTradeoff(label="No normality assumption", description="Uses ranks rather than raw values."),
                 AnalysisTradeoff(label="Slightly less power", description="May miss small effects."),
@@ -892,6 +956,7 @@ def get_candidate_analyses(
     elif goal in ("goal_compare", "compare") and design in ("design_repeated", "repeated"):
         outcome_col = answers.get("outcome", "")
         non_normal = _is_column_non_normal(profile, outcome_col)
+        use_nonparametric = non_normal or prefer_nonparametric
 
         analyses.append(CandidateAnalysis(
             id=_stable_id("ana", hypothesis.id, "repeated_measures_anova"),
@@ -899,8 +964,8 @@ def get_candidate_analyses(
             test_name="repeated_measures_anova",
             display_name="Repeated-measures ANOVA",
             description="Tests for differences across 3+ time points with the same subjects.",
-            is_suggested=not non_normal,
-            suggestion_reason=None if non_normal else "Standard approach for within-subjects longitudinal designs.",
+            is_suggested=not use_nonparametric,
+            suggestion_reason=None if use_nonparametric else "Standard approach for within-subjects longitudinal designs.",
             tradeoffs=[
                 AnalysisTradeoff(label="Assumes sphericity", description="Requires similar variances of differences between conditions."),
             ],
@@ -911,8 +976,12 @@ def get_candidate_analyses(
             test_name="friedman",
             display_name="Friedman test",
             description="Non-parametric alternative for repeated measures.",
-            is_suggested=non_normal,
-            suggestion_reason="Suggested fallback because the outcome variable appears to be non-normally distributed." if non_normal else None,
+            is_suggested=use_nonparametric,
+            suggestion_reason=(
+                "Suggested non-parametric alternative requested by researcher."
+                if prefer_nonparametric
+                else ("Suggested fallback because the outcome variable appears to be non-normally distributed." if non_normal else None)
+            ),
             tradeoffs=[
                 AnalysisTradeoff(label="Rank-based", description="No distributional assumptions."),
                 AnalysisTradeoff(label="Less power", description="May miss subtle changes."),
@@ -923,6 +992,7 @@ def get_candidate_analyses(
     elif goal in ("goal_reference", "reference"):
         outcome_col = answers.get("outcome", "")
         non_normal = _is_column_non_normal(profile, outcome_col)
+        use_nonparametric = non_normal or prefer_nonparametric
 
         analyses.append(CandidateAnalysis(
             id=_stable_id("ana", hypothesis.id, "one_sample_ttest"),
@@ -930,8 +1000,8 @@ def get_candidate_analyses(
             test_name="one_sample_ttest",
             display_name="One-sample t-test",
             description="Tests whether the sample mean differs from a known value.",
-            is_suggested=not non_normal,
-            suggestion_reason=None if non_normal else "Standard test for comparing a sample to a reference.",
+            is_suggested=not use_nonparametric,
+            suggestion_reason=None if use_nonparametric else "Standard test for comparing a sample to a reference.",
             tradeoffs=[
                 AnalysisTradeoff(label="Assumes normality", description="Best with roughly symmetric data."),
             ],
@@ -942,8 +1012,12 @@ def get_candidate_analyses(
             test_name="one_sample_wilcoxon",
             display_name="One-sample Wilcoxon signed-rank test",
             description="Non-parametric alternative using signed ranks.",
-            is_suggested=non_normal,
-            suggestion_reason="Suggested fallback because the outcome variable appears to be non-normally distributed." if non_normal else None,
+            is_suggested=use_nonparametric,
+            suggestion_reason=(
+                "Suggested non-parametric alternative requested by researcher."
+                if prefer_nonparametric
+                else ("Suggested fallback because the outcome variable appears to be non-normally distributed." if non_normal else None)
+            ),
             tradeoffs=[
                 AnalysisTradeoff(label="No normality assumption", description="Robust to skewed data."),
             ],
@@ -955,6 +1029,7 @@ def get_candidate_analyses(
             outcome_col = answers.get("outcome", "")
             predictor_col = answers.get("predictor", "")
             non_normal = _is_column_non_normal(profile, outcome_col) or _is_column_non_normal(profile, predictor_col)
+            use_nonparametric = non_normal or prefer_nonparametric
 
             analyses.append(CandidateAnalysis(
                 id=_stable_id("ana", hypothesis.id, "pearson_correlation"),
@@ -962,8 +1037,8 @@ def get_candidate_analyses(
                 test_name="pearson_correlation",
                 display_name="Pearson correlation",
                 description="Measures linear relationship between two numeric variables.",
-                is_suggested=not non_normal,
-                suggestion_reason=None if non_normal else "Most common for bivariate linear associations.",
+                is_suggested=not use_nonparametric,
+                suggestion_reason=None if use_nonparametric else "Most common for bivariate linear associations.",
                 tradeoffs=[
                     AnalysisTradeoff(label="Assumes linearity", description="Only detects linear relationships."),
                     AnalysisTradeoff(label="Sensitive to outliers", description="Extreme values can distort the coefficient."),
@@ -975,8 +1050,12 @@ def get_candidate_analyses(
                 test_name="spearman_correlation",
                 display_name="Spearman rank correlation",
                 description="Non-parametric monotonic relationship measure.",
-                is_suggested=non_normal,
-                suggestion_reason="Suggested fallback because one or both variables appear to be non-normally distributed." if non_normal else None,
+                is_suggested=use_nonparametric,
+                suggestion_reason=(
+                    "Suggested non-parametric alternative requested by researcher."
+                    if prefer_nonparametric
+                    else ("Suggested fallback because one or both variables appear to be non-normally distributed." if non_normal else None)
+                ),
                 tradeoffs=[
                     AnalysisTradeoff(label="Detects monotonic relationships", description="Not limited to linear patterns."),
                     AnalysisTradeoff(label="Robust to outliers", description="Uses ranks instead of raw values."),
@@ -1001,6 +1080,7 @@ def get_candidate_analyses(
     elif goal in ("goal_change", "change"):
         outcome_col = answers.get("outcome", "")
         non_normal = _is_column_non_normal(profile, outcome_col)
+        use_nonparametric = non_normal or prefer_nonparametric
 
         analyses.append(CandidateAnalysis(
             id=_stable_id("ana", hypothesis.id, "repeated_measures_anova"),
@@ -1008,8 +1088,8 @@ def get_candidate_analyses(
             test_name="repeated_measures_anova",
             display_name="Repeated-measures ANOVA",
             description="Tests for change across time points within subjects.",
-            is_suggested=not non_normal,
-            suggestion_reason=None if non_normal else "Standard for longitudinal within-subjects designs.",
+            is_suggested=not use_nonparametric,
+            suggestion_reason=None if use_nonparametric else "Standard for longitudinal within-subjects designs.",
             tradeoffs=[
                 AnalysisTradeoff(label="Assumes sphericity", description="Requires similar variances of differences."),
             ],
@@ -1020,8 +1100,12 @@ def get_candidate_analyses(
             test_name="friedman",
             display_name="Friedman test",
             description="Non-parametric repeated-measures test.",
-            is_suggested=non_normal,
-            suggestion_reason="Suggested fallback because the outcome variable appears to be non-normally distributed." if non_normal else None,
+            is_suggested=use_nonparametric,
+            suggestion_reason=(
+                "Suggested non-parametric alternative requested by researcher."
+                if prefer_nonparametric
+                else ("Suggested fallback because the outcome variable appears to be non-normally distributed." if non_normal else None)
+            ),
             tradeoffs=[
                 AnalysisTradeoff(label="Rank-based", description="No distributional assumptions."),
             ],
@@ -1237,7 +1321,7 @@ def get_follow_up_question(
     latest_followup = _get_latest_followup(tree, branch_id)
 
     prompt = "What would you like to do next?"
-    explanation = "Results continue the tree — you can keep exploring."
+    explanation = "Pick a follow-up path."
 
     if latest_followup == "followup_effect_size":
         # Extract active analysis result from tree if available
@@ -1261,47 +1345,53 @@ def get_follow_up_question(
 
             prompt = f"📊 Effect Size & Confidence Interval: {val_str}{mag_str}"
             if ci_str:
-                explanation = f"Detailed Breakdown — {ci_str}. Sample differences evaluate the magnitude of treatment effect beyond p-value significance."
+                explanation = f"Detailed Breakdown — {ci_str}. Evaluates effect magnitude beyond p-value."
             elif val_str:
                 explanation = f"Detailed Breakdown — {val_str}{mag_str} calculated for this active test."
             else:
-                explanation = "Effect sizes quantify the magnitude of the observed effect beyond p-value significance."
+                explanation = "Effect sizes show how big the effect actually is, independent of sample size."
         else:
             prompt = "📊 Effect Size & Confidence Interval Breakdown"
-            explanation = "Effect sizes quantify the magnitude of the observed effect beyond p-value significance."
+            explanation = "Effect sizes show how big the effect actually is, independent of sample size."
 
     elif latest_followup == "followup_nonparametric":
         prompt = "🔄 Non-parametric Alternative Selected"
-        explanation = "We've updated candidate test recommendations below to suggest non-parametric tests (Mann-Whitney U, Wilcoxon, Kruskal-Wallis, Spearman). Click a test below to execute."
+        explanation = "Updated recommendations to rank-based tests (Mann-Whitney U, Wilcoxon, Kruskal-Wallis, Spearman). Pick one below."
 
     elif latest_followup == "followup_export":
         prompt = "📄 Branch Rationale & Audit Trail Exported"
-        explanation = "All decision nodes, dataset profile context, statistical outputs, effect sizes, and rationale for this exploration branch have been logged."
+        explanation = "Decision trail, stats, effect sizes, and provenance for this branch have been logged."
 
     options = [
         QuestionOption(
             id="followup_effect_size",
             label="Inspect effect size and confidence interval",
+            description="Check Cohen's d / η² / r with 95% CIs.",
         ),
         QuestionOption(
             id="followup_covariate",
             label="Add a covariate and re-analyze",
+            description="Control for a confounding variable via ANCOVA / regression.",
         ),
         QuestionOption(
             id="followup_nonparametric",
             label="Compare with a non-parametric alternative",
+            description="Try rank-based tests when normality assumptions are violated.",
         ),
         QuestionOption(
             id="followup_subgroup",
             label="Test a subgroup or interaction",
+            description="Stratify by a categorical variable to check for interaction effects.",
         ),
         QuestionOption(
             id="followup_new_hypothesis",
             label="Create a related hypothesis with a different outcome",
+            description="Same groups, different outcome variable.",
         ),
         QuestionOption(
             id="followup_export",
             label="Stop and export this branch's rationale",
+            description="Export full decision trail, stats, and provenance.",
         ),
     ]
 

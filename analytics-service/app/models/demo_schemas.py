@@ -212,6 +212,7 @@ class AnalysisResult(BaseModel):
     result: Dict[str, Any] = Field(default_factory=dict)
     effect_size: Dict[str, Any] = Field(default_factory=dict)
     assumptions: Dict[str, Any] = Field(default_factory=dict)
+    group_stats: Dict[str, Any] = Field(default_factory=dict)
     interpretation: str = ""
     warnings: List[str] = Field(default_factory=list)
     follow_up_options: List[str] = Field(default_factory=list)

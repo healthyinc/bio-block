@@ -310,6 +310,111 @@ class TestAnalysisAlternatives:
         assert mw_u.suggestion_reason is not None
         assert "non-normally distributed" in mw_u.suggestion_reason
 
+    def test_approx_normal_suggests_parametric_ttest(self, profile, tree):
+        # Even with mild skewness (|skew| <= 1.0) and normality_hint="appears_normal", suggest parametric
+        for col in profile.columns:
+            if col.name == "blood_pressure_pre":
+                col.normality_hint = "appears_normal"
+                col.skewness = 0.6
+                col.kurtosis = 2.2
+
+        tree = self._build_two_group_tree(profile, tree)
+        branch_id = tree.active_branch_id
+        hyps = get_candidate_hypotheses(profile, tree, branch_id)
+        analyses = get_candidate_analyses(profile, hyps[0], tree, branch_id)
+
+        t_test = next(a for a in analyses if a.test_name == "independent_ttest")
+        mw_u = next(a for a in analyses if a.test_name == "mann_whitney_u")
+
+        assert t_test.is_suggested is True
+        assert mw_u.is_suggested is False
+
+    def test_multi_group_normal_suggests_anova(self, profile, tree):
+        for col in profile.columns:
+            if col.name == "blood_pressure_pre":
+                col.normality_hint = "appears_normal"
+                col.skewness = 0.1
+                col.kurtosis = 0.0
+
+        branch_id = tree.active_branch_id
+        tree = _answer(tree, profile, branch_id, "start_goal", "start_goal", {"start_mode": "start_goal"})
+        tree = _answer(tree, profile, branch_id, "goal_compare", "goal_compare", {"goal": "goal_compare"})
+        tree = _answer(tree, profile, branch_id, "blood_pressure_pre", "col_blood_pressure_pre",
+                       {"select_outcome": "blood_pressure_pre", "outcome": "blood_pressure_pre"})
+        tree = _answer(tree, profile, branch_id, "design_independent", "design_independent",
+                       {"design": "design_independent"})
+        tree = _answer(tree, profile, branch_id, "treatment", "col_treatment",
+                       {"select_group": "treatment", "group": "treatment"})
+        tree = _answer(tree, profile, branch_id, "groups_multi", "groups_multi",
+                       {"group_count": "groups_multi"})
+
+        hyps = get_candidate_hypotheses(profile, tree, branch_id)
+        analyses = get_candidate_analyses(profile, hyps[0], tree, branch_id)
+
+        anova = next(a for a in analyses if a.test_name == "one_way_anova")
+        kruskal = next(a for a in analyses if a.test_name == "kruskal_wallis")
+
+        assert anova.is_suggested is True
+        assert kruskal.is_suggested is False
+
+    def test_multi_group_non_normal_suggests_kruskal(self, profile, tree):
+        for col in profile.columns:
+            if col.name == "blood_pressure_pre":
+                col.normality_hint = "likely_non_normal"
+
+        branch_id = tree.active_branch_id
+        tree = _answer(tree, profile, branch_id, "start_goal", "start_goal", {"start_mode": "start_goal"})
+        tree = _answer(tree, profile, branch_id, "goal_compare", "goal_compare", {"goal": "goal_compare"})
+        tree = _answer(tree, profile, branch_id, "blood_pressure_pre", "col_blood_pressure_pre",
+                       {"select_outcome": "blood_pressure_pre", "outcome": "blood_pressure_pre"})
+        tree = _answer(tree, profile, branch_id, "design_independent", "design_independent",
+                       {"design": "design_independent"})
+        tree = _answer(tree, profile, branch_id, "treatment", "col_treatment",
+                       {"select_group": "treatment", "group": "treatment"})
+        tree = _answer(tree, profile, branch_id, "groups_multi", "groups_multi",
+                       {"group_count": "groups_multi"})
+
+        hyps = get_candidate_hypotheses(profile, tree, branch_id)
+        analyses = get_candidate_analyses(profile, hyps[0], tree, branch_id)
+
+        anova = next(a for a in analyses if a.test_name == "one_way_anova")
+        kruskal = next(a for a in analyses if a.test_name == "kruskal_wallis")
+
+        assert anova.is_suggested is False
+        assert kruskal.is_suggested is True
+
+    def test_large_dataset_suggests_independent_ttest(self, tree):
+        np.random.seed(42)
+        n = 10000
+        df = pd.DataFrame({
+            "weight": np.concatenate([np.random.normal(180, 20, 5000), np.random.normal(140, 15, 5000)]),
+            "sex": ["M"] * 5000 + ["F"] * 5000,
+        })
+        large_profile = profile_dataset(df)
+
+        branch_id = tree.active_branch_id
+        tree = _answer(tree, large_profile, branch_id, "start_goal", "start_goal", {"start_mode": "start_goal"})
+        tree = _answer(tree, large_profile, branch_id, "goal_compare", "goal_compare", {"goal": "goal_compare"})
+        tree = _answer(tree, large_profile, branch_id, "weight", "col_weight",
+                       {"select_outcome": "weight", "outcome": "weight"})
+        tree = _answer(tree, large_profile, branch_id, "design_independent", "design_independent",
+                       {"design": "design_independent"})
+        tree = _answer(tree, large_profile, branch_id, "sex", "col_sex",
+                       {"select_group": "sex", "group": "sex"})
+        tree = _answer(tree, large_profile, branch_id, "groups_two", "groups_two",
+                       {"group_count": "groups_two"})
+
+        hyps = get_candidate_hypotheses(large_profile, tree, branch_id)
+        analyses = get_candidate_analyses(large_profile, hyps[0], tree, branch_id)
+
+        t_test = next(a for a in analyses if a.test_name == "independent_ttest")
+        mw_u = next(a for a in analyses if a.test_name == "mann_whitney_u")
+
+        assert t_test.is_suggested is True
+        assert mw_u.is_suggested is False
+        assert "Standard parametric test" in t_test.suggestion_reason
+        assert "Levene's test" in t_test.suggestion_reason
+
 
 
 

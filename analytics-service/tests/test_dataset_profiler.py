@@ -118,3 +118,20 @@ class TestProfileDataset:
         profile = profile_dataset(clinical_df)
         bp = next(c for c in profile.columns if c.name == "blood_pressure")
         assert bp.normality_hint is not None
+
+    def test_large_sample_normality_hint_appears_normal(self):
+        np.random.seed(42)
+        # 10,000 lines of normal data with two group mixture (Weight vs Sex)
+        weights = np.concatenate([np.random.normal(180, 20, 5000), np.random.normal(140, 15, 5000)])
+        df = pd.DataFrame({"weight": weights})
+        profile = profile_dataset(df)
+        weight_col = next(c for c in profile.columns if c.name == "weight")
+        assert weight_col.normality_hint == "appears_normal"
+
+    def test_large_sample_heavily_skewed_normality_hint_likely_non_normal(self):
+        np.random.seed(42)
+        # 10,000 lines of exponential data (skewness > 1.5)
+        df = pd.DataFrame({"income": np.random.exponential(scale=1000, size=10000)})
+        profile = profile_dataset(df)
+        col = next(c for c in profile.columns if c.name == "income")
+        assert col.normality_hint == "likely_non_normal"

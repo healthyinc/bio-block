@@ -129,15 +129,21 @@ def _profile_numeric(series: pd.Series) -> dict:
         result["skewness"] = round(float(clean.skew()), 4)
         result["kurtosis"] = round(float(clean.kurtosis()), 4)
 
-    # Quick normality hint
-    if 8 <= len(clean) <= 5000:
+    # Normality hint — Shapiro-Wilk for small/moderate samples
+    if 8 <= len(clean) <= 500:
         _, p = sp_stats.shapiro(clean.values)
         if p > 0.05:
             result["normality_hint"] = "appears_normal"
         else:
             result["normality_hint"] = "likely_non_normal"
-    elif len(clean) > 5000:
-        result["normality_hint"] = "large_sample_check_advised"
+    elif len(clean) > 500:
+        # large n: SW rejects everything, use skew/kurtosis heuristic instead
+        skew = abs(float(clean.skew())) if len(clean) >= 3 else 0.0
+        kurt = abs(float(clean.kurtosis())) if len(clean) >= 3 else 0.0
+        if skew > 1.5 or kurt > 5.0:
+            result["normality_hint"] = "likely_non_normal"
+        else:
+            result["normality_hint"] = "appears_normal"
 
     return result
 

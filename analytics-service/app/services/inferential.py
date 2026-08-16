@@ -376,6 +376,37 @@ def _build_response(test_result, reason, assumptions, group_stats,
     }
 
 
+def _calc_group_stats(data: np.ndarray) -> Dict[str, Any]:
+    """Summary stats for a single group."""
+    clean = np.asarray(data, dtype=float)
+    clean = clean[~np.isnan(clean)]
+    n = int(len(clean))
+    if n == 0:
+        return {
+            "n": 0, "mean": 0.0, "std": 0.0, "median": 0.0,
+            "se": 0.0, "q1": 0.0, "q3": 0.0, "min": 0.0, "max": 0.0,
+        }
+    mean = round(float(np.mean(clean)), 4)
+    std = round(float(np.std(clean, ddof=1)), 4) if n > 1 else 0.0
+    median = round(float(np.median(clean)), 4)
+    se = round(float(std / np.sqrt(n)), 4) if n > 0 else 0.0
+    q1 = round(float(np.percentile(clean, 25)), 4)
+    q3 = round(float(np.percentile(clean, 75)), 4)
+    min_v = round(float(np.min(clean)), 4)
+    max_v = round(float(np.max(clean)), 4)
+    return {
+        "n": n,
+        "mean": mean,
+        "std": std,
+        "median": median,
+        "se": se,
+        "q1": q1,
+        "q3": q3,
+        "min": min_v,
+        "max": max_v,
+    }
+
+
 # -- Orchestrators --
 
 def _validate_numeric_col(df, col):
@@ -472,18 +503,8 @@ def run_two_group_test(df, numeric_col, group_col, alpha=0.05, alternative="two-
 
 
     group_stats = {
-        str(groups[0]): {
-            "n": int(len(group1)),
-            "mean": round(float(np.mean(group1)), 4),
-            "std": round(float(np.std(group1, ddof=1)), 4),
-            "median": round(float(np.median(group1)), 4),
-        },
-        str(groups[1]): {
-            "n": int(len(group2)),
-            "mean": round(float(np.mean(group2)), 4),
-            "std": round(float(np.std(group2, ddof=1)), 4),
-            "median": round(float(np.median(group2)), 4),
-        },
+        str(groups[0]): _calc_group_stats(group1),
+        str(groups[1]): _calc_group_stats(group2),
     }
 
     return _build_response(test_result, reason, assumptions, group_stats,
@@ -541,16 +562,9 @@ def run_paired_test(df, col1, col2, alpha=0.05, alternative="two-sided"):
         )
 
     group_stats = {
-        col1: {
-            "n": int(len(data1)),
-            "mean": round(float(np.mean(data1)), 4),
-            "std": round(float(np.std(data1, ddof=1)), 4),
-        },
-        col2: {
-            "n": int(len(data2)),
-            "mean": round(float(np.mean(data2)), 4),
-            "std": round(float(np.std(data2, ddof=1)), 4),
-        },
+        col1: _calc_group_stats(data1),
+        col2: _calc_group_stats(data2),
+        "_differences": _calc_group_stats(diffs),
     }
 
     return _build_response(test_result, reason, assumptions, group_stats,
@@ -604,13 +618,8 @@ def run_one_sample_test(df, numeric_col, population_mean, alpha=0.05,
         )
 
     group_stats = {
-        "sample": {
-            "n": int(n),
-            "mean": round(float(np.mean(sample)), 4),
-            "std": round(float(np.std(sample, ddof=1)), 4),
-            "median": round(float(np.median(sample)), 4),
-        },
-        "_reference": {"value": population_mean},
+        "sample": _calc_group_stats(sample),
+        "_reference": {"value": population_mean, "n": len(sample)},
     }
 
     return _build_response(test_result, reason, assumptions, group_stats,
@@ -1063,12 +1072,7 @@ def run_one_way_anova(
 
     group_stats = {}
     for name, gd in zip(group_names, group_data):
-        group_stats[name] = {
-            "n": int(len(gd)),
-            "mean": round(float(np.mean(gd)), 4),
-            "std": round(float(np.std(gd, ddof=1)), 4),
-            "median": round(float(np.median(gd)), 4),
-        }
+        group_stats[name] = _calc_group_stats(gd)
 
     return _build_anova_response(
         test_result, reason, assumptions, group_stats,
