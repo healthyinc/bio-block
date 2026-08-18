@@ -51,15 +51,15 @@ export default function SearchData({ onBack }) {
       // Check if it has streaming encryption markers
       if (dataString.includes("|METADATA_SEPARATOR|") && dataString.includes("|CHUNK_SEPARATOR|")) {
         console.log("Detected streaming encryption format, using streaming decryption");
-        const streamer = new StreamingEncryption();
+        const streamer = new StreamingEncryption(documentKey);
         return await streamer.decryptFileStream(dataString, progressCallback);
       } else {
         console.log("Using traditional decryption");
-        return decryptFile(encryptedData);
+        return decryptFile(encryptedData, documentKey);
       }
     } catch (error) {
       console.warn("Streaming decryption failed, falling back to traditional:", error);
-      return decryptFile(encryptedData);
+      return decryptFile(encryptedData, documentKey);
     }
   };
 
@@ -203,8 +203,11 @@ export default function SearchData({ onBack }) {
       const response = await fetch(`https://gateway.pinata.cloud/ipfs/${cid}`);
       const encryptedData = await response.text();
 
+      // Fetch document key
+      const documentKey = await getDocumentKey(cid);
+
       // Use smart decryption (handles both streaming and traditional)
-      const decryptedData = await smartDecrypt(encryptedData, (progress) =>
+      const decryptedData = await smartDecrypt(encryptedData, documentKey, (progress) =>
         console.log(`Decryption progress: ${progress.toFixed(1)}%`)
       );
 
@@ -252,8 +255,11 @@ export default function SearchData({ onBack }) {
       const response = await fetch(`https://gateway.pinata.cloud/ipfs/${previewHash}`);
       const encryptedData = await response.text();
 
+      // Fetch document key for preview
+      const previewKey = await getDocumentKey(previewHash);
+
       // Use smart decryption for preview
-      const decryptedData = await smartDecrypt(encryptedData, (progress) =>
+      const decryptedData = await smartDecrypt(encryptedData, previewKey, (progress) =>
         console.log(`Preview decryption progress: ${progress.toFixed(1)}%`)
       );
 

@@ -14,6 +14,7 @@ import {
   Check,
 } from 'lucide-react';
 import { storeDocumentHash } from '../lib/contractService';
+import { generateDocumentKey } from '../lib/encryptionUtils';
 import { encryptFile } from '../lib/encryptionUtils';
 import StreamingEncryption from '../lib/streamingEncryption';
 
@@ -441,7 +442,8 @@ export default function UploadData({
 
   const uploadToIPFSViaBackend = async (
     encryptedData: Blob | Uint8Array,
-    fileName: string
+    fileName: string,
+    documentKey: string
   ): Promise<IPFSUploadResult> => {
     const formData = new FormData();
     
@@ -452,6 +454,7 @@ export default function UploadData({
     
     formData.append('encryptedFile', blobData);
     formData.append('fileName', fileName);
+    formData.append('documentKey', documentKey);
 
     const backendUrl =
       process.env.NEXT_PUBLIC_JS_BACKEND_URL || 'http://localhost:3001';
@@ -560,7 +563,8 @@ export default function UploadData({
       // Step 3: Encrypting
       updateStep(2);
       try {
-        const streamer = new StreamingEncryption();
+        const documentKey = generateDocumentKey();
+        const streamer = new StreamingEncryption(documentKey);
         
         const shouldUseStreaming = streamer.shouldUseStreaming(fileToUpload.size);
 
@@ -580,7 +584,7 @@ export default function UploadData({
           setIsStreamingEncryption(false);
         } else {
           const fileBuffer = await fileToUpload.arrayBuffer();
-          encryptedFile = encryptFile(new Uint8Array(fileBuffer));
+          encryptedFile = encryptFile(new Uint8Array(fileBuffer), documentKey);
         }
 
         updateStep(2, true, false);
@@ -589,7 +593,8 @@ export default function UploadData({
         updateStep(3);
         const result = await uploadToIPFSViaBackend(
           encryptedFile,
-          fileToUpload.name
+          fileToUpload.name,
+          documentKey
         );
         if (!result.success) {
           updateStep(3, false, true);
@@ -620,7 +625,8 @@ export default function UploadData({
         let previewHash: string | null = null;
         if (previewFile) {
           try {
-            const previewStreamer = new StreamingEncryption();
+            const previewKey = generateDocumentKey();
+            const previewStreamer = new StreamingEncryption(previewKey);
             const shouldUseStreamingForPreview =
               previewStreamer.shouldUseStreaming(previewFile.size);
 
@@ -633,12 +639,13 @@ export default function UploadData({
               );
             } else {
               const previewBuffer = await previewFile.arrayBuffer();
-              encryptedPreview = encryptFile(new Uint8Array(previewBuffer));
+              encryptedPreview = encryptFile(new Uint8Array(previewBuffer), previewKey);
             }
 
             const previewResult = await uploadToIPFSViaBackend(
               encryptedPreview,
-              previewFile.name
+              previewFile.name,
+              previewKey
             );
             if (previewResult.success) {
               previewHash = previewResult.ipfsHash || null;

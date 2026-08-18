@@ -519,7 +519,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       const documentKey = generateDocumentKey(); // Generate unique key for this document
       
       try {
-        const streamer = new StreamingEncryption();
+        const streamer = new StreamingEncryption(documentKey);
 
         console.log(`=== ENCRYPTION DECISION ===`);
         console.log(
@@ -608,7 +608,8 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
         // Upload preview to IPFS via backend if it exists
         if (previewFile) {
           try {
-            const previewStreamer = new StreamingEncryption();
+            const previewKey = generateDocumentKey();
+            const previewStreamer = new StreamingEncryption(previewKey);
             const shouldUseStreamingForPreview = previewStreamer.shouldUseStreaming(
               previewFile.size
             );
