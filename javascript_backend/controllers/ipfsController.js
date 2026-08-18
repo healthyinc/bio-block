@@ -4,6 +4,24 @@ const FormData = require("form-data");
 const fs = require("fs");
 const os = require("os");
 const crypto = require("crypto");
+const path = require("path");
+const { ethers } = require("ethers");
+
+const KEYS_FILE = path.join(__dirname, "../data/keys.json");
+
+// Ensure data dir exists
+if (!fs.existsSync(path.dirname(KEYS_FILE))) {
+  fs.mkdirSync(path.dirname(KEYS_FILE), { recursive: true });
+}
+if (!fs.existsSync(KEYS_FILE)) {
+  fs.writeFileSync(KEYS_FILE, JSON.stringify({}));
+}
+
+// Contract configuration
+const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+const CONTRACT_ABI = [
+  "function checkAccess(string memory ipfsHash, address user) public view returns (bool)"
+];
 
 // Configure multer for disk storage with file-type validation
 const storage = multer.diskStorage({
@@ -18,72 +36,63 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   fileFilter: (req, file, cb) => {
-    // Accept health data formats and encrypted blobs that Bio-Block handles
     const allowedMimeTypes = [
-      // Encrypted blobs (primary use case for IPFS upload)
       "application/octet-stream",
-      // Spreadsheet formats
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
-      "application/vnd.ms-excel", // .xls
-      "text/csv", // .csv
-      "application/csv", // .csv (alternative)
-      "application/vnd.oasis.opendocument.spreadsheet", // .ods
-      "text/tab-separated-values", // .tsv
-      // Image formats
-      "image/jpeg", // .jpg/.jpeg
-      "image/png", // .png
-      // Document formats
-      "application/pdf", // .pdf
-      // Medical imaging
-      "application/dicom", // .dcm
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "application/vnd.ms-excel",
+      "text/csv",
+      "application/csv",
+      "application/vnd.oasis.opendocument.spreadsheet",
+      "text/tab-separated-values",
+      "image/jpeg",
+      "image/png",
+      "application/pdf",
+      "application/dicom",
     ];
-
-    // Extension fallback for cases where MIME type is unreliable
     const allowedExtensions = /\.(enc|xlsx|xls|csv|ods|tsv|jpg|jpeg|png|pdf|dcm|nii|nii\.gz)$/i;
-
     if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.test(file.originalname)) {
       cb(null, true);
     } else {
-      cb(
-        new Error(
-          "File type not allowed. Accepted: encrypted blobs, spreadsheets (.xlsx, .csv, .ods, .tsv), images (.jpg, .png), documents (.pdf), and medical imaging (.dcm, .nii)."
-        ),
-        false
-      );
+      cb(new Error("File type not allowed."), false);
     }
   },
-  limits: {
-    fileSize: 2 * 1024 * 1024 * 1024, // 2GB
-  },
+  limits: { fileSize: 2 * 1024 * 1024 * 1024 },
 });
 
 const uploadToIPFS = async (req, res) => {
   const cleanupTempFile = () => {
     if (req.file && req.file.path) {
       fs.unlink(req.file.path, (err) => {
-        if (err && err.code !== "ENOENT") {
-          console.error("Failed to clean up temp file:", err);
-        }
+        if (err && err.code !== "ENOENT") console.error("Failed to clean up temp file:", err);
       });
     }
   };
 
   try {
-    if (!req.file) {
-      return res.status(400).json({
-        error: "No file uploaded.",
+    if (!req.file) return res.status(400).json({ error: "No file uploaded." });
+
+    if (!process.env.PINATA_JWT || process.env.PINATA_JWT === "your_pinata_jwt_here") {
+      console.log("Mocking Pinata upload for local testing...");
+      const mockHash = "QmMock" + crypto.randomBytes(20).toString("hex");
+      const documentKey = req.body.documentKey || crypto.randomBytes(32).toString("hex");
+
+      const keys = JSON.parse(fs.readFileSync(KEYS_FILE, "utf8"));
+      keys[mockHash] = documentKey;
+      fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2));
+
+      cleanupTempFile();
+      return res.status(200).json({
+        success: true,
+        ipfsHash: mockHash,
+        documentKey: documentKey,
+        mocked: true,
       });
     }
 
-    const { fileName } = req.body;
-
-    console.log("Uploading to IPFS:", {
-      fileName,
-      fileSize: req.file.size,
-    });
+    const fileName = req.body.fileName || req.file.originalname;
+    const documentKey = req.body.documentKey;
 
     const fileStream = fs.createReadStream(req.file.path);
-
     const formData = new FormData();
     formData.append("file", fileStream, {
       filename: fileName || "encrypted_file",
@@ -92,16 +101,11 @@ const uploadToIPFS = async (req, res) => {
 
     const pinataMetadata = JSON.stringify({
       name: fileName || "Encrypted Document",
-      keyvalues: {
-        encrypted: "true",
-        uploadedAt: new Date().toISOString(),
-      },
+      keyvalues: { encrypted: "true", uploadedAt: new Date().toISOString() },
     });
     formData.append("pinataMetadata", pinataMetadata);
 
-    const pinataOptions = JSON.stringify({
-      cidVersion: 0,
-    });
+    const pinataOptions = JSON.stringify({ cidVersion: 0 });
     formData.append("pinataOptions", pinataOptions);
 
     const pinataResponse = await axios.post(
@@ -119,10 +123,13 @@ const uploadToIPFS = async (req, res) => {
 
     const ipfsHash = pinataResponse.data.IpfsHash;
 
-    console.log("IPFS upload successful:", { ipfsHash, fileName });
+    if (documentKey) {
+      const keys = JSON.parse(fs.readFileSync(KEYS_FILE, "utf8"));
+      keys[ipfsHash] = documentKey;
+      fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2));
+    }
 
     cleanupTempFile();
-
     res.json({
       success: true,
       ipfsHash: ipfsHash,
@@ -132,13 +139,9 @@ const uploadToIPFS = async (req, res) => {
   } catch (error) {
     cleanupTempFile();
     console.error("IPFS upload error:", error.response?.data || error.message);
-
     if (error.response?.status === 401) {
-      return res.status(401).json({
-        error: "Invalid Pinata API credentials",
-      });
+      return res.status(401).json({ error: "Invalid Pinata API credentials" });
     }
-
     res.status(500).json({
       error: "IPFS upload failed: " + (error.response?.data?.error || error.message),
     });
@@ -146,41 +149,34 @@ const uploadToIPFS = async (req, res) => {
 };
 
 const getDocumentKey = async (req, res) => {
-    try {
-        const { ipfsHash } = req.params;
-        const { buyerAddress } = req.query;
+  try {
+    const { ipfsHash } = req.params;
+    const { buyerAddress } = req.query;
 
-        if (!buyerAddress) {
-            return res.status(400).json({ error: 'buyerAddress is required' });
-        }
+    if (!buyerAddress) return res.status(400).json({ error: "buyerAddress is required" });
 
-        // Verify access on the blockchain
-        const provider = new ethers.JsonRpcProvider('http://127.0.0.1:8545'); // Default Hardhat local network
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+    const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
 
-        const hasAccess = await contract.checkAccess(ipfsHash, buyerAddress);
-
-        if (!hasAccess) {
-            return res.status(403).json({ error: 'Access denied: You have not purchased this document or you are not the owner' });
-        }
-
-        // Retrieve key
-        const keys = JSON.parse(fs.readFileSync(KEYS_FILE, 'utf8'));
-        const documentKey = keys[ipfsHash];
-
-        if (!documentKey) {
-            return res.status(404).json({ error: 'Key not found for this document' });
-        }
-
-        res.json({ documentKey });
-
-    } catch (error) {
-        console.error('Key retrieval error:', error);
-        res.status(500).json({ error: 'Failed to verify access or retrieve key. Make sure the blockchain network is running.' });
+    const hasAccess = await contract.checkAccess(ipfsHash, buyerAddress);
+    if (!hasAccess) {
+      return res.status(403).json({ error: "Access denied" });
     }
+
+    const keys = JSON.parse(fs.readFileSync(KEYS_FILE, "utf8"));
+    const documentKey = keys[ipfsHash];
+
+    if (!documentKey) return res.status(404).json({ error: "Key not found" });
+
+    res.json({ documentKey });
+  } catch (error) {
+    console.error("Key retrieval error:", error);
+    res.status(500).json({ error: "Failed to verify access or retrieve key." });
+  }
 };
 
 module.exports = {
   uploadToIPFS,
+  getDocumentKey,
   upload,
 };

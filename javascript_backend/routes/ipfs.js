@@ -1,11 +1,14 @@
 const express = require("express");
 const router = express.Router();
-const { uploadToIPFS, upload } = require("../controllers/ipfsController");
+const { uploadToIPFS, getDocumentKey, upload } = require("../controllers/ipfsController");
 const { uploadAnalyticsResult } = require("../controllers/analyticsIpfsController");
 
 router.post("/upload", upload.single("encryptedFile"), uploadToIPFS);
 
 router.post("/upload-analytics-result", express.json(), uploadAnalyticsResult);
+
+// GET /api/ipfs/key/:ipfsHash - Retrieve decryption key (requires payment verification)
+router.get('/key/:ipfsHash', getDocumentKey);
 
 router.use((error, req, res, next) => {
   if (error.code === "LIMIT_FILE_SIZE") {

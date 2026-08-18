@@ -171,7 +171,8 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       const isSpreadsheet =
         file.type.includes("spreadsheet") ||
         file.type.includes("csv") ||
-        ["xlsx", "xls", "csv", "ods", "tsv", "xlsm", "xlsb"].includes(fileExtension);
+        file.type.includes("text") ||
+        ["xlsx", "xls", "csv", "ods", "tsv", "xlsm", "xlsb", "txt"].includes(fileExtension);
       const isPdf = file.type === "application/pdf" || fileExtension === "pdf";
       const isDicom = fileExtension === "dcm" || fileExtension === "dicom";
 
@@ -482,7 +483,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       // Step 2: Anonymizing (if Excel or Image) and extracting preview
       updateStep(1); // Mark as in progress
       const fileExtension = selectedFile.name.split(".").pop()?.toLowerCase();
-      const isSpreadsheet = selectedFile.name.match(/\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i);
+      const isSpreadsheet = selectedFile.name.match(/\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb|txt)$/i);
       const isImage = selectedFile.type.startsWith("image/");
       const isPdf = selectedFile.type === "application/pdf" || fileExtension === "pdf";
       const isDicom = fileExtension === "dcm" || fileExtension === "dicom";
@@ -771,7 +772,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                     onChange={handleFileChange}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     id="file-upload"
-                    accept=".xlsx,.xls,.csv,.ods,.tsv,.xlsm,.xlsb,.jpg,.jpeg,.png,.pdf,.dcm,.dicom"
+                    accept=".xlsx,.xls,.csv,.ods,.tsv,.xlsm,.xlsb,.jpg,.jpeg,.png,.pdf,.dcm,.dicom,.txt"
                     disabled={!isWalletConnected}
                   />
 
