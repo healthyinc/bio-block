@@ -1,0 +1,24 @@
+{
+  "strict": {
+    "redact_dates": true,
+    "date_strategy": "redact",
+    "text_identifier_strategy": "redact",
+    "remove_dicom_private_tags": true,
+    "preserve_dicom_technical_metadata": false,
+    "remove_nifti_extensions": true,
+    "ocr_confidence_threshold": 0.3,
+    "allow_generalized_demographics": false
+  },
+  "research": {
+    "redact_dates": true,
+    "date_strategy": "shift",
+    "text_identifier_strategy": "pseudonymize",
+    "remove_dicom_private_tags": true,
+    "preserve_dicom_technical_metadata": true,
+    "remove_nifti_extensions": true,
+    "ocr_confidence_threshold": 0.5,
+    "allow_generalized_demographics": true
+  }
+}
+
+

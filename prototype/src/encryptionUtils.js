@@ -1,5 +1,5 @@
 // encryptionUtils.js
-import CryptoJS from 'crypto-js';
+import CryptoJS from "crypto-js";
 
 export const generateDocumentKey = () => {
   // Generate a random 256-bit (32 byte) key and return as hex string
@@ -9,8 +9,8 @@ export const generateDocumentKey = () => {
 export const encryptFile = (fileBuffer, encryptionKey) => {
   if (!encryptionKey) throw new Error("Encryption key is required");
   const wordArray = CryptoJS.lib.WordArray.create(fileBuffer);
-  const encrypted = CryptoJS.AES.encrypt(wordArray, encryptionKey).toString();
-  return new Blob([encrypted], { type: 'application/octet-stream' });
+  const encrypted = CryptoJS.AES.encrypt(wordArray, ENCRYPTION_KEY).toString();
+  return new Blob([encrypted], { type: "application/octet-stream" });
 };
 
 export const decryptFile = (encryptedData, encryptionKey) => {

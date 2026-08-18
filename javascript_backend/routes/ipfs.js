@@ -1,22 +1,24 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const { uploadToIPFS, getDocumentKey, upload } = require('../controllers/ipfsController');
+const { uploadToIPFS, upload } = require("../controllers/ipfsController");
+const { uploadAnalyticsResult } = require("../controllers/analyticsIpfsController");
 
-// POST /api/ipfs/upload - Upload encrypted files to IPFS
-router.post('/upload', upload.single('encryptedFile'), uploadToIPFS);
+router.post("/upload", upload.single("encryptedFile"), uploadToIPFS);
 
-// GET /api/ipfs/key/:ipfsHash - Retrieve decryption key (requires payment verification)
-router.get('/key/:ipfsHash', getDocumentKey);
+router.post("/upload-analytics-result", express.json(), uploadAnalyticsResult);
 
-
-// Error handling for multer
 router.use((error, req, res, next) => {
-    if (error.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ 
-            error: 'File too large. Maximum size is 10GB.' 
-        });
-    }
-    next(error);
+  if (error.code === "LIMIT_FILE_SIZE") {
+    return res.status(400).json({
+      error: "File too large. Maximum size is 2GB.",
+    });
+  }
+  if (error.message && error.message.startsWith("File type not allowed")) {
+    return res.status(400).json({
+      error: error.message,
+    });
+  }
+  next(error);
 });
 
 module.exports = router;
