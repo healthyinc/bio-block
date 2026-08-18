@@ -13,6 +13,7 @@ import {
   User,
   Building,
   X,
+  BarChart3,
 } from 'lucide-react';
 import { decryptFile } from '../lib/encryptionUtils';
 import { purchaseDocument, getDocumentPrice } from '../lib/contractService';
@@ -80,6 +81,10 @@ export default function SearchData({ onBack }: SearchDataProps) {
   const [showPreviewModal, setShowPreviewModal] = useState<boolean>(false);
   const [previewData, setPreviewData] = useState<PreviewData | null>(null);
   const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+
+  // Analytics states — in-memory decrypted dataset cache
+  const [decryptedDatasets, setDecryptedDatasets] = useState<Record<string, { blob: Blob; fileName: string }>>({});
+  const [purchaseCompleted, setPurchaseCompleted] = useState<Record<number, boolean>>({});
 
   // Filter states
   const [showFilters, setShowFilters] = useState<boolean>(false);
@@ -245,6 +250,17 @@ export default function SearchData({ onBack }: SearchDataProps) {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+
+      // Cache decrypted dataset in memory for analytics (no re-download needed)
+      const csvBlob = new Blob([bytes.buffer as ArrayBuffer], { type: 'text/csv' });
+      setDecryptedDatasets(prev => ({
+        ...prev,
+        [cid]: {
+          blob: csvBlob,
+          fileName: result.metadata?.fileName || `document_${index + 1}`,
+        },
+      }));
+      setPurchaseCompleted(prev => ({ ...prev, [index]: true }));
       
     } catch (error) {
       console.error('Purchase/Download Error:', error);
@@ -720,6 +736,23 @@ export default function SearchData({ onBack }: SearchDataProps) {
                                 )}
                               </button>
                             )}
+
+                            {/* Analyze This Dataset Button — opens Hypothesis Lab with cached data */}
+                            {purchaseCompleted[index] && (() => {
+                              const cid = result.cid || result.ipfsHash || result.hash || '';
+                              return cid && decryptedDatasets[cid] ? (
+                                <button
+                                  onClick={() => {
+                                    const labUrl = process.env.NEXT_PUBLIC_HYPOTHESIS_LAB_URL || 'http://localhost:5174';
+                                    window.open(`${labUrl}?cid=${encodeURIComponent(cid)}`, '_blank', 'noopener');
+                                  }}
+                                  className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-2xl hover:from-violet-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 font-semibold"
+                                >
+                                  <BarChart3 size={20} />
+                                  Analyze This Dataset
+                                </button>
+                              ) : null;
+                            })()}
                           </div>
                         </div>
                       ))}
