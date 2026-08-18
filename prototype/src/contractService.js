@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 
-const CONTRACT_ADDRESS = '0xd58de64aac08d5412b8020c7c61b215fec0c9644';
-const CONTRACT_ABI =[
+const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3';
+const CONTRACT_ABI = [
 	{
 		"inputs": [
 			{
@@ -138,61 +138,61 @@ const CONTRACT_ABI =[
 ]
 
 export const storeDocumentHash = async (ipfsHash, priceInEth) => {
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  const signer = await provider.getSigner();
-  const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-  
-  const priceInWei = ethers.parseEther(priceInEth.toString());
-  const tx = await contract.storeDocument(ipfsHash, priceInWei);
-  await tx.wait();
-  console.log(`Transaction successful with hash: ${tx.hash}`);
-  return tx.hash;
+	const provider = new ethers.BrowserProvider(window.ethereum);
+	const signer = await provider.getSigner();
+	const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+	const priceInWei = ethers.parseEther(priceInEth.toString());
+	const tx = await contract.storeDocument(ipfsHash, priceInWei);
+	await tx.wait();
+	console.log(`Transaction successful with hash: ${tx.hash}`);
+	return tx.hash;
 };
 
 export const purchaseDocument = async (ipfsHash, priceInEth) => {
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  const signer = await provider.getSigner();
-  const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-  
-  const priceInWei = ethers.parseEther(priceInEth.toString());
-  const tx = await contract.purchaseDocument(ipfsHash, { value: priceInWei });
-  await tx.wait();
-  console.log(`Purchase successful with hash: ${tx.hash}`);
-  return tx.hash;
+	const provider = new ethers.BrowserProvider(window.ethereum);
+	const signer = await provider.getSigner();
+	const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+	const priceInWei = ethers.parseEther(priceInEth.toString());
+	const tx = await contract.purchaseDocument(ipfsHash, { value: priceInWei });
+	await tx.wait();
+	console.log(`Purchase successful with hash: ${tx.hash}`);
+	return tx.hash;
 };
 
 export const withdrawEarnings = async () => {
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  const signer = await provider.getSigner();
-  const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-  
-  const tx = await contract.withdrawEarnings();
-  await tx.wait();
-  console.log(`Withdrawal successful with hash: ${tx.hash}`);
-  return tx.hash;
+	const provider = new ethers.BrowserProvider(window.ethereum);
+	const signer = await provider.getSigner();
+	const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+	const tx = await contract.withdrawEarnings();
+	await tx.wait();
+	console.log(`Withdrawal successful with hash: ${tx.hash}`);
+	return tx.hash;
 };
 
 export const getDocumentPrice = async (ipfsHash) => {
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-  
-  const priceInWei = await contract.documentPrices(ipfsHash);
-  return ethers.formatEther(priceInWei);
+	const provider = new ethers.BrowserProvider(window.ethereum);
+	const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+
+	const priceInWei = await contract.documentPrices(ipfsHash);
+	return ethers.formatEther(priceInWei);
 };
 
 export const getMyDocuments = async () => {
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  const signer = await provider.getSigner();
-  const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-  
-  const documents = await contract.getMyDocuments();
-  return documents;
+	const provider = new ethers.BrowserProvider(window.ethereum);
+	const signer = await provider.getSigner();
+	const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+	const documents = await contract.getMyDocuments();
+	return documents;
 };
 
 export const getEarnings = async (address) => {
-  const provider = new ethers.BrowserProvider(window.ethereum);
-  const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
-  
-  const earningsInWei = await contract.earnings(address);
-  return ethers.formatEther(earningsInWei);
+	const provider = new ethers.BrowserProvider(window.ethereum);
+	const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+
+	const earningsInWei = await contract.earnings(address);
+	return ethers.formatEther(earningsInWei);
 };

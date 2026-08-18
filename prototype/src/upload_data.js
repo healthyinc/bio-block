@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, Wallet, ArrowLeft, Shield, Database, CheckCircle, X, Clock, Check } from 'lucide-react';
 import { storeDocumentHash } from './contractService';
-import { encryptFile } from './encryptionUtils.js';
+import { encryptFile, generateDocumentKey } from './encryptionUtils.js';
 import StreamingEncryption from './utils/streamingEncryption.js';
 
 export default function UploadData({ onBack, isWalletConnected, walletAddress, onWalletConnect }) {
@@ -224,14 +224,17 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
   };
 
   // New hybrid approach: Upload encrypted file to backend for IPFS upload
-  const uploadToIPFSViaBackend = async (encryptedData, fileName) => {
+  const uploadToIPFSViaBackend = async (encryptedData, fileName, documentKey) => {
     const formData = new FormData();
     formData.append('encryptedFile', new Blob([encryptedData], { type: 'application/octet-stream' }));
     formData.append('fileName', fileName);
+    if (documentKey) {
+      formData.append('documentKey', documentKey);
+    }
 
     const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
     
-    const response = await fetch(`${backendUrl}/ipfs/upload`, {
+    const response = await fetch(`${backendUrl}/api/ipfs/upload`, {
       method: 'POST',
       body: formData
     });
@@ -300,7 +303,12 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       
       // Step 2: Anonymizing (if Excel or Image) and extracting preview
       updateStep(1); // Mark as in progress
-      if (selectedFile.name.match(/\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i) || selectedFile.type.startsWith('image/')) {
+      if (selectedFile.name.match(/\.(txt)$/i)) {
+        // Skip anonymization for txt files entirely
+        fileToUpload = selectedFile;
+        previewFile = null;
+        updateStep(1, true, false);
+      } else if (selectedFile.name.match(/\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i) || selectedFile.type.startsWith('image/')) {
         try {
           const result = await anonymizeFile(selectedFile);
           fileToUpload = result.mainFile;
@@ -314,14 +322,17 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       } else {
         // File type not supported - this should not happen due to file input restrictions
         updateStep(1, false, true); // Mark as error
-        setError('File type not supported for upload. Only Excel and spreadsheet files (.xlsx, .xls, .csv, .ods, .tsv, .xlsm, .xlsb) and image files are accepted.');
+        setError('File type not supported for upload. Only Excel and spreadsheet files (.xlsx, .xls, .csv, .ods, .tsv, .xlsm, .xlsb), image files, and text files (.txt) are accepted.');
         return;
       }
       
       // Step 3: Encrypting file (with streaming for large files)
       updateStep(2); // Mark as in progress
+      
+      const documentKey = generateDocumentKey(); // Generate unique key for this document
+      
       try {
-        const streamer = new StreamingEncryption();
+        const streamer = new StreamingEncryption(1024 * 1024, documentKey);
         
         console.log(`=== ENCRYPTION DECISION ===`);
         console.log(`Original file: ${selectedFile.name}, size: ${selectedFile.size} bytes (${(selectedFile.size / (1024*1024)).toFixed(2)}MB)`);
@@ -354,15 +365,16 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
           // Use traditional encryption for small files
           console.log(`⚡ Using TRADITIONAL encryption for small file (${(fileToUpload.size / (1024*1024)).toFixed(2)}MB)`);
           const fileBuffer = await fileToUpload.arrayBuffer();
-          encryptedFile = encryptFile(new Uint8Array(fileBuffer));
+          encryptedFile = encryptFile(new Uint8Array(fileBuffer), documentKey);
           console.log(`✅ Traditional encryption completed`);
         }
+
         
         updateStep(2, true, false); // Mark as completed
         
         // Step 4: Uploading to IPFS via backend
         updateStep(3); // Mark as in progress
-        const result = await uploadToIPFSViaBackend(encryptedFile, fileToUpload.name);
+        const result = await uploadToIPFSViaBackend(encryptedFile, fileToUpload.name, documentKey);
         if (!result.success) {
           updateStep(3, false, true); // Mark as error
           setError(`IPFS upload failed: ${result.error}`);
@@ -393,8 +405,11 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
         // Upload preview to IPFS via backend if it exists
         if (previewFile) {
           try {
-            const previewStreamer = new StreamingEncryption();
+            const previewKey = "public-preview-key";
+            const previewStreamer = new StreamingEncryption(1024 * 1024, previewKey);
             const shouldUseStreamingForPreview = previewStreamer.shouldUseStreaming(previewFile.size);
+
+
             
             let encryptedPreview;
             
@@ -407,10 +422,10 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
             } else {
               // Use traditional encryption for small preview files
               const previewBuffer = await previewFile.arrayBuffer();
-              encryptedPreview = encryptFile(new Uint8Array(previewBuffer));
+              encryptedPreview = encryptFile(new Uint8Array(previewBuffer), previewKey);
             }
             
-            const previewResult = await uploadToIPFSViaBackend(encryptedPreview, previewFile.name);
+            const previewResult = await uploadToIPFSViaBackend(encryptedPreview, previewFile.name, previewKey);
             if (previewResult.success) {
               previewHash = previewResult.ipfsHash;
             }
@@ -551,7 +566,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                     onChange={handleFileChange}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     id="file-upload"
-                    accept=".xlsx,.xls,.csv,.ods,.tsv,.xlsm,.xlsb,.jpg,.jpeg,.png"
+                    accept=".xlsx,.xls,.csv,.ods,.tsv,.xlsm,.xlsb,.jpg,.jpeg,.png,.txt"
                     disabled={!isWalletConnected}
                   />
                   
@@ -560,7 +575,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                       {selectedFile ? selectedFile.name : 'Choose a file or drag and drop'}
                     </p>
                     <p className={`${isWalletConnected ? 'text-gray-500' : 'text-gray-400'} text-sm`}>
-                      Spreadsheets and Images (JPG, JPEG, PNG) only
+                      Spreadsheets, Images (JPG, JPEG, PNG), and Text (.txt) only
                     </p>
                   </div>
                 </div>

@@ -6,16 +6,19 @@ contract DocumentStorage {
     mapping(string => uint256) public documentPrices;
     mapping(string => address) public documentOwners;
     mapping(address => uint256) public earnings;
+    mapping(string => mapping(address => bool)) public hasAccess;
     
     function storeDocument(string memory ipfsHash, uint256 price) public {
         userDocuments[msg.sender].push(ipfsHash);
         documentPrices[ipfsHash] = price;
         documentOwners[ipfsHash] = msg.sender;
+        hasAccess[ipfsHash][msg.sender] = true;
     }
     
     function purchaseDocument(string memory ipfsHash) public payable returns (bool) {
         require(msg.value >= documentPrices[ipfsHash], "Insufficient payment");
         earnings[documentOwners[ipfsHash]] += msg.value;
+        hasAccess[ipfsHash][msg.sender] = true;
         return true;
     }
     
@@ -32,5 +35,9 @@ contract DocumentStorage {
     
     function getMyDocuments() public view returns (string[] memory) {
         return userDocuments[msg.sender];
+    }
+    
+    function checkAccess(string memory ipfsHash, address user) public view returns (bool) {
+        return hasAccess[ipfsHash][user];
     }
 }

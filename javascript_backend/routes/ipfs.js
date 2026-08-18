@@ -1,9 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { uploadToIPFS, upload } = require('../controllers/ipfsController');
+const { uploadToIPFS, getDocumentKey, upload } = require('../controllers/ipfsController');
 
 // POST /api/ipfs/upload - Upload encrypted files to IPFS
 router.post('/upload', upload.single('encryptedFile'), uploadToIPFS);
+
+// GET /api/ipfs/key/:ipfsHash - Retrieve decryption key (requires payment verification)
+router.get('/key/:ipfsHash', getDocumentKey);
+
 
 // Error handling for multer
 router.use((error, req, res, next) => {

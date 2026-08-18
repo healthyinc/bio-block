@@ -29,7 +29,8 @@ app.get('/', (req, res) => {
         endpoints: [
             '/api/health',
             '/api/anonymize',
-            '/api/ipfs/upload'
+            '/api/ipfs/upload',
+            '/api/ipfs/key/:ipfsHash'
         ]
     });
 });
