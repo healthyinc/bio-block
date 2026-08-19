@@ -386,9 +386,25 @@ export default function UploadData({
       backendUrl =
         process.env.NEXT_PUBLIC_JS_BACKEND_URL || 'http://localhost:3001';
       endpoint = '/api/anonymize';
+    } else if (file.name.match(/\.(txt)$/i)) {
+      const text = await file.text();
+      const pyBackendUrl = process.env.NEXT_PUBLIC_PYTHON_BACKEND_URL || 'http://localhost:3002';
+      const textResponse = await fetch(`${pyBackendUrl}/anonymize_text`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+      if (!textResponse.ok) {
+        const errorData = await textResponse.json().catch(() => ({}));
+        throw new Error(errorData.detail || errorData.error || "Text anonymization failed");
+      }
+      const result = await textResponse.json();
+      const anonymizedBlob = new Blob([result.anonymized_text], { type: "text/plain" });
+      const mainFile = new File([anonymizedBlob], `anonymized_${file.name}`, { type: "text/plain" });
+      return { mainFile, previewFile: null };
     } else {
       throw new Error(
-        'File type not supported for anonymization. Only Excel (.xlsx, .xls, .csv, .ods, .tsv, .xlsm, .xlsb) and image files (.jpg, .jpeg, .png) are supported.'
+        'File type not supported for anonymization. Only Excel (.xlsx, .xls, .csv, .ods, .tsv, .xlsm, .xlsb), text (.txt) and image files (.jpg, .jpeg, .png) are supported.'
       );
     }
 
@@ -530,7 +546,7 @@ export default function UploadData({
       updateStep(1);
       const fileExtension = selectedFile.name.split('.').pop()?.toLowerCase();
       const isSpreadsheet = selectedFile.name.match(
-        /\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i
+        /\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb|txt)$/i
       );
       const isImage = selectedFile.type.startsWith('image/');
       const isPdf =

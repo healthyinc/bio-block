@@ -103,6 +103,6 @@ contract DocumentStorage {
     }
     
     function checkAccess(string memory ipfsHash, address user) public view returns (bool) {
-        return hasAccess[ipfsHash][user];
+        return hasAccess(ipfsHash, user);
     }
 }

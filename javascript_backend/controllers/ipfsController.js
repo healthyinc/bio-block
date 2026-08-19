@@ -17,6 +17,11 @@ if (!fs.existsSync(KEYS_FILE)) {
   fs.writeFileSync(KEYS_FILE, JSON.stringify({}));
 }
 
+const PREVIEW_KEYS_FILE = path.join(__dirname, "../data/preview_keys.json");
+if (!fs.existsSync(PREVIEW_KEYS_FILE)) {
+  fs.writeFileSync(PREVIEW_KEYS_FILE, JSON.stringify({}));
+}
+
 // Contract configuration
 const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 const CONTRACT_ABI = [
@@ -76,9 +81,20 @@ const uploadToIPFS = async (req, res) => {
       const mockHash = "QmMock" + crypto.randomBytes(20).toString("hex");
       const documentKey = req.body.documentKey || crypto.randomBytes(32).toString("hex");
 
-      const keys = JSON.parse(fs.readFileSync(KEYS_FILE, "utf8"));
-      keys[mockHash] = documentKey;
-      fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2));
+      if (req.body.isPreview === "true") {
+        const previewKeys = JSON.parse(fs.readFileSync(PREVIEW_KEYS_FILE, "utf8"));
+        previewKeys[mockHash] = documentKey;
+        fs.writeFileSync(PREVIEW_KEYS_FILE, JSON.stringify(previewKeys, null, 2));
+      } else {
+        const keys = JSON.parse(fs.readFileSync(KEYS_FILE, "utf8"));
+        keys[mockHash] = documentKey;
+        fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2));
+      }
+
+      // Save the mock file locally so it can be downloaded later
+      const mockDir = path.join(__dirname, "../data/mock_ipfs");
+      if (!fs.existsSync(mockDir)) fs.mkdirSync(mockDir, { recursive: true });
+      fs.copyFileSync(req.file.path, path.join(mockDir, mockHash));
 
       cleanupTempFile();
       return res.status(200).json({
@@ -124,9 +140,15 @@ const uploadToIPFS = async (req, res) => {
     const ipfsHash = pinataResponse.data.IpfsHash;
 
     if (documentKey) {
-      const keys = JSON.parse(fs.readFileSync(KEYS_FILE, "utf8"));
-      keys[ipfsHash] = documentKey;
-      fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2));
+      if (req.body.isPreview === "true") {
+        const previewKeys = JSON.parse(fs.readFileSync(PREVIEW_KEYS_FILE, "utf8"));
+        previewKeys[ipfsHash] = documentKey;
+        fs.writeFileSync(PREVIEW_KEYS_FILE, JSON.stringify(previewKeys, null, 2));
+      } else {
+        const keys = JSON.parse(fs.readFileSync(KEYS_FILE, "utf8"));
+        keys[ipfsHash] = documentKey;
+        fs.writeFileSync(KEYS_FILE, JSON.stringify(keys, null, 2));
+      }
     }
 
     cleanupTempFile();
@@ -154,6 +176,12 @@ const getDocumentKey = async (req, res) => {
     const { buyerAddress } = req.query;
 
     if (!buyerAddress) return res.status(400).json({ error: "buyerAddress is required" });
+
+    // Previews are public, no access check needed
+    const previewKeys = JSON.parse(fs.readFileSync(PREVIEW_KEYS_FILE, "utf8"));
+    if (previewKeys[ipfsHash]) {
+      return res.json({ documentKey: previewKeys[ipfsHash] });
+    }
 
     const provider = new ethers.JsonRpcProvider("http://127.0.0.1:8545");
     const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);

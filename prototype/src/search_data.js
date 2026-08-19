@@ -200,7 +200,14 @@ export default function SearchData({ onBack }) {
 
       setDownloading((prev) => ({ ...prev, [index]: true }));
 
-      const response = await fetch(`https://gateway.pinata.cloud/ipfs/${cid}`);
+      let response;
+      if (cid.startsWith("QmMock")) {
+        const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
+        response = await fetch(`${backendUrl}/api/ipfs/mock/${cid}`);
+      } else {
+        response = await fetch(`https://gateway.pinata.cloud/ipfs/${cid}`);
+      }
+
       const encryptedData = await response.text();
 
       // Fetch document key
@@ -252,9 +259,18 @@ export default function SearchData({ onBack }) {
     setShowPreviewModal(true);
 
     try {
-      const response = await fetch(`https://gateway.pinata.cloud/ipfs/${previewHash}`);
+      let response;
+      if (previewHash.startsWith("QmMock")) {
+        const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
+        response = await fetch(`${backendUrl}/api/ipfs/mock/${previewHash}`);
+      } else {
+        response = await fetch(`https://gateway.pinata.cloud/ipfs/${previewHash}`);
+      }
+      
+      if (!response.ok) {
+          throw new Error("Failed to fetch preview file");
+      }
       const encryptedData = await response.text();
-
       // Fetch document key for preview
       const previewKey = await getDocumentKey(previewHash);
 
