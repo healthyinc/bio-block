@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import chromadb
@@ -38,6 +38,12 @@ from services.ingestion import (
 from services.document_sanitization import (
     DocumentSanitizationError,
     scan_pdf_bytes,
+)
+from services.raster_redaction import (
+    RasterRedactionError,
+    redact_raster_bytes,
+    verified_raster_response,
+    verify_redacted_raster_bytes,
 )
 from services.tabular_anonymization import (
     TabularAnonymizationError,
@@ -242,56 +248,11 @@ def generate_id() -> str:
     random_suffix = hash(str(uuid.uuid4())) % 10000
     return f"{timestamp}{random_suffix}"
 
-def mask_phi_in_image_presidio(pil_image):
-    """
-    Advanced PHI detection and redaction using Presidio Image Redactor
-    This uses state-of-the-art ML models for better accuracy
-    """
-    if not presidio_available or presidio_image_redactor is None:
-        raise HTTPException(
-            status_code=500, 
-            detail="Presidio image redactor not available. Please install with: pip install presidio_analyzer presidio_anonymizer presidio_image_redactor"
-        )
-    
-    try:
-        # Use Presidio's advanced image redaction
-        redacted_image = presidio_image_redactor.redact(pil_image)
-        return redacted_image
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing image with Presidio: {str(e)}")
-
-def mask_phi_in_image_legacy(image_cv):
-    """
-    Legacy PHI detection using OCR and spaCy (fallback method)
-    """
-    if nlp is None:
-        raise HTTPException(status_code=500, detail="spaCy English model not available. Please install it with: python -m spacy download en_core_web_sm")
-    
-    if not tesseract_available:
-        raise HTTPException(status_code=500, detail="Tesseract OCR not available. Please install Tesseract: Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki, macOS: brew install tesseract, Linux: sudo apt install tesseract-ocr")
-    
-    try:
-        # Convert BGR to RGB for OCR processing
-        rgb_image = cv2.cvtColor(image_cv, cv2.COLOR_BGR2RGB)
-        
-        ocr_data = pytesseract.image_to_data(rgb_image, output_type=Output.DICT)
-        
-        full_text = " ".join(ocr_data["text"])
-        
-        doc = nlp(full_text)
-        
-        phi_entities = set(ent.text.strip() for ent in doc.ents if ent.label_ in PHI_LABELS)
-        
-        for i, word in enumerate(ocr_data["text"]):
-            if word.strip() in phi_entities:
-                x, y, w, h = ocr_data["left"][i], ocr_data["top"][i], ocr_data["width"][i], ocr_data["height"][i]
-                cv2.rectangle(image_cv, (x, y), (x + w, y + h), (0, 0, 0), -1)
-        
-        return image_cv
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
+# The former mask_phi_in_image_presidio / mask_phi_in_image_legacy helpers were
+# removed. The legacy one masked only OCR tokens whose exact text matched a
+# spaCy entity and returned the image unchanged otherwise, which is fail-open.
+# Raster redaction now goes through services/raster_redaction.py, which fills
+# every detected text region and verifies the encoded result before release.
 
 @app.get("/")
 async def root():
@@ -375,119 +336,114 @@ async def ingest_file(
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to route uploaded file")
 
+SUPPORTED_IMAGE_MEDIA_TYPES = {"image/jpeg", "image/jpg", "image/png"}
+
+
+def _validate_image_upload(file: UploadFile) -> None:
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image")
+    if file.content_type not in SUPPORTED_IMAGE_MEDIA_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Only JPEG, JPG, and PNG images are supported",
+        )
+
+
+def _raster_redaction_response(outcome, filename: str, prefix: str):
+    """Stream bytes only for a verified redaction; otherwise report a block."""
+    if not outcome.released:
+        audit_logger.log_operation(
+            operation="ANONYMIZE",
+            details=(
+                f"image blocked, status: {outcome.status}, "
+                f"reasons: {','.join(outcome.reason_codes)}"
+            ),
+        )
+        return JSONResponse(
+            status_code=422,
+            content=verified_raster_response(outcome),
+        )
+
+    audit_logger.log_operation(
+        operation="ANONYMIZE",
+        details=(
+            f"image redacted, boxes: {outcome.boxes_redacted}, "
+            f"validation: {outcome.validation_status}"
+        ),
+    )
+    safe_name = _safe_filename(filename or "image")
+    return StreamingResponse(
+        io.BytesIO(outcome.released_bytes),
+        media_type=outcome.media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename={prefix}_{safe_name}.png",
+            "X-Redaction-Validation": outcome.validation_status,
+            "X-Boxes-Redacted": str(outcome.boxes_redacted),
+        },
+    )
+
+
 @app.post("/anonymize_image")
 async def anonymize_image(file: UploadFile = File(...)):
     """
-    Anonymize PHI in JPEG/JPG/PNG images using Presidio (preferred) or legacy OCR+spaCy
+    Redact burned-in text from JPEG/JPG/PNG images.
+
+    Every text region the OCR engine reports above the profile confidence
+    threshold is filled, because on a medical raster any burned-in text is
+    presumptively identifying. The encoded output is then re-read and verified
+    both structurally and by a residual OCR pass. If OCR is unavailable, OCR
+    fails, detected text was not cleared, or verification does not pass, no
+    image bytes are returned at all - the response is a blocked summary.
+
+    Input EXIF/XMP metadata is never carried into the output.
     """
+    _validate_image_upload(file)
+
     try:
-        # Validate file type
-        if not file.content_type or not file.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File must be an image")
-        
-        if file.content_type not in ['image/jpeg', 'image/jpg', 'image/png']:
-            raise HTTPException(status_code=400, detail="Only JPEG, JPG, and PNG images are supported")
-        
-        # Read and convert image
         contents = await file.read()
-        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
-        
-        # Try Presidio first (preferred method)
-        if presidio_available and presidio_image_redactor is not None:
-            try:
-                print("Using Presidio advanced image redaction")
-                redacted_image_pil = mask_phi_in_image_presidio(pil_image)
-                
-                # Save redacted image
-                img_buffer = io.BytesIO()
-                redacted_image_pil.save(img_buffer, format='JPEG', quality=95)
-                img_buffer.seek(0)
-                
-                audit_logger.log_operation(
-                    operation="ANONYMIZE",
-                    details=f"file: {file.filename}, method: presidio",
-                )
+        outcome = redact_raster_bytes(contents, profile="strict")
+    except RasterRedactionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except Exception as exc:
+        # The message must never echo image content.
+        raise HTTPException(status_code=500, detail="Failed to redact image") from exc
 
-                return StreamingResponse(
-                    io.BytesIO(img_buffer.read()),
-                    media_type="image/jpeg",
-                    headers={"Content-Disposition": f"attachment; filename=presidio_anonymized_{file.filename}"}
-                )
-                
-            except Exception as e:
-                print(f"Presidio failed, falling back to legacy method: {str(e)}")
-        
-        # Fallback to legacy OCR + spaCy method
-        print("Using legacy OCR + spaCy image redaction")
-        image_cv = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-        masked_image_cv = mask_phi_in_image_legacy(image_cv)
-        
-        # Convert back to PIL and save
-        masked_image_rgb = cv2.cvtColor(masked_image_cv, cv2.COLOR_BGR2RGB)
-        masked_pil = Image.fromarray(masked_image_rgb)
-        
-        img_buffer = io.BytesIO()
-        masked_pil.save(img_buffer, format='JPEG', quality=95)
-        img_buffer.seek(0)
-
-        audit_logger.log_operation(
-            operation="ANONYMIZE",
-            details=f"file: {file.filename}, method: legacy",
-        )
-
-        return StreamingResponse(
-            io.BytesIO(img_buffer.read()),
-            media_type="image/jpeg",
-            headers={"Content-Disposition": f"attachment; filename=legacy_anonymized_{file.filename}"}
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to anonymize image: {str(e)}")
+    return _raster_redaction_response(outcome, file.filename, "redacted")
 
 
 @app.post("/anonymize_image_presidio")
 async def anonymize_image_presidio_only(file: UploadFile = File(...)):
     """
-    Anonymize PHI in images using ONLY Presidio (force advanced method)
+    Redact an image with Presidio, then verify the result independently.
+
+    Presidio redacts selectively, by PHI classification. On a medical raster a
+    misclassified burned-in identifier would survive, so its output is put
+    through the same residual OCR verification: any text the engine can still
+    read blocks the release. Presidio-only remains available for compatibility;
+    /anonymize_image is the stricter path.
     """
+    if not presidio_available or presidio_image_redactor is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Presidio not available. Install with: pip install presidio_analyzer presidio_anonymizer presidio_image_redactor && python -m spacy download en_core_web_lg",
+        )
+
+    _validate_image_upload(file)
+
     try:
-        if not presidio_available or presidio_image_redactor is None:
-            raise HTTPException(
-                status_code=503, 
-                detail="Presidio not available. Install with: pip install presidio_analyzer presidio_anonymizer presidio_image_redactor && python -m spacy download en_core_web_lg"
-            )
-        
-        # Validate file type
-        if not file.content_type or not file.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File must be an image")
-        
-        if file.content_type not in ['image/jpeg', 'image/jpg', 'image/png']:
-            raise HTTPException(status_code=400, detail="Only JPEG, JPG, and PNG images are supported")
-        
-        # Read and process image
         contents = await file.read()
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
-        
-        print("Processing image with Presidio advanced redaction")
-        redacted_image_pil = mask_phi_in_image_presidio(pil_image)
-        
-        # Save and return redacted image
-        img_buffer = io.BytesIO()
-        redacted_image_pil.save(img_buffer, format='PNG', quality=95)
-        img_buffer.seek(0)
-        
-        return StreamingResponse(
-            io.BytesIO(img_buffer.read()),
-            media_type="image/png",
-            headers={"Content-Disposition": f"attachment; filename=presidio_redacted_{file.filename}"}
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to anonymize image with Presidio: {str(e)}")
+        redacted = presidio_image_redactor.redact(pil_image)
+        buffer = io.BytesIO()
+        redacted.save(buffer, format="PNG")
+        # Verify Presidio's own output with the shared residual scan.
+        outcome = verify_redacted_raster_bytes(buffer.getvalue(), profile="strict")
+    except RasterRedactionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to redact image") from exc
+
+    return _raster_redaction_response(outcome, file.filename, "presidio_redacted")
 
 
 def anonymize_text_content(text: str) -> dict:

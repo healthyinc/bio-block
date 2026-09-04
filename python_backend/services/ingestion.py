@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from services.text_anonymization import (
     MAX_TEXT_BYTES,
@@ -112,6 +112,22 @@ def _expert_determination_response(
     }
 
 
+FACIAL_RECONSTRUCTION_REASON = "facial_reconstruction_not_mitigated"
+
+
+def _imaging_reason_codes(
+    handler_result: Dict[str, Any],
+    status_key: str,
+    base_reason: str,
+) -> Tuple[str, ...]:
+    """Reason codes for volumetric imaging, always including the standing one."""
+    reasons = [base_reason, FACIAL_RECONSTRUCTION_REASON]
+    status = handler_result.get(status_key)
+    if status and status not in {"completed", "completed_no_text_detected"}:
+        reasons.append(str(status))
+    return tuple(sorted(set(reasons)))
+
+
 def _release_decision_for(
     modality: str,
     handler_result: Dict[str, Any],
@@ -144,9 +160,24 @@ def _release_decision_for(
     if modality == "csv":
         return manual_review_decision("serialized_output_validation_pending")
     if modality == "dicom":
-        return manual_review_decision("dicom_validation_incomplete")
+        # Cross-sectional imaging permits facial reconstruction, which Safe
+        # Harbor treats as a comparable image. No defacing step exists, so
+        # this blocks regardless of how the pixel scan went.
+        return manual_review_decision(
+            *_imaging_reason_codes(
+                handler_result,
+                "pixel_redaction_status",
+                "dicom_validation_incomplete",
+            )
+        )
     if modality == "nifti":
-        return manual_review_decision("nifti_serialization_pending")
+        return manual_review_decision(
+            *_imaging_reason_codes(
+                handler_result,
+                "anonymization_status",
+                "nifti_serialization_pending",
+            )
+        )
     if modality == "wsi":
         return manual_review_decision("validated_wsi_writer_unavailable")
     return manual_review_decision("validation_incomplete")
