@@ -24,8 +24,9 @@ import tempfile
 from eth_account.messages import encode_defunct
 from eth_account import Account
 
-# Preview factory imports
-from services.preview.factory import PreviewFactory
+# The preview generators in services/preview are no longer wired to any
+# endpoint: they return raw or raw-rendered pixels. Previews go through
+# services/release_gate.sanitized_preview instead.
 from services.audit_logger import AuditLogger
 from services.ingestion import (
     HEADER_READ_LIMIT,
@@ -44,6 +45,11 @@ from services.raster_redaction import (
     redact_raster_bytes,
     verified_raster_response,
     verify_redacted_raster_bytes,
+)
+from services.release_gate import (
+    ReleaseGateError,
+    sanitize_for_index,
+    sanitized_preview,
 )
 from services.tabular_anonymization import (
     TabularAnonymizationError,
@@ -807,25 +813,59 @@ async def anonymize_csv_file(
     )
 
 
+def _gate_store_request(request: StoreWithContentRequest):
+    """Redact and verify everything before it reaches the vector store.
+
+    Client-supplied content used to be indexed verbatim, so an upload the
+    ingest route blocked could be posted here and become searchable.
+    """
+    try:
+        gate = sanitize_for_index(
+            {
+                "dataset_title": request.dataset_title,
+                "summary": request.summary,
+                "extracted_content": request.extracted_content or "",
+            },
+            metadata=request.metadata or {},
+        )
+    except ReleaseGateError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+    if not gate.cleared:
+        audit_logger.log_operation(
+            operation="STORE",
+            details=(
+                f"store blocked, status: {gate.status}, "
+                f"fields: {','.join(gate.blocked_fields)}"
+            ),
+        )
+        raise HTTPException(status_code=422, detail=gate.safe_summary())
+    return gate
+
+
 @app.post("/store")
 async def store_data(request: StoreWithContentRequest):
     """
     Store document data with metadata and content vectors
     """
+    gate = _gate_store_request(request)
+    safe_title = gate.fields["dataset_title"]
+    safe_summary = gate.fields["summary"]
+    safe_content = gate.fields["extracted_content"]
+
     try:
-        print(f"Received enhanced storage request: {request.dataset_title}")
         doc_id = generate_id()
-         
-        # Prepare metadata document
-        combined_metadata = f"Dataset Title: {request.dataset_title}\n{request.summary}"
+
+        # Built from the redacted fields only.
+        combined_metadata = f"Dataset Title: {safe_title}\n{safe_summary}"
         disease_tags = request.metadata.get("disease_tags", "")
-     
+
         if disease_tags:
             combined_metadata += f"\nDisease Tags: {disease_tags}"
-        
+
         metadata = {
             "cid": request.cid,
-            "dataset_title": request.dataset_title,
+            "dataset_title": safe_title,
             "file_type": request.file_type,
             **request.metadata
         }
@@ -834,12 +874,12 @@ async def store_data(request: StoreWithContentRequest):
             documents=[combined_metadata],
             metadatas=[metadata]
         )
-        
-     # Store content if available
-        if request.extracted_content and request.extracted_content.strip():
-            # Chunk content for better vectorization
+
+        # Store content if available
+        if safe_content and safe_content.strip():
+            # Chunk the redacted content for vectorization.
             extractor = ContentExtractor()
-            content_chunks = extractor.chunk_content(request.extracted_content)
+            content_chunks = extractor.chunk_content(safe_content)
             
             # Add each chunk with reference to original document
             chunk_ids = []
@@ -869,41 +909,45 @@ async def store_data(request: StoreWithContentRequest):
             operation="STORE",
             wallet_address=request.metadata.get("owner_address", ""),
             document_id=doc_id,
-            details=f"CID: {request.cid}, title: {request.dataset_title}",
+            details=f"CID: {request.cid}, sanitized: {gate.status}",
         )
 
         return {
             "message": "Stored successfully with enhanced content indexing",
             "cid": request.cid,
             "doc_id": doc_id,
-            "content_chunks": len(request.extracted_content.split()) if request.extracted_content else 0
-        }   
-        
-    except Exception as e:
-        print(f"Error in enhanced storage: {str(e)}")
+            "content_chunks": len(safe_content.split()) if safe_content else 0,
+            "sanitization": gate.safe_summary(),
+        }
 
-        import traceback
-        traceback.print_exc()  
-        raise HTTPException(status_code=500, detail=f"Failed to store data: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception:
+        # The message must never echo stored content.
+        raise HTTPException(status_code=500, detail="Failed to store data")
 
 @app.post("/store_enhanced")
 async def store_data_enhanced(request: StoreWithContentRequest):
     """
     Enhanced storage with both metadata and content vectors
     """
+    gate = _gate_store_request(request)
+    safe_title = gate.fields["dataset_title"]
+    safe_summary = gate.fields["summary"]
+    safe_content = gate.fields["extracted_content"]
+
     try:
-        print(f"Received enhanced storage request: {request.dataset_title}")
         doc_id = generate_id()
-        
-        # Prepare metadata document
-        combined_metadata = f"Dataset Title: {request.dataset_title}\n{request.summary}"
+
+        # Built from the redacted fields only.
+        combined_metadata = f"Dataset Title: {safe_title}\n{safe_summary}"
         disease_tags = request.metadata.get("disease_tags", "")
         if disease_tags:
             combined_metadata += f"\nDisease Tags: {disease_tags}"
-        
+
         metadata = {
             "cid": request.cid,
-            "dataset_title": request.dataset_title,
+            "dataset_title": safe_title,
             "file_type": request.file_type,
             **request.metadata
         }
@@ -916,10 +960,10 @@ async def store_data_enhanced(request: StoreWithContentRequest):
         )
         
         # Store content if available
-        if request.extracted_content and request.extracted_content.strip():
+        if safe_content and safe_content.strip():
             extractor = ContentExtractor()
-            content_chunks = extractor.chunk_content(request.extracted_content)
-            
+            content_chunks = extractor.chunk_content(safe_content)
+
             chunk_ids = []
             chunk_docs = []
             chunk_metas = []
@@ -947,21 +991,22 @@ async def store_data_enhanced(request: StoreWithContentRequest):
             operation="STORE",
             wallet_address=request.metadata.get("owner_address", ""),
             document_id=doc_id,
-            details=f"CID: {request.cid}, title: {request.dataset_title} (enhanced)",
+            details=f"CID: {request.cid}, sanitized: {gate.status} (enhanced)",
         )
 
         return {
             "message": "Stored successfully with enhanced content indexing",
             "cid": request.cid,
             "doc_id": doc_id,
-            "content_chunks": len(request.extracted_content.split()) if request.extracted_content else 0
+            "content_chunks": len(safe_content.split()) if safe_content else 0,
+            "sanitization": gate.safe_summary(),
         }
-        
-    except Exception as e:
-        print(f"Error in enhanced storage: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to store data: {str(e)}")
+
+    except HTTPException:
+        raise
+    except Exception:
+        # The message must never echo stored content.
+        raise HTTPException(status_code=500, detail="Failed to store data")
 
 @app.post("/search")
 async def search_data(request: SearchRequest):
@@ -1145,7 +1190,36 @@ async def update_document(doc_id: str, request: UpdateRequest):
         
         new_dataset_title = request.dataset_title if request.dataset_title else old_metadata.get("dataset_title", "")
         new_summary = request.summary if request.summary else existing["documents"][0]
-        
+
+        # An update writes into the same searchable index a store does, so it
+        # goes through the same gate. Only the caller-supplied fields are
+        # re-sanitized; already-stored text was gated when it was written.
+        if request.dataset_title or request.summary or request.metadata:
+            try:
+                gate = sanitize_for_index(
+                    {
+                        "dataset_title": request.dataset_title or "",
+                        "summary": request.summary or "",
+                    },
+                    metadata=request.metadata or {},
+                )
+            except ReleaseGateError as exc:
+                raise HTTPException(
+                    status_code=exc.status_code, detail=exc.detail
+                ) from exc
+            if not gate.cleared:
+                audit_logger.log_operation(
+                    operation="UPDATE",
+                    wallet_address=request.owner_address,
+                    document_id=doc_id,
+                    details=f"update blocked, status: {gate.status}",
+                )
+                raise HTTPException(status_code=422, detail=gate.safe_summary())
+            if request.dataset_title:
+                new_dataset_title = gate.fields["dataset_title"]
+            if request.summary:
+                new_summary = gate.fields["summary"]
+
         updated_metadata = {**old_metadata}
         if request.metadata:
             updated_metadata.update(request.metadata)
@@ -1218,84 +1292,72 @@ async def delete_document(doc_id: str, request: DeleteRequest):
 
 # --- START: SIMPLE PREVIEW ENDPOINT ---
 
+async def _sanitized_preview_response(file: UploadFile):
+    """Shared preview gate. Streams only verified sanitized pixels."""
+    try:
+        file_contents = await file.read()
+        outcome = sanitized_preview(
+            file_contents,
+            filename=file.filename,
+            content_type=file.content_type,
+            profile="strict",
+        )
+    except ReleaseGateError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # The message must never echo file content.
+        raise HTTPException(
+            status_code=500, detail="Failed to generate preview"
+        ) from exc
+
+    if not outcome.released:
+        audit_logger.log_operation(
+            operation="PREVIEW",
+            details=(
+                f"preview blocked, status: {outcome.status}, "
+                f"reasons: {','.join(outcome.reason_codes)}"
+            ),
+        )
+        return JSONResponse(status_code=422, content=outcome.safe_summary())
+
+    return StreamingResponse(
+        io.BytesIO(outcome.content),
+        media_type=outcome.media_type,
+        headers={"X-BioBlock-Preview-Status": outcome.status},
+    )
+
+
 @app.post("//simple_preview") # Catches the bad URL
 @app.post("/simple_preview", include_in_schema=False)
 async def simple_preview(file: UploadFile = File(...)):
     """
-    A simple endpoint that just returns the uploaded image
-    without any anonymization. This is to test the pipeline.
-    
-    Now uses the PreviewFactory to support multiple file types including DICOM.
-    Maintains backward compatibility with existing frontend.
+    Return a sanitized preview of the uploaded file.
+
+    This endpoint previously streamed the uploaded bytes back unmodified - the
+    image preview generator documents that as "bypass behavior" - which let raw
+    uploaded pixels out without ever touching the sanitizer. Previews are now
+    produced only from verified sanitized pixels: rasters go through the
+    verified redaction path, DICOM is metadata-scrubbed and pixel-redacted with
+    final-byte validation before rendering, and modalities with no sanitized
+    preview (NIfTI, WSI) are blocked rather than rendered raw.
     """
-    print("✅ --- simple_preview endpoint was called! --- ✅")
-    print(f"File received: {file.filename}, Content-Type: {file.content_type}")
-
-    try:
-        # Read the file contents
-        file_contents = await file.read()
-
-        # Use factory to get the appropriate generator
-        generator = PreviewFactory.create_generator(
-            filename=file.filename,
-            content_type=file.content_type
-        )
-
-        # Generate preview using the factory-selected generator
-        response, media_type = generator.generate_preview(
-            file_contents=file_contents,
-            filename=file.filename,
-            content_type=file.content_type
-        )
-
-        print(f"Sending response with media_type: {media_type}")
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate preview: {str(e)}"
-        )
+    return await _sanitized_preview_response(file)
 
 # --- END: SIMPLE PREVIEW ENDPOINT ---
 
 @app.post("/preview_dicom", include_in_schema=False)
 async def preview_dicom(file: UploadFile = File(...)):
     """
-    Convert DICOM file to PNG/JPEG image for preview.
-    Works on both Mac and Windows.
-    
-    Now uses the PreviewFactory for consistency.
-    Maintains backward compatibility with existing frontend.
+    Render a DICOM preview from sanitized pixels only.
+
+    Metadata is scrubbed, pixels are OCR-redacted and validated against the
+    re-read bytes, the sanitized pixels are rendered, and the rendered PNG is
+    put through a residual text scan. Any failure blocks; the raw pixel array
+    is never rendered.
     """
-    try:
-        # Read the file contents
-        file_contents = await file.read()
-
-        # Use factory to get the DICOM generator (factory will validate file type)
-        generator = PreviewFactory.create_generator(
-            filename=file.filename,
-            content_type=file.content_type
-        )
-
-        # Generate preview using the factory-selected generator
-        response, media_type = generator.generate_preview(
-            file_contents=file_contents,
-            filename=file.filename,
-            content_type=file.content_type
-        )
-
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to convert DICOM to image: {str(e)}"
-        )
+    return await _sanitized_preview_response(file)
 @app.post("/search_enhanced")
 async def search_data_enhanced(request: Dict[str, Any]):
     """
