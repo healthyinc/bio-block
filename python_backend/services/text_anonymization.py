@@ -11,6 +11,13 @@ from services.ner_phi_detector import (
     SpacyNerPhiDetector,
     configured_model_name,
 )
+from services.local_model_detectors import (
+    MODE_OFFLINE,
+    GlinerPiiDetector,
+    LocalModelError,
+    StanfordClinicalDetector,
+    resolve_model_mode,
+)
 from services.phi_detection import (
     DetectedEntity,
     PhiDetector,
@@ -106,8 +113,32 @@ def _normalize_profile(profile: str) -> str:
     return _profile_settings(profile)[0]
 
 
-@lru_cache(maxsize=8)
 def _detectors(model_name: str, profile: str) -> Tuple[PhiDetector, ...]:
+    """Build the detector chain for the currently configured model mode.
+
+    An unrecognized mode raises ``LocalModelError`` rather than silently
+    dropping the model adapters.
+    """
+    return _build_detectors(model_name, profile, resolve_model_mode())
+
+
+@lru_cache(maxsize=8)
+def _build_detectors(
+    model_name: str,
+    profile: str,
+    model_mode: str,
+) -> Tuple[PhiDetector, ...]:
+    """Cached detector chain. Model adapters only propose spans."""
+    if model_mode == MODE_OFFLINE:
+        return (
+            StructuredPatternDetector(),
+            StanfordClinicalDetector(),
+            GlinerPiiDetector(),
+            SpacyNerPhiDetector(
+                model_name,
+                high_recall_proper_nouns=profile == "strict",
+            ),
+        )
     return (
         StructuredPatternDetector(),
         SpacyNerPhiDetector(
@@ -126,6 +157,10 @@ def _detect_entities(
     try:
         for detector in _detectors(model_name, profile):
             detected.extend(detector.detect(text))
+    except LocalModelError as exc:
+        # Model load, checksum, inference, and timeout failures block the
+        # artifact; they never degrade to returning unredacted content.
+        raise NerPhiDetectionError(exc.error_code, exc.status_code) from exc
     except NerPhiDetectionError:
         raise
     except Exception as exc:

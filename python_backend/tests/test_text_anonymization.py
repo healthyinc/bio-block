@@ -263,3 +263,137 @@ def test_structured_identifier_redaction_does_not_depend_on_ner(
     assert result["detected_entities"] == {entity_type: 1}
     assert result["detection_sources"] == {"structured_pattern": 1}
 
+
+
+# ---------------------------------------------------------------------------
+# Local model adapters are detectors only, and fail closed (Phase 3)
+# ---------------------------------------------------------------------------
+
+
+def _model_detector_names(model_mode):
+    from services import local_model_detectors as models
+
+    text_anonymization._build_detectors.cache_clear()
+    try:
+        detectors = text_anonymization._build_detectors(
+            "en_core_web_sm", "strict", model_mode
+        )
+        return [detector.__class__.__name__ for detector in detectors]
+    finally:
+        text_anonymization._build_detectors.cache_clear()
+        assert models.SUPPORTED_MODEL_MODES  # keep the import meaningful
+
+
+def test_offline_mode_wires_both_local_model_detectors():
+    from services import local_model_detectors as models
+
+    names = _model_detector_names(models.MODE_OFFLINE)
+
+    assert "StanfordClinicalDetector" in names
+    assert "GlinerPiiDetector" in names
+    assert names[0] == "StructuredPatternDetector"
+
+
+def test_legacy_test_mode_excludes_the_local_model_detectors():
+    from services import local_model_detectors as models
+
+    names = _model_detector_names(models.MODE_LEGACY_TEST)
+
+    assert "StanfordClinicalDetector" not in names
+    assert "GlinerPiiDetector" not in names
+
+
+def test_unknown_model_mode_blocks_anonymization(monkeypatch):
+    from services import local_model_detectors as models
+
+    monkeypatch.setenv(models.MODEL_MODE_ENV_VAR, "cloud")
+
+    with pytest.raises(TextAnonymizationError) as exc:
+        anonymize_clinical_text("Patient MRN: 123456.", study_salt="study-a")
+
+    assert exc.value.detail == "invalid_model_configuration"
+    assert exc.value.status_code == 500
+
+
+@pytest.mark.parametrize(
+    "error_code,status_code",
+    [
+        ("model_checksum_mismatch", 503),
+        ("model_files_unavailable", 503),
+        ("model_inference_timeout", 503),
+        ("stanford_inference_failed", 500),
+    ],
+)
+def test_model_failure_blocks_instead_of_returning_text(
+    monkeypatch, error_code, status_code
+):
+    from services.local_model_detectors import LocalModelError
+
+    class BlowingUpDetector:
+        def detect(self, text):
+            raise LocalModelError(error_code, status_code)
+
+    monkeypatch.setattr(
+        text_anonymization,
+        "_detectors",
+        lambda model_name, profile: (BlowingUpDetector(),),
+    )
+
+    with pytest.raises(TextAnonymizationError) as exc:
+        anonymize_clinical_text("Patient MRN: 123456.", study_salt="study-a")
+
+    assert exc.value.detail == error_code
+    assert exc.value.status_code == status_code
+    assert "123456" not in str(exc.value)
+
+
+def test_model_failure_blocks_detection_only_endpoint(monkeypatch):
+    from services.local_model_detectors import LocalModelError
+    from services.text_anonymization import detect_clinical_phi
+
+    class BlowingUpDetector:
+        def detect(self, text):
+            raise LocalModelError("model_checksum_mismatch")
+
+    monkeypatch.setattr(
+        text_anonymization,
+        "_detectors",
+        lambda model_name, profile: (BlowingUpDetector(),),
+    )
+
+    with pytest.raises(TextAnonymizationError) as exc:
+        detect_clinical_phi("Patient MRN: 123456.")
+
+    assert exc.value.detail == "model_checksum_mismatch"
+
+
+def test_model_candidates_are_redacted_not_released(monkeypatch):
+    from services.local_model_detectors import SOURCE_GLINER
+    from services.privacy_contracts import PhiEntity
+
+    text = "Contact Ravi Kumar for details."
+
+    class FakeModelDetector:
+        def detect(self, _text):
+            return [
+                PhiEntity(
+                    entity_type="PERSON",
+                    start=8,
+                    end=18,
+                    source=SOURCE_GLINER,
+                    score=0.42,
+                    original_label="person",
+                )
+            ]
+
+    monkeypatch.setattr(
+        text_anonymization,
+        "_detectors",
+        lambda model_name, profile: (FakeModelDetector(),),
+    )
+
+    result = anonymize_clinical_text(text, study_salt="study-a")
+
+    assert "Ravi Kumar" not in result["anonymized_text"]
+    assert "<REDACTED_NAME>" in result["anonymized_text"]
+    assert result["detection_sources"] == {SOURCE_GLINER: 1}

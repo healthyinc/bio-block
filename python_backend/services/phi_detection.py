@@ -182,15 +182,21 @@ def resolve_overlaps(
         for entity in entities
         if 0 <= entity.start < entity.end <= text_length
     }
+    # The key must totally order the candidates: set iteration order is not
+    # stable across runs, so any tie left here would make redaction
+    # non-deterministic. Rule-based findings carry no score and rank above
+    # model candidates.
     ordered = sorted(
         valid,
         key=lambda entity: (
             -_priority(entity),
             -(entity.end - entity.start),
+            -(1.0 if entity.score is None else entity.score),
             entity.start,
             _SOURCE_ORDER.get(entity.source, 99),
             entity.entity_type,
             entity.original_label or "",
+            entity.source,
         ),
     )
 

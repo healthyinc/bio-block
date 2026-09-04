@@ -1,0 +1,16 @@
+{
+  "stanford_deidentifier": {
+    "repo_id": "StanfordAIMI/stanford-deidentifier-base",
+    "revision": "661b9c1c717d3165512d440abc3700c386aefab6",
+    "license": "MIT",
+    "weight_file": "pytorch_model.bin",
+    "weight_sha256": "fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716"
+  },
+  "gliner_multi_pii": {
+    "repo_id": "urchade/gliner_multi_pii-v1",
+    "revision": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+    "license": "Apache-2.0",
+    "weight_file": "pytorch_model.bin",
+    "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+  }
+}
