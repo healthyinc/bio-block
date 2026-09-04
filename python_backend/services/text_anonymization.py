@@ -19,6 +19,7 @@ from services.local_model_detectors import (
     resolve_model_mode,
 )
 from services.phi_detection import (
+    SOURCE_STRICT_PROPER_NOUN,
     DetectedEntity,
     PhiDetector,
     StructuredPatternDetector,
@@ -405,6 +406,15 @@ def residual_phi_categories(anonymized_text: str) -> Dict[str, int]:
     """Re-scan redacted output. A non-empty result must block the release.
 
     Returns categories and counts only, never the surviving values.
+
+    The high-recall proper-noun heuristic is excluded from this second pass.
+    In strict mode the first pass already ran it and redacted everything it
+    flagged, so anything it finds here is an ordinary capitalized word left in
+    the surviving prose - masking the placeholders changes the sentence shape
+    and exposes words like "Portal" or "Contact" to it. Re-applying it would
+    block releases on our own leftovers rather than on surviving PHI. Every
+    evidence-based detector (structured patterns, context rules, and the
+    trained NER models) still counts.
     """
     if not isinstance(anonymized_text, str):
         raise TextAnonymizationError("Text input must be a string")
@@ -423,4 +433,8 @@ def residual_phi_categories(anonymized_text: str) -> Dict[str, int]:
             exc.error_code,
             status_code=exc.status_code,
         ) from exc
-    return _entity_summary(entities)
+    return _entity_summary(
+        entity
+        for entity in entities
+        if entity.source != SOURCE_STRICT_PROPER_NOUN
+    )

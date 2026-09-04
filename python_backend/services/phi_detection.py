@@ -100,9 +100,12 @@ STRUCTURED_PATTERNS: Sequence[_PatternDefinition] = (
     _PatternDefinition(
         "ip_address",
         "IP_ADDRESS",
+        # The boundaries reject a longer dotted number without rejecting a
+        # trailing sentence period: "accessed from 203.0.113.42." is the
+        # common phrasing, and a plain (?![\d.]) never matches it.
         _compile(
-            r"(?<![\d.])(?:25[0-5]|2[0-4]\d|1?\d?\d)"
-            r"(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}(?![\d.])"
+            r"(?<!\d)(?<!\d\.)(?:25[0-5]|2[0-4]\d|1?\d?\d)"
+            r"(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}(?!\d)(?!\.\d)"
         ),
     ),
     _PatternDefinition(
