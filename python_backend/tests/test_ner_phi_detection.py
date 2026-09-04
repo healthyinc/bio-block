@@ -14,6 +14,7 @@ from services.ner_phi_detector import (  # noqa: E402
 from services.phi_detection import (  # noqa: E402
     SOURCE_CONTEXT_RULE,
     SOURCE_NER,
+    SOURCE_STRICT_PROPER_NOUN,
     SOURCE_STRUCTURED_PATTERN,
     DetectedEntity,
     resolve_overlaps,
@@ -272,3 +273,207 @@ def test_invalid_input_type_is_rejected():
         anonymize_clinical_text(b"Patient Rahul Sharma", study_salt="study-a")
 
     assert exc.value.status_code == 400
+
+
+@pytest.mark.parametrize("profile", ["strict", "research"])
+@pytest.mark.parametrize(
+    ("text", "name"),
+    [
+        ("Kartik is suffering fever.", "Kartik"),
+        ("Rose has pain.", "Rose"),
+        ("Nikhil was diagnosed with influenza.", "Nikhil"),
+    ],
+)
+def test_clinical_subject_names_are_redacted_in_both_profiles(
+    profile,
+    text,
+    name,
+):
+    result = anonymize_clinical_text(
+        text,
+        profile=profile,
+        study_salt="study-a",
+    )
+
+    assert name not in result["anonymized_text"]
+    assert result["detected_entities"] == {"PERSON": 1}
+    assert result["detection_sources"] == {SOURCE_CONTEXT_RULE: 1}
+
+
+@pytest.mark.parametrize(
+    ("text", "name"),
+    [
+        ("Kartik went home after lunch.", "Kartik"),
+        ("The clinician spoke with Kartik.", "Kartik"),
+        ("After lunch, Kartik returned.", "Kartik"),
+    ],
+)
+def test_strict_profile_removes_names_from_arbitrary_positions(text, name):
+    result = anonymize_clinical_text(
+        text,
+        profile="strict",
+        study_salt="study-a",
+    )
+
+    assert name not in result["anonymized_text"]
+    assert result["entity_count"] == 1
+
+
+def test_strict_profile_records_proper_noun_fallback_when_model_misses_name():
+    result = anonymize_clinical_text(
+        "Kartik went home after lunch.",
+        profile="strict",
+        study_salt="study-a",
+    )
+
+    assert result["anonymized_text"].startswith("<REDACTED_NAME>")
+    assert result["detection_sources"] == {SOURCE_STRICT_PROPER_NOUN: 1}
+
+
+def test_research_profile_does_not_apply_strict_proper_noun_fallback():
+    text = "Kartik went home after lunch."
+    result = anonymize_clinical_text(
+        text,
+        profile="research",
+        study_salt="study-a",
+    )
+
+    assert result["anonymized_text"] == text
+    assert result["detected_entities"] == {}
+
+
+def test_strict_fallback_preserves_known_non_name_medical_terms():
+    text = "Diabetes is causing fatigue. MRI was reviewed."
+    result = anonymize_clinical_text(
+        text,
+        profile="strict",
+        study_salt="study-a",
+    )
+
+    assert result["anonymized_text"] == text
+    assert result["detected_entities"] == {}
+
+
+def test_contextual_patient_name_overrides_eponym_safeguard():
+    result = anonymize_clinical_text(
+        "Patient Hodgkin was admitted for observation.",
+        study_salt="study-a",
+    )
+
+    assert "Hodgkin" not in result["anonymized_text"]
+    assert result["detected_entities"] == {"PERSON": 1}
+
+
+def test_date_shaped_ner_mislabel_does_not_override_structured_date():
+    result = anonymize_clinical_text(
+        "Patient Rahul Sharma was admitted on 03/08/2026.",
+        study_salt="study-a",
+    )
+
+    assert "Rahul Sharma" not in result["anonymized_text"]
+    assert "03/08/2026" not in result["anonymized_text"]
+    assert "<REDACTED_DATE>" in result["anonymized_text"]
+    assert result["detected_entities"]["DATE_TIME"] == 1
+
+
+class _FakeNerDetector:
+    def __init__(self, entities):
+        self.entities = list(entities)
+
+    def detect(self, text):
+        return list(self.entities)
+
+
+def _entity_for(text, value, source=SOURCE_NER, occurrence=0):
+    import re
+
+    starts = [match.start() for match in re.finditer(re.escape(value), text)]
+    start = starts[occurrence]
+    return DetectedEntity(
+        entity_type="PERSON",
+        start=start,
+        end=start + len(value),
+        source=source,
+        original_label="PERSON",
+    )
+
+
+def _anonymize_with_fake(monkeypatch, text, entities):
+    from services import text_anonymization as text_service
+    from services.phi_detection import StructuredPatternDetector
+
+    monkeypatch.setattr(
+        text_service,
+        "_detectors",
+        lambda model_name, profile: (
+            StructuredPatternDetector(),
+            _FakeNerDetector(entities),
+        ),
+    )
+    return anonymize_clinical_text(text, study_salt="study-a")
+
+
+def test_clinical_verb_rule_covers_model_missed_name():
+    result = anonymize_clinical_text(
+        "Dr. Amit Verma treated Priya Nair.",
+        study_salt="study-a",
+    )
+
+    assert "Amit Verma" not in result["anonymized_text"]
+    assert "Priya Nair" not in result["anonymized_text"]
+    assert result["detected_entities"] == {"PERSON": 2}
+
+
+def test_serialized_result_does_not_contain_detected_values(monkeypatch):
+    import json
+
+    text = "Synthetic Person has MRN-458921 and synthetic@example.com."
+    result = _anonymize_with_fake(
+        monkeypatch,
+        text,
+        [_entity_for(text, "Synthetic Person")],
+    )
+    serialized = json.dumps(result, sort_keys=True)
+
+    assert "Synthetic Person" not in serialized
+    assert "458921" not in serialized
+    assert "synthetic@example.com" not in serialized
+    assert '"start"' not in serialized
+    assert '"end"' not in serialized
+
+
+def test_duplicate_overlapping_detections_replace_once(monkeypatch):
+    text = "Dr. Amit Verma was examined."
+    entities = [
+        _entity_for(text, "Amit"),
+        _entity_for(text, "Amit Verma"),
+        _entity_for(text, "Amit Verma", source=SOURCE_CONTEXT_RULE),
+    ]
+
+    result = _anonymize_with_fake(monkeypatch, text, entities)
+
+    assert result["anonymized_text"].count("<REDACTED_NAME>") == 1
+    assert "Amit" not in result["anonymized_text"]
+    assert result["entity_count"] == 1
+
+
+def test_adjacent_entities_do_not_corrupt_offsets(monkeypatch):
+    text = "John SmithSarah Johnson"
+    entities = [
+        _entity_for(text, "John Smith"),
+        _entity_for(text, "Sarah Johnson"),
+    ]
+
+    result = _anonymize_with_fake(monkeypatch, text, entities)
+
+    assert result["anonymized_text"] == "<REDACTED_NAME><REDACTED_NAME>"
+    assert result["entity_count"] == 2
+
+
+def test_no_fake_entities_preserves_non_phi_text(monkeypatch):
+    text = "Symptoms improved after hydration and rest."
+
+    result = _anonymize_with_fake(monkeypatch, text, [])
+
+    assert result["anonymized_text"] == text
+    assert result["entity_count"] == 0

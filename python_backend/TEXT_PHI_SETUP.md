@@ -28,8 +28,24 @@ python -m pip install "https://github.com/explosion/spacy-models/releases/downlo
 Verify that the trained NER component loads before starting the API:
 
 ```bash
-python -c "import spacy; assert 'ner' in spacy.load('en_core_web_sm').pipe_names"
+python check_phi_ner_model.py
 ```
+
+## Profile behavior
+
+`strict` adds a high-recall fallback after trained NER and contextual rules. It
+redacts remaining proper-noun spans unless they are narrow known field labels,
+modalities, or protected clinical terms. This intentionally accepts more false
+positives to reduce the chance of a name leaving the service unchanged.
+
+`research` keeps trained NER and clinical-subject rules, but does not apply the
+generic proper-noun fallback. Both profiles recognize names used as subjects of
+clinical statements, such as `Kartik is suffering fever`.
+
+Automated NER cannot prove that arbitrary natural language contains no PHI.
+Workflows requiring a zero-residual-canary test result must still retain a
+human-review or release-approval gate; that result is not proof of zero PHI
+leakage.
 
 ## Configuration
 

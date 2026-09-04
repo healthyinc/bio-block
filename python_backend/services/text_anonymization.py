@@ -106,18 +106,25 @@ def _normalize_profile(profile: str) -> str:
     return _profile_settings(profile)[0]
 
 
-@lru_cache(maxsize=4)
-def _detectors(model_name: str) -> Tuple[PhiDetector, ...]:
+@lru_cache(maxsize=8)
+def _detectors(model_name: str, profile: str) -> Tuple[PhiDetector, ...]:
     return (
         StructuredPatternDetector(),
-        SpacyNerPhiDetector(model_name),
+        SpacyNerPhiDetector(
+            model_name,
+            high_recall_proper_nouns=profile == "strict",
+        ),
     )
 
 
-def _detect_entities(text: str, model_name: str) -> List[DetectedEntity]:
+def _detect_entities(
+    text: str,
+    model_name: str,
+    profile: str,
+) -> List[DetectedEntity]:
     detected: List[DetectedEntity] = []
     try:
-        for detector in _detectors(model_name):
+        for detector in _detectors(model_name, profile):
             detected.extend(detector.detect(text))
     except NerPhiDetectionError:
         raise
@@ -284,7 +291,7 @@ def detect_clinical_phi(text: str) -> Dict[str, int]:
         )
 
     try:
-        entities = _detect_entities(text, configured_model_name())
+        entities = _detect_entities(text, configured_model_name(), "strict")
     except NerPhiDetectionError as exc:
         raise TextAnonymizationError(
             exc.error_code,
@@ -313,7 +320,7 @@ def anonymize_clinical_text(
 
     try:
         model_name = configured_model_name()
-        entities = _detect_entities(text, model_name)
+        entities = _detect_entities(text, model_name, privacy_profile)
     except NerPhiDetectionError as exc:
         raise TextAnonymizationError(
             exc.error_code,

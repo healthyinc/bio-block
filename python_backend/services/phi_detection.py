@@ -5,6 +5,7 @@ from typing import Iterable, List, Optional, Pattern, Protocol, Sequence
 SOURCE_NER = "ner"
 SOURCE_STRUCTURED_PATTERN = "structured_pattern"
 SOURCE_CONTEXT_RULE = "context_rule"
+SOURCE_STRICT_PROPER_NOUN = "strict_proper_noun"
 
 
 @dataclass(frozen=True)
@@ -163,6 +164,7 @@ _SOURCE_ORDER = {
     SOURCE_STRUCTURED_PATTERN: 0,
     SOURCE_CONTEXT_RULE: 1,
     SOURCE_NER: 2,
+    SOURCE_STRICT_PROPER_NOUN: 3,
 }
 
 

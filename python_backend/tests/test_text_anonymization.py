@@ -200,3 +200,63 @@ def test_strict_profile_redacts_dates():
     assert "2026-06-16" not in result["anonymized_text"]
     assert "<REDACTED_DATE>" in result["anonymized_text"]
 
+
+class _NoopNerDetector:
+    def detect(self, text):
+        return []
+
+
+@pytest.mark.parametrize(
+    ("text", "raw_value", "entity_type", "replacement"),
+    [
+        ("MRN-458921 was verified.", "458921", "MEDICAL_RECORD_NUMBER", "<REDACTED_MRN>"),
+        ("Patient ID PT-1001 was verified.", "PT-1001", "PATIENT_ID", "<REDACTED_PATIENT_ID>"),
+        (
+            "Health Plan ID PLAN-998877 was verified.",
+            "PLAN-998877",
+            "HEALTH_PLAN_ID",
+            "<REDACTED_HEALTH_PLAN>",
+        ),
+        (
+            "Accession Number ACC-445566 was verified.",
+            "ACC-445566",
+            "ACCESSION_NUMBER",
+            "<REDACTED_ACCESSION>",
+        ),
+        ("Device ID DEV-998877 was verified.", "DEV-998877", "DEVICE_ID", "<REDACTED_DEVICE_ID>"),
+        (
+            "Email synthetic.person@example.com was verified.",
+            "synthetic.person@example.com",
+            "EMAIL_ADDRESS",
+            "<REDACTED_EMAIL>",
+        ),
+        ("Phone 555-321-7654 was verified.", "555-321-7654", "PHONE_NUMBER", "<REDACTED_PHONE>"),
+        ("SSN 123-45-6789 was verified.", "123-45-6789", "US_SSN", "<REDACTED_SSN>"),
+        ("Visit date 03/08/2026 was verified.", "03/08/2026", "DATE_TIME", "<REDACTED_DATE>"),
+    ],
+)
+def test_structured_identifier_redaction_does_not_depend_on_ner(
+    monkeypatch,
+    text,
+    raw_value,
+    entity_type,
+    replacement,
+):
+    from services.phi_detection import StructuredPatternDetector
+
+    monkeypatch.setattr(
+        text_anonymization,
+        "_detectors",
+        lambda model_name, profile: (
+            StructuredPatternDetector(),
+            _NoopNerDetector(),
+        ),
+    )
+
+    result = anonymize_clinical_text(text, study_salt="study-a")
+
+    assert raw_value not in result["anonymized_text"]
+    assert replacement in result["anonymized_text"]
+    assert result["detected_entities"] == {entity_type: 1}
+    assert result["detection_sources"] == {"structured_pattern": 1}
+

@@ -519,6 +519,71 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertFalse(result["tabular_summary"]["k_anonymity_satisfied"])
         self.assertIn("tabular_summary", result)
 
+    def test_text_upload_returns_only_redacted_content_and_safe_counts(self):
+        raw_text = (
+            b"Patient Rahul Sharma has MRN-458921 and was examined by "
+            b"Dr. Amit Verma."
+        )
+
+        response = upload_file("synthetic-note.txt", raw_text, "text/plain")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        serialized = response.text
+        self.assertEqual(body["detected_modality"], "text")
+        self.assertEqual(body["anonymization_status"], "completed")
+        self.assertNotIn("Rahul Sharma", serialized)
+        self.assertNotIn("Amit Verma", serialized)
+        self.assertNotIn("458921", serialized)
+        self.assertIn("<REDACTED_NAME>", body["anonymized_text"])
+        self.assertIn("<REDACTED_MRN>", body["anonymized_text"])
+        self.assertEqual(body["detected_entities"]["PERSON"], 2)
+        self.assertEqual(body["detected_entities"]["MEDICAL_RECORD_NUMBER"], 1)
+        for raw_span_key in (
+            '"start"',
+            '"end"',
+            '"score"',
+            '"original_label"',
+            '"entity_text"',
+        ):
+            self.assertNotIn(raw_span_key, serialized)
+
+    def test_text_upload_model_failure_cannot_return_original_content(self):
+        raw_text = b"Patient Synthetic Person has MRN-458921."
+        previous_model = os.environ.get("PHI_NER_MODEL")
+        os.environ["PHI_NER_MODEL"] = "missing_configured_phi_model"
+        try:
+            response = upload_file("synthetic-note.txt", raw_text, "text/plain")
+        finally:
+            if previous_model is None:
+                os.environ.pop("PHI_NER_MODEL", None)
+            else:
+                os.environ["PHI_NER_MODEL"] = previous_model
+
+        self.assertEqual(response.status_code, 503)
+        serialized = response.text
+        self.assertEqual(response.json()["detail"], "ner_model_unavailable")
+        self.assertNotIn("Synthetic Person", serialized)
+        self.assertNotIn("458921", serialized)
+        self.assertNotIn("anonymized_text", serialized)
+        self.assertNotIn("traceback", serialized.lower())
+
+    def test_strict_text_upload_redacts_arbitrary_proper_noun(self):
+        response = upload_file(
+            "synthetic-note.txt",
+            b"Kartik went home after lunch.",
+            "text/plain",
+            "strict",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertNotIn("Kartik", response.text)
+        self.assertIn("<REDACTED_NAME>", body["anonymized_text"])
+        self.assertEqual(body["anonymization_status"], "completed")
+        self.assertEqual(body["detected_entities"], {"PERSON": 1})
+        self.assertEqual(body["detection_sources"], {"strict_proper_noun": 1})
+
 
 if __name__ == "__main__":
     unittest.main()
