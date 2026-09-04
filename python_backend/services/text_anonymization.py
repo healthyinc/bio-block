@@ -381,3 +381,46 @@ def anonymize_clinical_text(
 
 
 
+# ---------------------------------------------------------------------------
+# Post-redaction validation (Phase 4)
+# ---------------------------------------------------------------------------
+
+# Placeholders and research-profile surrogates are our own output, not PHI.
+# They are masked out before the residual scan so the validator measures what
+# survived redaction rather than re-flagging the redaction itself.
+_PLACEHOLDER_PATTERN = re.compile(r"<REDACTED_[A-Z0-9_]+>")
+_SURROGATE_PATTERN = re.compile(
+    r"\b(?:PERSON|MRN|PATIENT_ID|HEALTH_PLAN|ACCESSION|DEVICE)"
+    rf"_[0-9A-F]{{{HASH_LENGTH}}}\b"
+)
+
+
+def mask_release_placeholders(text: str) -> str:
+    """Blank out our own replacement tokens, preserving offsets."""
+    masked = _PLACEHOLDER_PATTERN.sub(lambda match: " " * len(match.group(0)), text)
+    return _SURROGATE_PATTERN.sub(lambda match: " " * len(match.group(0)), masked)
+
+
+def residual_phi_categories(anonymized_text: str) -> Dict[str, int]:
+    """Re-scan redacted output. A non-empty result must block the release.
+
+    Returns categories and counts only, never the surviving values.
+    """
+    if not isinstance(anonymized_text, str):
+        raise TextAnonymizationError("Text input must be a string")
+    masked = mask_release_placeholders(anonymized_text)
+    if not masked.strip():
+        return {}
+    if len(masked.encode("utf-8")) > MAX_TEXT_BYTES:
+        raise TextAnonymizationError(
+            f"Text input exceeds the {MAX_TEXT_BYTES} byte limit",
+            status_code=413,
+        )
+    try:
+        entities = _detect_entities(masked, configured_model_name(), "strict")
+    except NerPhiDetectionError as exc:
+        raise TextAnonymizationError(
+            exc.error_code,
+            status_code=exc.status_code,
+        ) from exc
+    return _entity_summary(entities)

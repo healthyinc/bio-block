@@ -31,8 +31,13 @@ from services.ingestion import (
     HEADER_READ_LIMIT,
     TEXT_READ_LIMIT_BYTES,
     IngestionError,
+    _safe_filename,
     detect_modality,
     route_for_ingestion,
+)
+from services.document_sanitization import (
+    DocumentSanitizationError,
+    scan_pdf_bytes,
 )
 from services.tabular_anonymization import (
     TabularAnonymizationError,
@@ -349,7 +354,7 @@ async def ingest_file(
                 )
 
         file_content = None
-        if modality in {"csv", "dicom", "nifti", "wsi"}:
+        if modality in {"csv", "pdf", "dicom", "nifti", "wsi"}:
             await file.seek(0)
             file_content = await file.read()
 
@@ -529,74 +534,64 @@ async def anonymize_text(request: AnonymizeTextRequest):
 @app.post("/anonymize_pdf")
 async def anonymize_pdf(file: UploadFile = File(...)):
     """
-    Anonymize PHI in PDF documents. Extracts text from each page,
-    runs PHI detection and anonymization, returns per-page results.
-    """
-    if not pymupdf_available:
-        raise HTTPException(
-            status_code=503,
-            detail="PyMuPDF not available. Install with: pip install PyMuPDF"
-        )
+    Scan every PHI-bearing surface of a PDF: page text, document and XMP
+    metadata, annotations, form fields, links, bookmarks, embedded files, and
+    raster images.
 
+    A PDF is never automatically releasable: there is no validated PDF writer,
+    so the outcome is manual_review_required at best. Redacted page text is
+    returned only when every text surface was read and came back clear;
+    otherwise it is withheld so a partial scan cannot be mistaken for a clean
+    document. Original bytes are never returned.
+    """
     if not file.filename or not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="File must be a PDF document")
 
     try:
         contents = await file.read()
+        # Scanned in memory; PHI is never written to a temporary file.
+        result = scan_pdf_bytes(contents, profile="strict")
+    except DocumentSanitizationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except TextAnonymizationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except Exception as exc:
+        # The message must never echo document content.
+        raise HTTPException(
+            status_code=500, detail="Failed to scan PDF"
+        ) from exc
 
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            tmp.write(contents)
-            tmp_path = tmp.name
+    entities_found = [
+        {"entity_type": entity_type, "count": count}
+        for entity_type, count in sorted(result["detected_entities"].items())
+    ]
+    audit_logger.log_operation(
+        operation="ANONYMIZE",
+        details=(
+            f"pdf pages: {result['pdf_summary'].get('page_count', 0)}, "
+            f"entities: {result['entity_count']}, "
+            f"status: {result['anonymization_status']}"
+        ),
+    )
 
-        try:
-            doc = fitz.open(tmp_path)
-            pages_result = []
-            total_entities = 0
-
-            for page_num in range(len(doc)):
-                page = doc[page_num]
-                page_text = page.get_text()
-
-                if page_text.strip():
-                    page_anonymized = anonymize_text_content(page_text)
-                    total_entities += page_anonymized["entity_count"]
-                    pages_result.append({
-                        "page_number": page_num + 1,
-                        "anonymized_text": page_anonymized["anonymized_text"],
-                        "entities_found": page_anonymized["entities_found"],
-                        "entity_count": page_anonymized["entity_count"]
-                    })
-                else:
-                    pages_result.append({
-                        "page_number": page_num + 1,
-                        "anonymized_text": "",
-                        "entities_found": [],
-                        "entity_count": 0
-                    })
-
-            method = "presidio" if (presidio_available and presidio_analyzer) else "spacy"
-            doc.close()
-
-            audit_logger.log_operation(
-                operation="ANONYMIZE",
-                details=f"pdf: {file.filename}, pages: {len(pages_result)}, entities: {total_entities}, method: {method}",
-            )
-
-            return {
-                "filename": file.filename,
-                "total_pages": len(pages_result),
-                "total_entities": total_entities,
-                "method": method,
-                "pages": pages_result
-            }
-
-        finally:
-            os.unlink(tmp_path)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to anonymize PDF: {str(e)}")
+    return {
+        "filename": _safe_filename(file.filename),
+        "total_pages": result["pdf_summary"].get("page_count", 0),
+        "total_entities": result["entity_count"],
+        "method": "typed_phi_pipeline",
+        "privacy_policy": "safe_harbor_v1",
+        "anonymization_status": result["anonymization_status"],
+        "release_decision": manual_review_decision(
+            *result["unscannable_reasons"]
+        ).to_public_dict(),
+        "pdf_summary": result["pdf_summary"],
+        "unscannable_reasons": result["unscannable_reasons"],
+        "text_layer_complete": result["text_layer_complete"],
+        "entities_found": entities_found,
+        "detection_sources": result["detection_sources"],
+        "residual_phi_categories": result["residual_phi_categories"],
+        "pages": result["pages"],
+    }
 
 
 # HIPAA Safe Harbor: 18 identifier types mapped to DICOM tags

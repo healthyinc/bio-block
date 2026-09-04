@@ -4,6 +4,12 @@ from services.text_anonymization import (
     MAX_TEXT_BYTES,
     TextAnonymizationError,
     anonymize_clinical_text,
+    residual_phi_categories,
+)
+from services.document_sanitization import (
+    REASON_NO_VALIDATED_WRITER,
+    DocumentSanitizationError,
+    scan_pdf_for_ingestion,
 )
 from services.dicom_anonymization import (
     DicomAnonymizationError,
@@ -32,7 +38,7 @@ from services.privacy_contracts import (
 from services.privacy_policy import PrivacyPolicyError, resolve_privacy_policy
 
 SUPPORTED_PROFILES = {"safe_harbor_v1", "strict", "research"}
-SUPPORTED_MODALITIES = {"csv", "text", "dicom", "nifti", "wsi"}
+SUPPORTED_MODALITIES = {"csv", "text", "pdf", "dicom", "nifti", "wsi"}
 HEADER_READ_LIMIT = 4096
 TEXT_READ_LIMIT_BYTES = min(256 * 1024, MAX_TEXT_BYTES)
 TABULAR_SUMMARY_KEYS = (
@@ -112,13 +118,29 @@ def _release_decision_for(
     safe_name: str,
 ):
     if modality == "text" and handler_result.get("anonymization_status") == "completed":
+        residual = handler_result.get("residual_phi_categories") or {}
+        if residual:
+            # Redaction did not clear the text. Categories only, never values.
+            return manual_review_decision(
+                "privacy_requirements_not_met",
+                *sorted(f"residual_{category.lower()}" for category in residual),
+            )
         artifact = SanitizedArtifact(
             content=handler_result["anonymized_text"].encode("utf-8"),
             media_type="text/plain; charset=utf-8",
             filename=safe_name,
-            validators=("typed_phi_detection", "deterministic_redaction"),
+            validators=(
+                "typed_phi_detection",
+                "deterministic_redaction",
+                "residual_phi_rescan",
+            ),
         )
-        return issue_release(artifact)
+        return issue_release(artifact, "safe_harbor_technical_checks_passed")
+    if modality == "pdf":
+        # No validated PDF writer exists, so a PDF is never auto-releasable.
+        return manual_review_decision(
+            *(handler_result.get("unscannable_reasons") or [REASON_NO_VALIDATED_WRITER])
+        )
     if modality == "csv":
         return manual_review_decision("serialized_output_validation_pending")
     if modality == "dicom":
@@ -150,6 +172,10 @@ def _has_dicom_preamble(header: bytes) -> bool:
     return len(header) >= 132 and header[128:132] == b"DICM"
 
 
+def _has_pdf_magic(header: bytes) -> bool:
+    return header[:1024].lstrip().startswith(b"%PDF-")
+
+
 def detect_modality(
     filename: str,
     content_type: Optional[str],
@@ -161,11 +187,15 @@ def detect_modality(
 
     if _has_dicom_preamble(header):
         return "dicom"
+    if _has_pdf_magic(header):
+        return "pdf"
 
     if ext == ".csv":
         return "csv"
     if ext == ".txt":
         return "text"
+    if ext == ".pdf":
+        return "pdf"
     if ext in {".dcm", ".dicom"}:
         return "dicom"
     if ext in {".nii", ".nii.gz"}:
@@ -177,6 +207,8 @@ def detect_modality(
         return "csv"
     if mime == "text/plain":
         return "text"
+    if mime == "application/pdf":
+        return "pdf"
     if mime in {"application/dicom", "application/x-dicom"} or "dicom" in mime:
         return "dicom"
     if mime in {"image/tiff", "image/tif"}:
@@ -235,6 +267,10 @@ def anonymize_text(
         text = text_content.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise IngestionError("Text uploads must be UTF-8 encoded") from exc
+    if "\x00" in text:
+        # A NUL byte can split a value the detector would otherwise match, so
+        # the upload is unscannable rather than clean.
+        raise IngestionError("Text uploads must not contain NUL bytes")
 
     try:
         result = anonymize_clinical_text(
@@ -242,10 +278,12 @@ def anonymize_text(
             profile=profile,
             study_salt=study_salt,
         )
+        residual = residual_phi_categories(result["anonymized_text"])
     except TextAnonymizationError as exc:
         raise IngestionError(exc.detail, status_code=exc.status_code) from exc
 
     return {
+        "residual_phi_categories": residual,
         "handler": "anonymize_text",
         "routing_status": "handler_selected",
         "anonymization_status": result["anonymization_status"],
@@ -258,6 +296,29 @@ def anonymize_text(
         "detection_sources": result["detection_sources"],
         "ner_model": result["ner_model"],
         "trained_ner_active": result["trained_ner_active"],
+    }
+
+
+def scan_pdf(file_content: bytes, profile: str) -> Dict[str, Any]:
+    """Inventory and scan PDF surfaces. Never produces releasable bytes."""
+    try:
+        result = scan_pdf_for_ingestion(file_content, profile=profile)
+    except DocumentSanitizationError as exc:
+        raise IngestionError(exc.detail, status_code=exc.status_code) from exc
+
+    return {
+        "handler": "scan_pdf",
+        "routing_status": "handler_selected",
+        "anonymization_status": result["anonymization_status"],
+        "message": result["message"],
+        "pdf_summary": result["pdf_summary"],
+        "unscannable_reasons": result["unscannable_reasons"],
+        "detected_entities": result["detected_entities"],
+        "entity_count": result["entity_count"],
+        "detection_sources": result["detection_sources"],
+        "residual_phi_categories": result["residual_phi_categories"],
+        "text_layer_complete": result["text_layer_complete"],
+        "pages": result["pages"],
     }
 
 
@@ -329,6 +390,7 @@ def anonymize_wsi(
 HANDLER_REGISTRY: Dict[str, Callable[..., Dict[str, Any]]] = {
     "csv": anonymize_csv,
     "text": anonymize_text,
+    "pdf": scan_pdf,
     "dicom": anonymize_dicom,
     "nifti": anonymize_nifti,
     "wsi": anonymize_wsi,
@@ -387,6 +449,13 @@ def route_for_ingestion(
                 status_code=500,
             )
         handler_result = handler(text_content, resolved_policy.config_profile, study_salt)
+    elif modality == "pdf":
+        if file_content is None:
+            raise IngestionError(
+                "PDF content was not provided for scanning",
+                status_code=500,
+            )
+        handler_result = handler(file_content, resolved_policy.config_profile)
     elif modality == "dicom":
         if file_content is None:
             raise IngestionError(
@@ -437,6 +506,16 @@ def route_for_ingestion(
         response["detected_entities"] = handler_result["detected_entities"]
     if "metadata_summary" in handler_result:
         response["metadata_summary"] = handler_result["metadata_summary"]
+    if "residual_phi_categories" in handler_result:
+        response["residual_phi_categories"] = handler_result["residual_phi_categories"]
+    for pdf_key in (
+        "pdf_summary",
+        "unscannable_reasons",
+        "text_layer_complete",
+        "pages",
+    ):
+        if pdf_key in handler_result:
+            response[pdf_key] = handler_result[pdf_key]
     if "rows_in" in handler_result:
         response["tabular_summary"] = {
             key: handler_result[key]
