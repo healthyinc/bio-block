@@ -50,7 +50,9 @@ from services.tabular_anonymization import (
     anonymize_tabular_csv,
 )
 from services.privacy_contracts import (
+    SanitizedArtifact,
     expert_determination_decision,
+    issue_release,
     manual_review_decision,
 )
 from services.privacy_policy import PrivacyPolicyError, resolve_privacy_policy
@@ -662,13 +664,35 @@ async def anonymize_csv_file(
     quasi_identifiers: Optional[str] = Form(None),
     sensitive_column: Optional[str] = Form(None),
     safe_harbor_mappings: Optional[str] = Form(None),
+    profile: str = Form("strict"),
 ):
     """
     Anonymize a CSV file and return a downloadable anonymized CSV.
 
-    Use this endpoint for local before/after demos. The general ingestion route
-    remains summary-only and does not return raw uploaded rows.
+    This route is policy-gated like every other release path: only
+    safe_harbor_v1 (and its strict alias) can produce downloadable bytes, and
+    research always returns expert_determination_required with no rows. A run
+    whose privacy validation failed, or whose serialized output did not match
+    the removal plan, is reported as blocked rather than streamed.
     """
+    try:
+        resolved_policy = resolve_privacy_policy(profile)
+    except PrivacyPolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not resolved_policy.automatic_release_allowed:
+        decision = expert_determination_decision()
+        return JSONResponse(
+            status_code=200,
+            content={
+                "anonymization_status": decision.disposition.value,
+                "privacy_profile": resolved_policy.requested_profile,
+                "privacy_policy": decision.policy.value,
+                "release_decision": decision.to_public_dict(),
+                "message": "Research processing requires an expert determination.",
+            },
+        )
+
     try:
         contents = await file.read()
         result = anonymize_tabular_csv(
@@ -700,6 +724,52 @@ async def anonymize_csv_file(
     download_name = "anonymized_dataset.csv"
     anonymized_csv = result.pop("_internal_anonymized_csv")
 
+    if result["anonymization_status"] == "failed_privacy_validation":
+        # Privacy validation or serialized-output validation failed. These rows
+        # are not releasable, so none of them leave here.
+        audit_logger.log_operation(
+            operation="ANONYMIZE",
+            details=(
+                f"csv blocked, status: {result['anonymization_status']}, "
+                f"serialized_validation: "
+                f"{result.get('serialized_output_validation')}"
+            ),
+        )
+        return JSONResponse(
+            status_code=422,
+            content={
+                "anonymization_status": result["anonymization_status"],
+                "privacy_profile": resolved_policy.requested_profile,
+                "privacy_policy": resolved_policy.policy.value,
+                "release_decision": manual_review_decision(
+                    "privacy_requirements_not_met",
+                    *result.get("validation_failures", []),
+                ).to_public_dict(),
+                "serialized_output_validation": result.get(
+                    "serialized_output_validation"
+                ),
+                "validation_failures": result.get("validation_failures", []),
+                "k_anonymity_satisfied": result["k_anonymity_satisfied"],
+                "l_diversity_satisfied": result["l_diversity_satisfied"],
+                "warnings": result["warnings"],
+                "message": "CSV did not satisfy privacy requirements; no rows released.",
+            },
+        )
+
+    release_decision = issue_release(
+        SanitizedArtifact(
+            content=anonymized_csv.encode("utf-8"),
+            media_type="text/csv; charset=utf-8",
+            filename=download_name,
+            validators=(
+                "safe_harbor_column_removal",
+                "k_anonymity_l_diversity",
+                "serialized_output_validation",
+            ),
+        ),
+        "safe_harbor_technical_checks_passed",
+    )
+
     audit_logger.log_operation(
         operation="ANONYMIZE",
         details=(
@@ -728,6 +798,11 @@ async def anonymize_csv_file(
             "X-BioBlock-Safe-Harbor-Status": result["safe_harbor_report"][
                 "safe_harbor_validation_status"
             ],
+            "X-BioBlock-Serialized-Output-Validation": str(
+                result.get("serialized_output_validation", "not_run")
+            ),
+            "X-BioBlock-Artifact-Sha256": release_decision.artifact_sha256 or "",
+            "X-BioBlock-Privacy-Policy": resolved_policy.policy.value,
         },
     )
 

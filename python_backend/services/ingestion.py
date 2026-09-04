@@ -11,6 +11,11 @@ from services.document_sanitization import (
     DocumentSanitizationError,
     scan_pdf_for_ingestion,
 )
+from services.workbook_sanitization import (
+    REASON_NO_VALIDATED_WRITER as WORKBOOK_NO_VALIDATED_WRITER,
+    WorkbookSanitizationError,
+    scan_workbook_for_ingestion,
+)
 from services.dicom_anonymization import (
     DicomAnonymizationError,
     anonymize_dicom_file_bytes,
@@ -38,7 +43,7 @@ from services.privacy_contracts import (
 from services.privacy_policy import PrivacyPolicyError, resolve_privacy_policy
 
 SUPPORTED_PROFILES = {"safe_harbor_v1", "strict", "research"}
-SUPPORTED_MODALITIES = {"csv", "text", "pdf", "dicom", "nifti", "wsi"}
+SUPPORTED_MODALITIES = {"csv", "text", "pdf", "workbook", "dicom", "nifti", "wsi"}
 HEADER_READ_LIMIT = 4096
 TEXT_READ_LIMIT_BYTES = min(256 * 1024, MAX_TEXT_BYTES)
 TABULAR_SUMMARY_KEYS = (
@@ -157,8 +162,33 @@ def _release_decision_for(
         return manual_review_decision(
             *(handler_result.get("unscannable_reasons") or [REASON_NO_VALIDATED_WRITER])
         )
+    if modality == "workbook":
+        # No validated workbook writer exists, so a workbook never releases.
+        return manual_review_decision(
+            *(
+                handler_result.get("unscannable_reasons")
+                or [WORKBOOK_NO_VALIDATED_WRITER]
+            )
+        )
     if modality == "csv":
-        return manual_review_decision("serialized_output_validation_pending")
+        # Serialized-output validation now runs (see tabular_validation), but
+        # the ingest route's release posture is unchanged: it stays blocked.
+        # Whether generalized quasi-identifiers clear the release bar is a
+        # re-identification-risk judgment rather than a Safe Harbor
+        # determination, and that policy decision has not been made. The
+        # /anonymize_csv download route remains the reviewed path.
+        if handler_result.get("serialized_output_validation") == "passed":
+            return manual_review_decision(
+                "serialized_output_validation_passed",
+                "tabular_release_policy_review_pending",
+            )
+        return manual_review_decision(
+            "privacy_requirements_not_met",
+            *(
+                handler_result.get("validation_failures")
+                or ["serialized_output_validation_failed"]
+            ),
+        )
     if modality == "dicom":
         # Cross-sectional imaging permits facial reconstruction, which Safe
         # Harbor treats as a comparable image. No defacing step exists, so
@@ -227,6 +257,8 @@ def detect_modality(
         return "text"
     if ext == ".pdf":
         return "pdf"
+    if ext in {".xlsx", ".xlsm"}:
+        return "workbook"
     if ext in {".dcm", ".dicom"}:
         return "dicom"
     if ext in {".nii", ".nii.gz"}:
@@ -240,6 +272,11 @@ def detect_modality(
         return "text"
     if mime == "application/pdf":
         return "pdf"
+    if mime in {
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel.sheet.macroenabled.12",
+    }:
+        return "workbook"
     if mime in {"application/dicom", "application/x-dicom"} or "dicom" in mime:
         return "dicom"
     if mime in {"image/tiff", "image/tif"}:
@@ -281,6 +318,8 @@ def anonymize_csv(
         )
     except TabularAnonymizationError as exc:
         raise IngestionError(exc.detail, status_code=exc.status_code) from exc
+    # This route stays summary-only: the anonymized rows are never serialized
+    # into the response. Validation still runs inside anonymize_tabular_csv.
     return {
         "handler": "anonymize_csv",
         "routing_status": "handler_selected",
@@ -353,6 +392,15 @@ def scan_pdf(file_content: bytes, profile: str) -> Dict[str, Any]:
     }
 
 
+def scan_workbook(file_content: bytes, profile: str) -> Dict[str, Any]:
+    """Inventory and scan workbook surfaces. Never produces releasable bytes."""
+    try:
+        result = scan_workbook_for_ingestion(file_content, profile=profile)
+    except WorkbookSanitizationError as exc:
+        raise IngestionError(exc.detail, status_code=exc.status_code) from exc
+    return result
+
+
 def anonymize_dicom(file_content: bytes, profile: str) -> Dict[str, Any]:
     try:
         metadata_result = anonymize_dicom_file_bytes(file_content, profile=profile)
@@ -422,6 +470,7 @@ HANDLER_REGISTRY: Dict[str, Callable[..., Dict[str, Any]]] = {
     "csv": anonymize_csv,
     "text": anonymize_text,
     "pdf": scan_pdf,
+    "workbook": scan_workbook,
     "dicom": anonymize_dicom,
     "nifti": anonymize_nifti,
     "wsi": anonymize_wsi,
@@ -487,6 +536,13 @@ def route_for_ingestion(
                 status_code=500,
             )
         handler_result = handler(file_content, resolved_policy.config_profile)
+    elif modality == "workbook":
+        if file_content is None:
+            raise IngestionError(
+                "Workbook content was not provided for scanning",
+                status_code=500,
+            )
+        handler_result = handler(file_content, resolved_policy.config_profile)
     elif modality == "dicom":
         if file_content is None:
             raise IngestionError(
@@ -539,14 +595,17 @@ def route_for_ingestion(
         response["metadata_summary"] = handler_result["metadata_summary"]
     if "residual_phi_categories" in handler_result:
         response["residual_phi_categories"] = handler_result["residual_phi_categories"]
-    for pdf_key in (
+    for document_key in (
         "pdf_summary",
+        "workbook_summary",
         "unscannable_reasons",
         "text_layer_complete",
         "pages",
+        "serialized_output_validation",
+        "validation_failures",
     ):
-        if pdf_key in handler_result:
-            response[pdf_key] = handler_result[pdf_key]
+        if document_key in handler_result:
+            response[document_key] = handler_result[document_key]
     if "rows_in" in handler_result:
         response["tabular_summary"] = {
             key: handler_result[key]

@@ -13,6 +13,7 @@ from services.safe_harbor import (
     build_safe_harbor_report,
     prepare_safe_harbor_rows,
 )
+from services.tabular_validation import VALIDATION_PASSED, validate_serialized_csv
 
 
 UNKNOWN_VALUE = "UNKNOWN"
@@ -347,8 +348,24 @@ def anonymize_tabular_csv(
         "warnings": warnings,
     }
 
+    # Always serialize, so the bytes a caller could download are the bytes that
+    # get validated. Reporting a removal plan without re-reading the output is
+    # how a column that survived serialization gets called clean.
+    serialized_csv = _write_csv(retained_columns, anonymized_rows)
+    validation = validate_serialized_csv(
+        serialized_csv,
+        expected_columns=retained_columns,
+        expected_row_count=len(anonymized_rows),
+        removed_columns=columns_removed,
+        source_records=records,
+    )
+    result.update(validation)
+    if validation["serialized_output_validation"] != VALIDATION_PASSED:
+        result["anonymization_status"] = "failed_privacy_validation"
+        result["warnings"] = [*warnings, *validation["validation_failures"]]
+
     if include_anonymized_csv:
-        result["_internal_anonymized_csv"] = _write_csv(retained_columns, anonymized_rows)
+        result["_internal_anonymized_csv"] = serialized_csv
 
     return result
 
