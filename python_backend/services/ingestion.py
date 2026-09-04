@@ -23,8 +23,15 @@ from services.privacy_profiles import (
     PrivacyProfileError,
     validate_privacy_profile as validate_config_privacy_profile,
 )
+from services.privacy_contracts import (
+    SanitizedArtifact,
+    expert_determination_decision,
+    issue_release,
+    manual_review_decision,
+)
+from services.privacy_policy import PrivacyPolicyError, resolve_privacy_policy
 
-SUPPORTED_PROFILES = {"strict", "research"}
+SUPPORTED_PROFILES = {"safe_harbor_v1", "strict", "research"}
 SUPPORTED_MODALITIES = {"csv", "text", "dicom", "nifti", "wsi"}
 HEADER_READ_LIMIT = 4096
 TEXT_READ_LIMIT_BYTES = min(256 * 1024, MAX_TEXT_BYTES)
@@ -61,9 +68,66 @@ class IngestionError(ValueError):
 
 def validate_privacy_profile(profile: str) -> str:
     try:
-        return validate_config_privacy_profile(profile)
-    except PrivacyProfileError as exc:
-        raise IngestionError(exc.detail, status_code=exc.status_code) from exc
+        resolved = resolve_privacy_policy(profile)
+        validate_config_privacy_profile(resolved.config_profile)
+        return resolved.requested_profile
+    except (PrivacyProfileError, PrivacyPolicyError) as exc:
+        detail = getattr(exc, "detail", str(exc))
+        status_code = getattr(exc, "status_code", 400)
+        raise IngestionError(detail, status_code=status_code) from exc
+
+
+def _blocked_downstream(status: str) -> Dict[str, str]:
+    return {
+        "ipfs_chunking": status,
+        "cid_encryption": status,
+        "metadata_indexing": status,
+        "blockchain_transaction": status,
+    }
+
+
+def _expert_determination_response(
+    safe_name: str,
+    modality: str,
+) -> Dict[str, Any]:
+    decision = expert_determination_decision()
+    return {
+        "status": "success",
+        "filename": safe_name,
+        "detected_modality": modality,
+        "privacy_profile": "research",
+        "privacy_policy": decision.policy.value,
+        "handler": HANDLER_REGISTRY[modality].__name__,
+        "routing_status": "release_blocked",
+        "anonymization_status": decision.disposition.value,
+        "message": "Research processing requires an expert determination.",
+        "release_decision": decision.to_public_dict(),
+        "downstream": _blocked_downstream("blocked"),
+    }
+
+
+def _release_decision_for(
+    modality: str,
+    handler_result: Dict[str, Any],
+    safe_name: str,
+):
+    if modality == "text" and handler_result.get("anonymization_status") == "completed":
+        artifact = SanitizedArtifact(
+            content=handler_result["anonymized_text"].encode("utf-8"),
+            media_type="text/plain; charset=utf-8",
+            filename=safe_name,
+            validators=("typed_phi_detection", "deterministic_redaction"),
+        )
+        return issue_release(artifact)
+    if modality == "csv":
+        return manual_review_decision("serialized_output_validation_pending")
+    if modality == "dicom":
+        return manual_review_decision("dicom_validation_incomplete")
+    if modality == "nifti":
+        return manual_review_decision("nifti_serialization_pending")
+    if modality == "wsi":
+        return manual_review_decision("validated_wsi_writer_unavailable")
+    return manual_review_decision("validation_incomplete")
 
 
 def _safe_filename(filename: str) -> str:
@@ -288,7 +352,11 @@ def route_for_ingestion(
 ) -> Dict[str, Any]:
     safe_name = _safe_filename(filename)
     privacy_profile = validate_privacy_profile(profile)
+    resolved_policy = resolve_privacy_policy(privacy_profile)
     modality = detect_modality(safe_name, content_type, header)
+
+    if not resolved_policy.automatic_release_allowed:
+        return _expert_determination_response(safe_name, modality)
 
     handler = HANDLER_REGISTRY.get(modality)
     if handler is None:
@@ -318,46 +386,46 @@ def route_for_ingestion(
                 "Text content was not provided for anonymization",
                 status_code=500,
             )
-        handler_result = handler(text_content, privacy_profile, study_salt)
+        handler_result = handler(text_content, resolved_policy.config_profile, study_salt)
     elif modality == "dicom":
         if file_content is None:
             raise IngestionError(
                 "DICOM content was not provided for anonymization",
                 status_code=500,
             )
-        handler_result = handler(file_content, privacy_profile)
+        handler_result = handler(file_content, resolved_policy.config_profile)
     elif modality == "nifti":
         if file_content is None:
             raise IngestionError(
                 "NIfTI content was not provided for anonymization",
                 status_code=500,
             )
-        handler_result = handler(file_content, safe_name, privacy_profile)
+        handler_result = handler(file_content, safe_name, resolved_policy.config_profile)
     elif modality == "wsi":
         if file_content is None:
             raise IngestionError(
                 "WSI content was not provided for OCR scan planning",
                 status_code=500,
             )
-        handler_result = handler(file_content, safe_name, privacy_profile)
+        handler_result = handler(file_content, safe_name, resolved_policy.config_profile)
     else:
         handler_result = handler()
 
+    release_decision = _release_decision_for(modality, handler_result, safe_name)
     response = {
         "status": "success",
         "filename": safe_name,
         "detected_modality": modality,
         "privacy_profile": privacy_profile,
+        "privacy_policy": resolved_policy.policy.value,
         "handler": handler_result["handler"],
         "routing_status": handler_result["routing_status"],
         "anonymization_status": handler_result["anonymization_status"],
         "message": handler_result["message"],
-        "downstream": {
-            "ipfs_chunking": "pending",
-            "cid_encryption": "pending",
-            "metadata_indexing": "pending",
-            "blockchain_transaction": "pending",
-        },
+        "release_decision": release_decision.to_public_dict(),
+        "downstream": _blocked_downstream(
+            "pending" if release_decision.releasable else "blocked"
+        ),
     }
     if "anonymized_text" in handler_result:
         response["anonymized_text"] = handler_result["anonymized_text"]

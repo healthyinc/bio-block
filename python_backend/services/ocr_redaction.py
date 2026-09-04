@@ -45,7 +45,7 @@ class OCRBox:
 
 @dataclass
 class ImageRedactionResult:
-    image: Image.Image
+    image: Optional[Image.Image]
     boxes_detected: int
     boxes_redacted: int
     redaction_status: str
@@ -139,9 +139,8 @@ def redact_image_with_backend(
     engine_status = _backend_status(backend)
 
     if engine_status == "unavailable":
-        pil_image = _ensure_pil_image(image)
         return ImageRedactionResult(
-            image=pil_image,
+            image=None,
             boxes_detected=0,
             boxes_redacted=0,
             redaction_status="skipped_ocr_unavailable",
@@ -152,7 +151,7 @@ def redact_image_with_backend(
         boxes = backend.detect_text_boxes(_ensure_pil_image(image))
     except OCREngineUnavailable:
         return ImageRedactionResult(
-            image=_ensure_pil_image(image),
+            image=None,
             boxes_detected=0,
             boxes_redacted=0,
             redaction_status="skipped_ocr_unavailable",
@@ -160,7 +159,7 @@ def redact_image_with_backend(
         )
     except Exception:
         return ImageRedactionResult(
-            image=_ensure_pil_image(image),
+            image=None,
             boxes_detected=0,
             boxes_redacted=0,
             redaction_status="ocr_failed",
@@ -273,7 +272,6 @@ def redact_dicom_pixels(
         return _dicom_result(
             pixel_redaction_status="skipped_ocr_unavailable",
             ocr_engine_status=engine_status,
-            sanitized_bytes=file_bytes,
             include_sanitized_bytes=include_sanitized_bytes,
         )
 
@@ -290,7 +288,6 @@ def redact_dicom_pixels(
         return _dicom_result(
             pixel_redaction_status="no_pixel_data",
             ocr_engine_status=engine_status,
-            sanitized_bytes=file_bytes,
             include_sanitized_bytes=include_sanitized_bytes,
         )
 
@@ -300,7 +297,6 @@ def redact_dicom_pixels(
         return _dicom_result(
             pixel_redaction_status="unsupported_pixel_data",
             ocr_engine_status=engine_status,
-            sanitized_bytes=file_bytes,
             include_sanitized_bytes=include_sanitized_bytes,
         )
 
@@ -309,7 +305,6 @@ def redact_dicom_pixels(
         return _dicom_result(
             pixel_redaction_status="unsupported_pixel_format",
             ocr_engine_status=engine_status,
-            sanitized_bytes=file_bytes,
             include_sanitized_bytes=include_sanitized_bytes,
         )
 
@@ -341,7 +336,6 @@ def redact_dicom_pixels(
         return _dicom_result(
             pixel_redaction_status="skipped_ocr_unavailable",
             ocr_engine_status="unavailable",
-            sanitized_bytes=file_bytes,
             include_sanitized_bytes=include_sanitized_bytes,
         )
     except Exception:
@@ -349,7 +343,6 @@ def redact_dicom_pixels(
             pixel_redaction_status="ocr_failed",
             ocr_engine_status="error",
             frames_processed=frames_processed,
-            sanitized_bytes=file_bytes,
             include_sanitized_bytes=include_sanitized_bytes,
         )
 

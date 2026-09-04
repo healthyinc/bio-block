@@ -316,7 +316,10 @@ def anonymize_clinical_text(
         )
 
     privacy_profile, settings = _profile_settings(profile)
-    salt = _resolve_study_salt(study_salt)
+    if settings["text_identifier_strategy"] == "redact":
+        salt = ""
+    else:
+        salt = _resolve_study_salt(study_salt)
 
     try:
         model_name = configured_model_name()

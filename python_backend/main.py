@@ -34,13 +34,18 @@ from services.ingestion import (
     detect_modality,
     route_for_ingestion,
 )
-from services.dicom_anonymization import (
-    DicomAnonymizationError,
-    anonymize_dicom_file_bytes,
-)
 from services.tabular_anonymization import (
     TabularAnonymizationError,
     anonymize_tabular_csv,
+)
+from services.privacy_contracts import (
+    expert_determination_decision,
+    manual_review_decision,
+)
+from services.privacy_policy import PrivacyPolicyError, resolve_privacy_policy
+from services.text_anonymization import (
+    TextAnonymizationError,
+    anonymize_clinical_text,
 )
 
 # PDF extraction imports
@@ -481,81 +486,22 @@ async def anonymize_image_presidio_only(file: UploadFile = File(...)):
 
 
 def anonymize_text_content(text: str) -> dict:
-    """
-    Core text anonymization logic using Presidio with spaCy NER fallback.
-    Returns dict with anonymized_text, entities, and method used.
-    """
-    entities_found = []
+    """Compatibility wrapper over the fail-closed typed detector pipeline."""
+    try:
+        result = anonymize_clinical_text(text, profile="strict")
+    except TextAnonymizationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
-    # Try Presidio first
-    if presidio_available and presidio_analyzer and presidio_anonymizer:
-        try:
-            results = presidio_analyzer.analyze(
-                text=text,
-                language="en",
-                entities=[
-                    "PERSON", "PHONE_NUMBER", "EMAIL_ADDRESS", "US_SSN",
-                    "DATE_TIME", "LOCATION", "MEDICAL_LICENSE", "IP_ADDRESS",
-                    "US_DRIVER_LICENSE", "US_PASSPORT", "CREDIT_CARD", "URL"
-                ]
-            )
-
-            anonymized = presidio_anonymizer.anonymize(
-                text=text,
-                analyzer_results=results
-            )
-
-            for result in results:
-                entities_found.append({
-                    "entity_type": result.entity_type,
-                    "start": result.start,
-                    "end": result.end,
-                    "score": round(result.score, 3),
-                    "original_text": text[result.start:result.end]
-                })
-
-            return {
-                "anonymized_text": anonymized.text,
-                "entities_found": entities_found,
-                "entity_count": len(entities_found),
-                "method": "presidio"
-            }
-        except Exception as e:
-            print(f"Presidio text anonymization failed, trying spaCy fallback: {str(e)}")
-
-    # Fallback to spaCy NER
-    if nlp is not None:
-        doc = nlp(text)
-        anonymized_text = text
-
-        sorted_ents = sorted(doc.ents, key=lambda e: e.start_char, reverse=True)
-        for ent in sorted_ents:
-            if ent.label_ in PHI_LABELS:
-                entities_found.append({
-                    "entity_type": ent.label_,
-                    "start": ent.start_char,
-                    "end": ent.end_char,
-                    "score": 1.0,
-                    "original_text": ent.text
-                })
-                anonymized_text = (
-                    anonymized_text[:ent.start_char]
-                    + f"<{ent.label_}>"
-                    + anonymized_text[ent.end_char:]
-                )
-
-        entities_found.reverse()
-        return {
-            "anonymized_text": anonymized_text,
-            "entities_found": entities_found,
-            "entity_count": len(entities_found),
-            "method": "spacy"
-        }
-
-    raise HTTPException(
-        status_code=503,
-        detail="No anonymization engine available. Install Presidio or spaCy."
-    )
+    return {
+        "anonymized_text": result["anonymized_text"],
+        "entities_found": [
+            {"entity_type": entity_type, "count": count}
+            for entity_type, count in sorted(result["detected_entities"].items())
+        ],
+        "entity_count": result["entity_count"],
+        "method": "typed_phi_pipeline",
+        "privacy_policy": "safe_harbor_v1",
+    }
 
 
 @app.post("/anonymize_text")
@@ -616,7 +562,6 @@ async def anonymize_pdf(file: UploadFile = File(...)):
                     total_entities += page_anonymized["entity_count"]
                     pages_result.append({
                         "page_number": page_num + 1,
-                        "original_text": page_text,
                         "anonymized_text": page_anonymized["anonymized_text"],
                         "entities_found": page_anonymized["entities_found"],
                         "entity_count": page_anonymized["entity_count"]
@@ -624,7 +569,6 @@ async def anonymize_pdf(file: UploadFile = File(...)):
                 else:
                     pages_result.append({
                         "page_number": page_num + 1,
-                        "original_text": "",
                         "anonymized_text": "",
                         "entities_found": [],
                         "entity_count": 0
@@ -695,47 +639,21 @@ async def anonymize_dicom(
     file: UploadFile = File(...),
     profile: str = Form("strict"),
 ):
-    """
-    Anonymize DICOM metadata using the selected privacy profile and return a downloadable DICOM file.
+    """Block downloads until the unified DICOM sanitizer validates all layers."""
+    safe_name = (file.filename or "").strip().lower()
+    if not safe_name.endswith((".dcm", ".dicom")):
+        raise HTTPException(status_code=400, detail="File must be a DICOM document")
 
-    The response is a valid .dcm attachment so it can be saved and opened
-    in a DICOM viewer. Raw PHI values are never returned in the response.
-    """
     try:
-        contents = await file.read()
-        result = anonymize_dicom_file_bytes(contents, profile=profile)
-    except DicomAnonymizationError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail="Failed to anonymize DICOM") from exc
+        resolved_policy = resolve_privacy_policy(profile)
+    except PrivacyPolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    safe_name = (file.filename or "dicom.dcm").strip().replace("\\", "/").rsplit("/", 1)[-1]
-    if not safe_name:
-        safe_name = "dicom.dcm"
-    stem = safe_name.rsplit(".", 1)[0] if "." in safe_name else safe_name
-    download_name = f"anonymized_{stem}.dcm"
-    metadata_summary = result["metadata_summary"]
-
-    audit_logger.log_operation(
-        operation="ANONYMIZE",
-        details=(
-            f"dicom: {safe_name}, fields_scrubbed: "
-            f"{metadata_summary['fields_scrubbed']}, "
-            f"private_tags_removed: {metadata_summary['private_tags_removed']}"
-        ),
-    )
-
-    return StreamingResponse(
-        io.BytesIO(result["anonymized_dicom_bytes"]),
-        media_type="application/dicom",
-        headers={
-            "Content-Disposition": f'attachment; filename="{download_name}"',
-            "X-BioBlock-Anonymization-Status": result["anonymization_status"],
-            "X-BioBlock-Fields-Scrubbed": str(metadata_summary["fields_scrubbed"]),
-            "X-BioBlock-Private-Tags-Removed": str(metadata_summary["private_tags_removed"]),
-            "X-BioBlock-Pixel-Data-Preserved": str(metadata_summary["pixel_data_preserved"]).lower(),
-        },
-    )
+    if resolved_policy.automatic_release_allowed:
+        decision = manual_review_decision("dicom_pixel_validation_incomplete")
+    else:
+        decision = expert_determination_decision()
+    raise HTTPException(status_code=409, detail=decision.to_public_dict())
 
 def _parse_optional_csv_columns(columns: Optional[str]) -> Optional[List[str]]:
     if columns is None:

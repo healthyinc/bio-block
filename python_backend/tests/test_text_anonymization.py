@@ -139,7 +139,10 @@ def test_missing_salt_is_rejected(monkeypatch):
     monkeypatch.setattr(text_anonymization, "_read_local_env_salt", lambda: None)
 
     with pytest.raises(TextAnonymizationError) as exc:
-        anonymize_clinical_text("Patient has MRN: 123456.")
+        anonymize_clinical_text(
+            "Patient has MRN: 123456.",
+            profile="research",
+        )
 
     assert exc.value.status_code == 500
     assert text_anonymization.STUDY_SALT_ENV_VAR in exc.value.detail

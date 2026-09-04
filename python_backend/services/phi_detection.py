@@ -1,6 +1,9 @@
 import re
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Pattern, Protocol, Sequence
+from typing import Iterable, List, Pattern, Sequence
+
+from services.privacy_contracts import PhiDetector as SharedPhiDetector
+from services.privacy_contracts import PhiEntity
 
 SOURCE_NER = "ner"
 SOURCE_STRUCTURED_PATTERN = "structured_pattern"
@@ -8,21 +11,8 @@ SOURCE_CONTEXT_RULE = "context_rule"
 SOURCE_STRICT_PROPER_NOUN = "strict_proper_noun"
 
 
-@dataclass(frozen=True)
-class DetectedEntity:
-    """A PHI span whose offsets refer to the original full text."""
-
-    entity_type: str
-    start: int
-    end: int
-    source: str
-    score: Optional[float] = None
-    original_label: Optional[str] = None
-
-
-class PhiDetector(Protocol):
-    def detect(self, text: str) -> List[DetectedEntity]:
-        """Return detected PHI without retaining or returning matched values."""
+DetectedEntity = PhiEntity
+PhiDetector = SharedPhiDetector
 
 
 @dataclass(frozen=True)

@@ -151,10 +151,11 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(body["handler"], handler)
         self.assertEqual(body["routing_status"], "handler_selected")
         self.assertEqual(body["anonymization_status"], "placeholder")
-        self.assertEqual(body["downstream"]["ipfs_chunking"], "pending")
-        self.assertEqual(body["downstream"]["cid_encryption"], "pending")
-        self.assertEqual(body["downstream"]["metadata_indexing"], "pending")
-        self.assertEqual(body["downstream"]["blockchain_transaction"], "pending")
+        self.assertEqual(body["downstream"]["ipfs_chunking"], "blocked")
+        self.assertEqual(body["downstream"]["cid_encryption"], "blocked")
+        self.assertEqual(body["downstream"]["metadata_indexing"], "blocked")
+        self.assertEqual(body["downstream"]["blockchain_transaction"], "blocked")
+        self.assertFalse(body["release_decision"]["releasable"])
 
     def assert_completed_metadata_route(self, response, modality, handler):
         self.assertEqual(response.status_code, 200)
@@ -165,10 +166,11 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(body["routing_status"], "handler_selected")
         self.assertEqual(body["anonymization_status"], "completed")
         self.assertIn("metadata_summary", body)
-        self.assertEqual(body["downstream"]["ipfs_chunking"], "pending")
-        self.assertEqual(body["downstream"]["cid_encryption"], "pending")
-        self.assertEqual(body["downstream"]["metadata_indexing"], "pending")
-        self.assertEqual(body["downstream"]["blockchain_transaction"], "pending")
+        self.assertEqual(body["downstream"]["ipfs_chunking"], "blocked")
+        self.assertEqual(body["downstream"]["cid_encryption"], "blocked")
+        self.assertEqual(body["downstream"]["metadata_indexing"], "blocked")
+        self.assertEqual(body["downstream"]["blockchain_transaction"], "blocked")
+        self.assertFalse(body["release_decision"]["releasable"])
 
     def test_csv_upload_returns_completed_safe_tabular_summary(self):
         csv_content = (
@@ -214,10 +216,11 @@ class TestIngestionRouting(unittest.TestCase):
             summary["safe_harbor_report"]["unresolved_identifier_categories"],
             [],
         )
-        self.assertEqual(body["downstream"]["ipfs_chunking"], "pending")
-        self.assertEqual(body["downstream"]["cid_encryption"], "pending")
-        self.assertEqual(body["downstream"]["metadata_indexing"], "pending")
-        self.assertEqual(body["downstream"]["blockchain_transaction"], "pending")
+        self.assertEqual(body["downstream"]["ipfs_chunking"], "blocked")
+        self.assertEqual(body["downstream"]["cid_encryption"], "blocked")
+        self.assertEqual(body["downstream"]["metadata_indexing"], "blocked")
+        self.assertEqual(body["downstream"]["blockchain_transaction"], "blocked")
+        self.assertFalse(body["release_decision"]["releasable"])
         for raw_value in (
             "Alice Adams",
             "alice@example.com",
@@ -583,6 +586,41 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(body["anonymization_status"], "completed")
         self.assertEqual(body["detected_entities"], {"PERSON": 1})
         self.assertEqual(body["detection_sources"], {"strict_proper_noun": 1})
+
+    def test_research_text_upload_requires_expert_determination_without_content(self):
+        response = upload_file(
+            "synthetic-note.txt",
+            b"Patient Synthetic Person has MRN-458921.",
+            "text/plain",
+            "research",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(
+            body["anonymization_status"],
+            "expert_determination_required",
+        )
+        self.assertFalse(body["release_decision"]["releasable"])
+        self.assertNotIn("anonymized_text", body)
+        self.assertNotIn("Synthetic Person", response.text)
+        self.assertNotIn("458921", response.text)
+        self.assertTrue(all(value == "blocked" for value in body["downstream"].values()))
+
+    def test_safe_harbor_v1_profile_is_accepted_as_canonical_policy(self):
+        response = upload_file(
+            "synthetic-note.txt",
+            b"Patient Synthetic Person was admitted.",
+            "text/plain",
+            "safe_harbor_v1",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["privacy_profile"], "safe_harbor_v1")
+        self.assertEqual(body["privacy_policy"], "safe_harbor_v1")
+        self.assertTrue(body["release_decision"]["releasable"])
+        self.assertNotIn("Synthetic Person", response.text)
 
 
 if __name__ == "__main__":
