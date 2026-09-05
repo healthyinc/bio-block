@@ -133,6 +133,20 @@ def _imaging_reason_codes(
     return tuple(sorted(set(reasons)))
 
 
+def release_decision_for(
+    modality: str,
+    handler_result: Dict[str, Any],
+    safe_name: str,
+):
+    """The single release authority for every modality and every route.
+
+    Both the ingest route and the direct download routes call this. Routing a
+    second endpoint through its own copy of the policy is how one route ends up
+    releasing what the other blocks, so there is deliberately only one.
+    """
+    return _release_decision_for(modality, handler_result, safe_name)
+
+
 def _release_decision_for(
     modality: str,
     handler_result: Dict[str, Any],

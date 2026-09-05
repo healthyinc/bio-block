@@ -4,10 +4,25 @@ Model artifacts are provisioned separately and are never committed. Runtime
 loading is offline-only (`local_files_only=True`), lazy, and bound to the exact
 revision and weight SHA-256 in `python_backend/config/model_manifest.json`.
 
-| Adapter | Repository | Revision | Weight SHA-256 | Declared license |
+| Role | Repository | Revision | Pinned file SHA-256 | Declared license |
 |---|---|---|---|---|
-| Clinical text | `StanfordAIMI/stanford-deidentifier-base` | `661b9c1c717d3165512d440abc3700c386aefab6` | `fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716` | MIT |
-| Open-ended PII | `urchade/gliner_multi_pii-v1` | `1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d` | `3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d` | Apache-2.0 |
+| Clinical text detector | `StanfordAIMI/stanford-deidentifier-base` | `661b9c1c717d3165512d440abc3700c386aefab6` | `fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716` | MIT |
+| Open-ended PII detector | `urchade/gliner_multi_pii-v1` | `1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d` | `3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d` | Apache-2.0 |
+| GLiNER tokenizer backbone | `microsoft/mdeberta-v3-base` | `a0484667b22365f84929a935b5e50a51f71f159d` | `13c8d666d62a7bc4ac8f040aab68e942c861f93303156cc28f5c7e885d86d6e3` (`spm.model`) | MIT |
+
+`config/model_files.lock.json` extends this to a SHA-256 for **every** file in
+each snapshot, so drift in a file the manifest does not pin is still
+detectable. Setup is documented in [MODEL_SETUP.md](MODEL_SETUP.md).
+
+### The tokenizer backbone is a real supply-chain input
+
+GLiNER's snapshot ships only its own weights and config. At construction it
+resolves a tokenizer **by repository name** from `config.model_name`. Until
+Phase 9 that repository was neither pinned nor verified, and the consequence
+was concrete: GLiNER could not load offline at all. It is now a manifest entry
+with its own revision and checksum, restricted by `allow_patterns` to the three
+tokenizer files so its ~1 GB of encoder weights are never fetched.
+`load_gliner_model` verifies it before building the model.
 
 The license entries record upstream model-card declarations and are not legal
 advice. Optional adapter dependencies are pinned in `requirements-models.txt`.
@@ -76,19 +91,35 @@ candidate would be a fail-open path.
 | Variable | Default | Meaning |
 |---|---|---|
 | `PHI_MODEL_MODE` | `offline` | `offline` loads the pinned local models; `legacy_test` runs the rule-based and spaCy detectors only. Any other value fails closed. |
-| `PHI_CANDIDATE_THRESHOLD` | `0.0` | Minimum score for a candidate to be considered at all |
-| `PHI_REDACTION_THRESHOLD` | `0.0` | Confidence at which a candidate is considered confident. It never removes a candidate |
+| `PHI_CANDIDATE_THRESHOLD` | *(locked file)* | Overrides the calibrated threshold for both models. Set only to tighten or loosen one deployment |
+| `PHI_REDACTION_THRESHOLD` | *(locked file)* | As above |
 | `PHI_TEXT_CHUNK_SIZE` | `2000` | Window size in characters |
 | `PHI_TEXT_CHUNK_OVERLAP` | `200` | Window overlap in characters; must be ≥ 1 and < `chunk_size` |
 | `PHI_MODEL_BATCH_SIZE` | `8` | Windows submitted per batch |
 | `PHI_MODEL_TIMEOUT_SECONDS` | `120` | Wall-clock budget for one `detect()` call |
-| `PHI_THRESHOLDS_CALIBRATED` | `0` | Set to `1` only after Phase 8 corpus calibration |
+| `PHI_THRESHOLDS_CALIBRATED` | `0` | Legacy flag. `calibrated` is now derived from whether the locked file supplied the value |
 
-Candidate and redaction thresholds are configurable. Their conservative
-defaults are zero while uncalibrated, causing every returned model candidate to
-be redacted. No configured value is described as validated until Phase 8 corpus
-calibration is complete. Zero residual synthetic canaries remains a test
-acceptance condition, not proof of zero PHI leakage.
+## Calibrated thresholds
+
+Thresholds are no longer zero. `config/detection_thresholds.json` holds the
+locked, calibrated values:
+
+| Detector | Candidate threshold |
+|---|---|
+| `stanford_deidentifier` | **0.05** |
+| `gliner_multi_pii` | **0.10** |
+
+They were selected **jointly against the combined chain**, on the calibration
+partition only, and the held-out partition was run once afterwards. Precedence
+at load time is: environment variable, then the locked file, then the
+conservative zero default. A missing or unreadable calibration therefore
+over-redacts rather than under-redacts.
+
+Full method, per-category results and limitations:
+[reports/REAL_MODEL_EVALUATION.md](reports/REAL_MODEL_EVALUATION.md).
+
+Zero residual synthetic canaries remains a test acceptance condition, not proof
+of zero PHI leakage.
 
 ## Running real-model checks
 

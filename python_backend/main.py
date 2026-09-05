@@ -30,10 +30,12 @@ from eth_account import Account
 from services.audit_logger import AuditLogger
 from services.ingestion import (
     HEADER_READ_LIMIT,
+    TABULAR_SUMMARY_KEYS,
     TEXT_READ_LIMIT_BYTES,
     IngestionError,
     _safe_filename,
     detect_modality,
+    release_decision_for,
     route_for_ingestion,
 )
 from services.document_sanitization import (
@@ -728,11 +730,17 @@ async def anonymize_csv_file(
         safe_name = "dataset.csv"
     stem = safe_name.rsplit(".", 1)[0] if "." in safe_name else safe_name
     download_name = "anonymized_dataset.csv"
-    anonymized_csv = result.pop("_internal_anonymized_csv")
+    # Serialized so validation runs against the bytes a download would produce.
+    # Kept only for the guarded release branch below, which the current policy
+    # never reaches; it is never written into a blocked response.
+    anonymized_csv = result.pop("_internal_anonymized_csv", "")
 
-    if result["anonymization_status"] == "failed_privacy_validation":
-        # Privacy validation or serialized-output validation failed. These rows
-        # are not releasable, so none of them leave here.
+    # One release authority, shared with /api/v1/ingest. A second endpoint with
+    # its own copy of the policy is how one route releases what the other
+    # blocks, so this calls the same function rather than deciding for itself.
+    release_decision = release_decision_for("csv", result, safe_name)
+
+    if not release_decision.releasable:
         audit_logger.log_operation(
             operation="ANONYMIZE",
             details=(
@@ -747,34 +755,25 @@ async def anonymize_csv_file(
                 "anonymization_status": result["anonymization_status"],
                 "privacy_profile": resolved_policy.requested_profile,
                 "privacy_policy": resolved_policy.policy.value,
-                "release_decision": manual_review_decision(
-                    "privacy_requirements_not_met",
-                    *result.get("validation_failures", []),
-                ).to_public_dict(),
+                "release_decision": release_decision.to_public_dict(),
                 "serialized_output_validation": result.get(
                     "serialized_output_validation"
                 ),
                 "validation_failures": result.get("validation_failures", []),
                 "k_anonymity_satisfied": result["k_anonymity_satisfied"],
                 "l_diversity_satisfied": result["l_diversity_satisfied"],
+                "tabular_summary": {
+                    key: result[key]
+                    for key in TABULAR_SUMMARY_KEYS
+                    if key in result
+                },
                 "warnings": result["warnings"],
-                "message": "CSV did not satisfy privacy requirements; no rows released.",
+                "message": (
+                    "CSV analysis completed. Rows are not automatically "
+                    "releasable; this decision matches /api/v1/ingest."
+                ),
             },
         )
-
-    release_decision = issue_release(
-        SanitizedArtifact(
-            content=anonymized_csv.encode("utf-8"),
-            media_type="text/csv; charset=utf-8",
-            filename=download_name,
-            validators=(
-                "safe_harbor_column_removal",
-                "k_anonymity_l_diversity",
-                "serialized_output_validation",
-            ),
-        ),
-        "safe_harbor_technical_checks_passed",
-    )
 
     audit_logger.log_operation(
         operation="ANONYMIZE",

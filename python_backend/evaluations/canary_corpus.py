@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -184,7 +184,6 @@ def _build_workbook() -> bytes:
 
 
 def _build_dicom() -> bytes:
-    import pydicom
     from pydicom.dataset import FileDataset, FileMetaDataset
     from pydicom.uid import ExplicitVRLittleEndian, SecondaryCaptureImageStorage
 

@@ -1,0 +1,34 @@
+{
+  "_comment": "Calibrated detection thresholds, locked. Selected on the calibration partition only; the held-out test partition was run once afterwards and did not influence these values. Changing a threshold requires a new corpus version and a fresh held-out partition.",
+  "calibrated_on": "calibration",
+  "calibration_metrics": {
+    "composite_cost": 52.0,
+    "document_leakage_rate": 0.0,
+    "f1": 0.6941,
+    "false_negatives": 0,
+    "false_positives": 52,
+    "missed_categories": [],
+    "precision": 0.5315,
+    "span_recall": 1.0,
+    "typed_recall": 0.8475,
+    "useful_text_preservation": 0.2143
+  },
+  "corpus_version": "canary-v2.0",
+  "detectors": {
+    "gliner_multi_pii": {
+      "candidate_threshold": 0.1,
+      "redaction_threshold": 0.1
+    },
+    "stanford_deidentifier": {
+      "candidate_threshold": 0.05,
+      "redaction_threshold": 0.05
+    }
+  },
+  "model_revisions": {
+    "gliner_multi_pii": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+    "mdeberta_backbone": "a0484667b22365f84929a935b5e50a51f71f159d",
+    "stanford_deidentifier": "661b9c1c717d3165512d440abc3700c386aefab6"
+  },
+  "selection_rule": "1. combined span recall must not fall below the all-zero baseline - a false negative is a disclosure and is never traded away. 2. zero is excluded for either model: it is not a calibrated value, it is the absence of one. 3. among the rest, maximise typed recall, which improves how a finding is labelled without trading away any span. 4. ties go to the LOWEST thresholds, keeping the widest safety margin on unseen data, because precision gained by raising a threshold is bought with candidates that would otherwise have been redacted.",
+  "version": "phase9"
+}

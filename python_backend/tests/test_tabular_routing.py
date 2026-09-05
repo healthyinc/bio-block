@@ -214,18 +214,19 @@ def test_research_profile_never_downloads_rows(api_client):
         assert identifier not in response.text
 
 
-def test_safe_harbor_profile_still_downloads_with_a_release_decision(api_client):
+def test_safe_harbor_profile_reports_analysis_but_releases_no_rows(api_client):
     response = api_client.post(
         "/anonymize_csv",
         files={"file": ("sample.csv", BytesIO(CSV_CONTENT), "text/csv")},
         data={"k": "2", "l": "2", "profile": "safe_harbor_v1"},
     )
 
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/csv")
-    assert response.headers["X-BioBlock-Serialized-Output-Validation"] == "passed"
-    assert response.headers["X-BioBlock-Privacy-Policy"] == "safe_harbor_v1"
-    assert len(response.headers["X-BioBlock-Artifact-Sha256"]) == 64
+    assert response.status_code == 422
+    assert response.headers["content-type"].startswith("application/json")
+    body = response.json()
+    assert body["release_decision"]["releasable"] is False
+    assert body["release_decision"]["artifact_sha256"] is None
+    assert body["serialized_output_validation"] == "passed"
     for identifier in (SYNTHETIC_NAME, SYNTHETIC_EMAIL, SYNTHETIC_MRN):
         assert identifier not in response.text
 
@@ -237,8 +238,97 @@ def test_default_profile_is_still_accepted(api_client):
         data={"k": "2", "l": "2"},
     )
 
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/csv")
+    assert response.status_code == 422
+    assert response.json()["anonymization_status"] == "completed_with_warnings"
+
+
+# ---------------------------------------------------------------------------
+# Route parity: neither CSV route may release what the other blocks
+# ---------------------------------------------------------------------------
+
+
+def test_both_csv_routes_share_one_release_decision_function():
+    # Not "two functions that agree today" — literally the same callable, so
+    # the two routes cannot drift apart in a later change.
+    import main
+    from services import ingestion
+
+    assert main.release_decision_for is ingestion.release_decision_for
+    assert (
+        ingestion.release_decision_for.__wrapped__ is ingestion._release_decision_for
+        if hasattr(ingestion.release_decision_for, "__wrapped__")
+        else True
+    )
+
+
+def test_download_route_cannot_release_what_the_ingest_route_blocks(api_client):
+    """The bypass this guards against: one route handing out rows the other holds."""
+    ingest = route_for_ingestion(
+        filename="sample.csv",
+        content_type="text/csv",
+        header=CSV_CONTENT[:4096],
+        profile="strict",
+        file_content=CSV_CONTENT,
+    )
+    download = api_client.post(
+        "/anonymize_csv",
+        files={"file": ("sample.csv", BytesIO(CSV_CONTENT), "text/csv")},
+        data={"k": "5", "l": "2", "profile": "strict"},
+    )
+
+    ingest_decision = ingest["release_decision"]
+    download_decision = download.json()["release_decision"]
+
+    # Same disposition, same policy, same reason codes, neither releasable.
+    assert ingest_decision["releasable"] is False
+    assert download_decision["releasable"] is False
+    assert ingest_decision["disposition"] == download_decision["disposition"]
+    assert ingest_decision["policy"] == download_decision["policy"]
+    assert ingest_decision["reason_codes"] == download_decision["reason_codes"]
+    assert ingest_decision["artifact_sha256"] is None
+    assert download_decision["artifact_sha256"] is None
+
+
+def test_neither_csv_route_emits_row_content(api_client):
+    ingest = route_for_ingestion(
+        filename="sample.csv",
+        content_type="text/csv",
+        header=CSV_CONTENT[:4096],
+        profile="strict",
+        file_content=CSV_CONTENT,
+    )
+    download = api_client.post(
+        "/anonymize_csv",
+        files={"file": ("sample.csv", BytesIO(CSV_CONTENT), "text/csv")},
+        data={"k": "2", "l": "2"},
+    )
+
+    for surface in (json.dumps(ingest), download.text):
+        for identifier in (SYNTHETIC_NAME, SYNTHETIC_EMAIL, SYNTHETIC_MRN):
+            assert identifier not in surface
+        # Generalized quasi-identifier rows are row content too.
+        assert "31-32" not in surface
+        assert "_internal_anonymized_csv" not in surface
+
+
+def test_research_profile_blocks_identically_on_both_routes(api_client):
+    ingest = route_for_ingestion(
+        filename="sample.csv",
+        content_type="text/csv",
+        header=CSV_CONTENT[:4096],
+        profile="research",
+        file_content=CSV_CONTENT,
+    )
+    download = api_client.post(
+        "/anonymize_csv",
+        files={"file": ("sample.csv", BytesIO(CSV_CONTENT), "text/csv")},
+        data={"k": "2", "l": "2", "profile": "research"},
+    )
+
+    assert ingest["anonymization_status"] == "expert_determination_required"
+    assert download.json()["anonymization_status"] == "expert_determination_required"
+    assert ingest["release_decision"]["releasable"] is False
+    assert download.json()["release_decision"]["releasable"] is False
 
 
 def test_unknown_profile_is_rejected(api_client):

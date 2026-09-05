@@ -176,3 +176,40 @@ These are deliberate and blocked, not overlooked:
    model candidate is redacted. No configured value is described as validated.
 6. **NIfTI and WSI previews are blocked entirely**, which is a functional
    regression for any client that previewed them.
+
+## Real-model evaluation (Phase 9)
+
+Everything above the mocked-test line is measured with mocks. Phase 9 added a
+separate measurement against the **real pinned weights**, loaded offline from a
+checksum-verified local cache. The two are never mixed:
+
+| | Mocked suite | Real-model evaluation |
+|---|---|---|
+| Command | `pytest -q` | see [MODEL_SETUP.md](MODEL_SETUP.md) |
+| Loads real weights | never | always |
+| Network | never | only to provision, never at inference |
+| Count | 507 passed, 14 skipped | 13 opt-in tests + the evaluation runs |
+| Results | this document | [reports/REAL_MODEL_EVALUATION.md](reports/REAL_MODEL_EVALUATION.md) |
+
+Headline held-out result, combined chain at the locked thresholds:
+**span recall 1.0000, zero false negatives, zero document leakage, no missed
+category, and zero gold values surviving redaction.** Precision is 0.5315 and
+useful-text preservation 0.214 — the chain over-redacts, and that cost is
+attributable to spaCy's high-recall proper-noun rule rather than to either
+pinned model.
+
+Thresholds are now calibrated rather than zero: Stanford `0.05`,
+GLiNER `0.10`, locked in `config/detection_thresholds.json`.
+
+### Additions to the known gaps
+
+7. **The residual validator blocks most documents when the real models are
+   enabled.** 9 of 10 held-out documents carried residual findings while zero
+   gold values actually survived. Fail-closed and safe, but it turns automatic
+   text release into manual review for almost everything in `offline` mode.
+8. **`AGE_OVER_89` has no dedicated detector.** No individual detector finds
+   it; the chain recovers it only incidentally. Safe Harbor requires ages above
+   89 to be aggregated, so treat any such age as manual review.
+9. **The structured phone pattern only matches 10-digit NANP numbers.** Local
+   and international formats are not matched by the deterministic rules at all
+   and depend on the models.

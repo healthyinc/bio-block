@@ -1,0 +1,5707 @@
+{
+  "calibration": {
+    "combined": {
+      "corpus_version": "canary-v2.0",
+      "detector": "combined",
+      "environment": {
+        "cuda_available": false,
+        "device": "cpu",
+        "gliner": "0.2.22",
+        "huggingface_hub": "0.24.7",
+        "logical_cpus": 12,
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+        "python": "3.11.9",
+        "spacy": "3.8.14",
+        "torch": "2.4.1+cpu",
+        "transformers": "4.44.2"
+      },
+      "failures": [],
+      "metrics": {
+        "by_category": {
+          "ACCESSION": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "ACCOUNT_NUMBER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "ADDRESS": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.6667
+          },
+          "AGE_OVER_89": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "BIOMETRIC_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "CERTIFICATE_NUMBER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "DATE": {
+            "gold": 4,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.75
+          },
+          "DEVICE_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "EMAIL": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "EMPLOYER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "FAX": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "GEOGRAPHY": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "HEALTH_PLAN": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "HOSPITAL": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.6667
+          },
+          "IP_ADDRESS": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "LICENSE_NUMBER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "MRN": {
+            "gold": 4,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.75
+          },
+          "ORGANIZATION": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PATIENT_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON": {
+            "gold": 10,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.7
+          },
+          "PERSON_CLINICIAN": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON_RELATIVE": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PHONE": {
+            "gold": 4,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.75
+          },
+          "POSTAL_CODE": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "SSN": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "UNUSUAL_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "URL": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "USERNAME": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "VEHICLE_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          }
+        },
+        "composite_cost": 410.0,
+        "detections": 469,
+        "document_leakage_rate": 0.0,
+        "documents": 10,
+        "f1": 0.2235,
+        "false_negatives": 0,
+        "false_positives": 410,
+        "gold_spans": 59,
+        "leaking_documents": [],
+        "negative_terms": 14,
+        "negative_terms_redacted": 14,
+        "precision": 0.1258,
+        "span_recall": 1.0,
+        "true_positives": 59,
+        "typed_recall": 0.8136,
+        "useful_text_preservation": 0.0
+      },
+      "missed_categories": [],
+      "models": {
+        "gliner_multi_pii": {
+          "license": "Apache-2.0",
+          "repo_id": "urchade/gliner_multi_pii-v1",
+          "revision": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+          "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+        },
+        "mdeberta_backbone": {
+          "license": "MIT",
+          "repo_id": "microsoft/mdeberta-v3-base",
+          "revision": "a0484667b22365f84929a935b5e50a51f71f159d",
+          "weight_sha256": "13c8d666d62a7bc4ac8f040aab68e942c861f93303156cc28f5c7e885d86d6e3"
+        },
+        "stanford_deidentifier": {
+          "license": "MIT",
+          "repo_id": "StanfordAIMI/stanford-deidentifier-base",
+          "revision": "661b9c1c717d3165512d440abc3700c386aefab6",
+          "weight_sha256": "fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716"
+        }
+      },
+      "partition": "calibration",
+      "performance": {
+        "documents": 10,
+        "latency_ms_max": 13036.86,
+        "latency_ms_mean": 2795.16,
+        "latency_ms_p50": 1611.95,
+        "latency_ms_p90": 13036.86,
+        "latency_ms_p99": 13036.86,
+        "model_load_seconds": 50.55,
+        "peak_rss_mib": 2228.1
+      },
+      "threshold": 0.0,
+      "unsupported_documents": [],
+      "wall_seconds": 78.63
+    },
+    "residual": {
+      "corpus_version": "canary-v2.0",
+      "detector": "residual_validator",
+      "environment": {
+        "cuda_available": false,
+        "device": "cpu",
+        "gliner": "0.2.22",
+        "huggingface_hub": "0.24.7",
+        "logical_cpus": 12,
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+        "python": "3.11.9",
+        "spacy": "3.8.14",
+        "torch": "2.4.1+cpu",
+        "transformers": "4.44.2"
+      },
+      "models": {
+        "gliner_multi_pii": {
+          "license": "Apache-2.0",
+          "repo_id": "urchade/gliner_multi_pii-v1",
+          "revision": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+          "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+        },
+        "mdeberta_backbone": {
+          "license": "MIT",
+          "repo_id": "microsoft/mdeberta-v3-base",
+          "revision": "a0484667b22365f84929a935b5e50a51f71f159d",
+          "weight_sha256": "13c8d666d62a7bc4ac8f040aab68e942c861f93303156cc28f5c7e885d86d6e3"
+        },
+        "stanford_deidentifier": {
+          "license": "MIT",
+          "repo_id": "StanfordAIMI/stanford-deidentifier-base",
+          "revision": "661b9c1c717d3165512d440abc3700c386aefab6",
+          "weight_sha256": "fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716"
+        }
+      },
+      "partition": "calibration",
+      "result": {
+        "documents": 10,
+        "documents_with_residual_findings": [
+          "calibration_misspelling_abbrev",
+          "calibration_names",
+          "calibration_negative_controls"
+        ],
+        "failures": [],
+        "latencies_ms": [
+          37935.64,
+          1152.99,
+          1145.75,
+          978.35,
+          1013.25,
+          1193.74,
+          1646.82,
+          976.74,
+          1938.73,
+          12562.53
+        ],
+        "residual_categories": {
+          "PERSON": 2,
+          "US_SSN": 1
+        },
+        "surviving_gold_count": 0,
+        "surviving_gold_values": []
+      },
+      "threshold": null,
+      "wall_seconds": 60.73
+    },
+    "rules": {
+      "corpus_version": "canary-v2.0",
+      "detector": "rules",
+      "environment": {
+        "cuda_available": false,
+        "device": "cpu",
+        "gliner": "0.2.22",
+        "huggingface_hub": "0.24.7",
+        "logical_cpus": 12,
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+        "python": "3.11.9",
+        "spacy": "3.8.14",
+        "torch": "2.4.1+cpu",
+        "transformers": "4.44.2"
+      },
+      "failures": [],
+      "metrics": {
+        "by_category": {
+          "ACCESSION": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "ACCOUNT_NUMBER": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "account": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "ADDRESS": {
+            "gold": 3,
+            "missed": 3,
+            "missed_tags": {
+              "abbreviation_context": 1,
+              "address": 1,
+              "multiline": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "AGE_OVER_89": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "age_over_89": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "BIOMETRIC_ID": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "biometric": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "CERTIFICATE_NUMBER": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "certificate": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "DATE": {
+            "gold": 4,
+            "missed": 1,
+            "missed_tags": {
+              "date_written": 1
+            },
+            "span_recall": 0.75,
+            "typed_recall": 0.75
+          },
+          "DEVICE_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "EMAIL": {
+            "gold": 3,
+            "missed": 1,
+            "missed_tags": {
+              "unicode": 1
+            },
+            "span_recall": 0.6667,
+            "typed_recall": 0.6667
+          },
+          "EMPLOYER": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "employer": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "FAX": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "fax": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "GEOGRAPHY": {
+            "gold": 2,
+            "missed": 2,
+            "missed_tags": {
+              "geography": 1,
+              "multiline": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "HEALTH_PLAN": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "HOSPITAL": {
+            "gold": 3,
+            "missed": 3,
+            "missed_tags": {
+              "abbreviation_context": 1,
+              "facility": 2
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "IP_ADDRESS": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "LICENSE_NUMBER": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "license": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "MRN": {
+            "gold": 4,
+            "missed": 1,
+            "missed_tags": {
+              "misspelt_label": 1
+            },
+            "span_recall": 0.75,
+            "typed_recall": 0.5
+          },
+          "ORGANIZATION": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "untagged": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "PATIENT_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON": {
+            "gold": 10,
+            "missed": 10,
+            "missed_tags": {
+              "abbreviation_context": 1,
+              "chunk_boundary": 1,
+              "indian_name": 1,
+              "international_name": 1,
+              "lowercase": 1,
+              "misspelt_value": 1,
+              "mixed_case": 2,
+              "multiline": 1,
+              "transliteration": 1,
+              "unicode": 2,
+              "uppercase": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "PERSON_CLINICIAN": {
+            "gold": 2,
+            "missed": 2,
+            "missed_tags": {
+              "clinician": 2
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "PERSON_RELATIVE": {
+            "gold": 2,
+            "missed": 2,
+            "missed_tags": {
+              "relative": 2
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "PHONE": {
+            "gold": 4,
+            "missed": 4,
+            "missed_tags": {
+              "abbreviation_context": 1,
+              "multiline": 1,
+              "phone": 1,
+              "phone_international": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "POSTAL_CODE": {
+            "gold": 3,
+            "missed": 3,
+            "missed_tags": {
+              "multiline": 1,
+              "postal_code": 2
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "SSN": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "UNUSUAL_ID": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "unusual_format": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "URL": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "USERNAME": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "username": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "VEHICLE_ID": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "vehicle": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          }
+        },
+        "composite_cost": 430.0,
+        "detections": 15,
+        "document_leakage_rate": 1.0,
+        "documents": 10,
+        "f1": 0.4267,
+        "false_negatives": 43,
+        "false_positives": 0,
+        "gold_spans": 59,
+        "leaking_documents": [
+          "calibration_chunk_boundary",
+          "calibration_contact",
+          "calibration_dates_age",
+          "calibration_geography",
+          "calibration_identifiers",
+          "calibration_misspelling_abbrev",
+          "calibration_multiline_overlap",
+          "calibration_names",
+          "calibration_negative_controls",
+          "calibration_unicode_casing"
+        ],
+        "negative_terms": 14,
+        "negative_terms_redacted": 0,
+        "precision": 1.0,
+        "span_recall": 0.2712,
+        "true_positives": 16,
+        "typed_recall": 0.2542,
+        "useful_text_preservation": 1.0
+      },
+      "missed_categories": [
+        "ACCOUNT_NUMBER",
+        "ADDRESS",
+        "AGE_OVER_89",
+        "BIOMETRIC_ID",
+        "CERTIFICATE_NUMBER",
+        "EMPLOYER",
+        "FAX",
+        "GEOGRAPHY",
+        "HOSPITAL",
+        "LICENSE_NUMBER",
+        "ORGANIZATION",
+        "PERSON",
+        "PERSON_CLINICIAN",
+        "PERSON_RELATIVE",
+        "PHONE",
+        "POSTAL_CODE",
+        "UNUSUAL_ID",
+        "USERNAME",
+        "VEHICLE_ID"
+      ],
+      "models": {
+        "gliner_multi_pii": {
+          "license": "Apache-2.0",
+          "repo_id": "urchade/gliner_multi_pii-v1",
+          "revision": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+          "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+        },
+        "stanford_deidentifier": {
+          "license": "MIT",
+          "repo_id": "StanfordAIMI/stanford-deidentifier-base",
+          "revision": "661b9c1c717d3165512d440abc3700c386aefab6",
+          "weight_sha256": "fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716"
+        }
+      },
+      "partition": "calibration",
+      "performance": {
+        "documents": 10,
+        "latency_ms_max": 1.31,
+        "latency_ms_mean": 0.35,
+        "latency_ms_p50": 0.23,
+        "latency_ms_p90": 1.31,
+        "latency_ms_p99": 1.31,
+        "model_load_seconds": 0.0,
+        "peak_rss_mib": 0.0
+      },
+      "threshold": 0.0,
+      "unsupported_documents": [],
+      "wall_seconds": 13.57
+    },
+    "spacy": {
+      "corpus_version": "canary-v2.0",
+      "detector": "spacy",
+      "environment": {
+        "cuda_available": false,
+        "device": "cpu",
+        "gliner": "0.2.22",
+        "huggingface_hub": "0.24.7",
+        "logical_cpus": 12,
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+        "python": "3.11.9",
+        "spacy": "3.8.14",
+        "torch": "2.4.1+cpu",
+        "transformers": "4.44.2"
+      },
+      "failures": [],
+      "metrics": {
+        "by_category": {
+          "ACCESSION": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "ACCOUNT_NUMBER": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "account": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "ADDRESS": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "AGE_OVER_89": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "BIOMETRIC_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "CERTIFICATE_NUMBER": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "certificate": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "DATE": {
+            "gold": 4,
+            "missed": 1,
+            "missed_tags": {
+              "date_us": 1
+            },
+            "span_recall": 0.75,
+            "typed_recall": 0.5
+          },
+          "DEVICE_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "EMAIL": {
+            "gold": 3,
+            "missed": 3,
+            "missed_tags": {
+              "email": 1,
+              "second_window": 1,
+              "unicode": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "EMPLOYER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "FAX": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "fax": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "GEOGRAPHY": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "HEALTH_PLAN": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "HOSPITAL": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.6667
+          },
+          "IP_ADDRESS": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "ip_end_of_sentence": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "LICENSE_NUMBER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "MRN": {
+            "gold": 4,
+            "missed": 2,
+            "missed_tags": {
+              "misspelt_label": 1,
+              "nested": 1,
+              "overlapping": 1
+            },
+            "span_recall": 0.5,
+            "typed_recall": 0.0
+          },
+          "ORGANIZATION": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PATIENT_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "PERSON": {
+            "gold": 10,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.7
+          },
+          "PERSON_CLINICIAN": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON_RELATIVE": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PHONE": {
+            "gold": 4,
+            "missed": 4,
+            "missed_tags": {
+              "abbreviation_context": 1,
+              "multiline": 1,
+              "phone": 1,
+              "phone_international": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "POSTAL_CODE": {
+            "gold": 3,
+            "missed": 3,
+            "missed_tags": {
+              "multiline": 1,
+              "postal_code": 2
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "SSN": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "ssn": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "UNUSUAL_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "URL": {
+            "gold": 2,
+            "missed": 2,
+            "missed_tags": {
+              "overlapping": 1,
+              "url": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "USERNAME": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "username": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "VEHICLE_ID": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "vehicle": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          }
+        },
+        "composite_cost": 249.0,
+        "detections": 78,
+        "document_leakage_rate": 0.8,
+        "documents": 10,
+        "f1": 0.592,
+        "false_negatives": 22,
+        "false_positives": 29,
+        "gold_spans": 59,
+        "leaking_documents": [
+          "calibration_chunk_boundary",
+          "calibration_contact",
+          "calibration_dates_age",
+          "calibration_geography",
+          "calibration_identifiers",
+          "calibration_misspelling_abbrev",
+          "calibration_multiline_overlap",
+          "calibration_unicode_casing"
+        ],
+        "negative_terms": 14,
+        "negative_terms_redacted": 9,
+        "precision": 0.5606,
+        "span_recall": 0.6271,
+        "true_positives": 37,
+        "typed_recall": 0.3051,
+        "useful_text_preservation": 0.3571
+      },
+      "missed_categories": [
+        "ACCOUNT_NUMBER",
+        "CERTIFICATE_NUMBER",
+        "EMAIL",
+        "FAX",
+        "IP_ADDRESS",
+        "PHONE",
+        "POSTAL_CODE",
+        "SSN",
+        "URL",
+        "USERNAME",
+        "VEHICLE_ID"
+      ],
+      "models": {
+        "gliner_multi_pii": {
+          "license": "Apache-2.0",
+          "repo_id": "urchade/gliner_multi_pii-v1",
+          "revision": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+          "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+        },
+        "stanford_deidentifier": {
+          "license": "MIT",
+          "repo_id": "StanfordAIMI/stanford-deidentifier-base",
+          "revision": "661b9c1c717d3165512d440abc3700c386aefab6",
+          "weight_sha256": "fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716"
+        }
+      },
+      "partition": "calibration",
+      "performance": {
+        "documents": 10,
+        "latency_ms_max": 111.04,
+        "latency_ms_mean": 32.72,
+        "latency_ms_p50": 24.09,
+        "latency_ms_p90": 111.04,
+        "latency_ms_p99": 111.04,
+        "model_load_seconds": 6.68,
+        "peak_rss_mib": 0.0
+      },
+      "threshold": 0.0,
+      "unsupported_documents": [],
+      "wall_seconds": 11.0
+    }
+  },
+  "corpus_statistics": {
+    "calibration": {
+      "cat_ACCESSION": 1,
+      "cat_ACCOUNT_NUMBER": 1,
+      "cat_ADDRESS": 3,
+      "cat_AGE_OVER_89": 1,
+      "cat_BIOMETRIC_ID": 1,
+      "cat_CERTIFICATE_NUMBER": 1,
+      "cat_DATE": 4,
+      "cat_DEVICE_ID": 1,
+      "cat_EMAIL": 3,
+      "cat_EMPLOYER": 1,
+      "cat_FAX": 1,
+      "cat_GEOGRAPHY": 2,
+      "cat_HEALTH_PLAN": 1,
+      "cat_HOSPITAL": 3,
+      "cat_IP_ADDRESS": 1,
+      "cat_LICENSE_NUMBER": 1,
+      "cat_MRN": 4,
+      "cat_ORGANIZATION": 1,
+      "cat_PATIENT_ID": 1,
+      "cat_PERSON": 10,
+      "cat_PERSON_CLINICIAN": 2,
+      "cat_PERSON_RELATIVE": 2,
+      "cat_PHONE": 4,
+      "cat_POSTAL_CODE": 3,
+      "cat_SSN": 1,
+      "cat_UNUSUAL_ID": 1,
+      "cat_URL": 2,
+      "cat_USERNAME": 1,
+      "cat_VEHICLE_ID": 1,
+      "categories_covered": 29,
+      "documents": 10,
+      "gold_spans": 59,
+      "negative_terms": 14
+    },
+    "development": {
+      "cat_ACCESSION": 1,
+      "cat_ACCOUNT_NUMBER": 1,
+      "cat_ADDRESS": 3,
+      "cat_AGE_OVER_89": 1,
+      "cat_BIOMETRIC_ID": 1,
+      "cat_CERTIFICATE_NUMBER": 1,
+      "cat_DATE": 4,
+      "cat_DEVICE_ID": 1,
+      "cat_EMAIL": 3,
+      "cat_EMPLOYER": 1,
+      "cat_FAX": 1,
+      "cat_GEOGRAPHY": 2,
+      "cat_HEALTH_PLAN": 1,
+      "cat_HOSPITAL": 3,
+      "cat_IP_ADDRESS": 1,
+      "cat_LICENSE_NUMBER": 1,
+      "cat_MRN": 4,
+      "cat_ORGANIZATION": 1,
+      "cat_PATIENT_ID": 1,
+      "cat_PERSON": 10,
+      "cat_PERSON_CLINICIAN": 2,
+      "cat_PERSON_RELATIVE": 2,
+      "cat_PHONE": 4,
+      "cat_POSTAL_CODE": 3,
+      "cat_SSN": 1,
+      "cat_UNUSUAL_ID": 1,
+      "cat_URL": 2,
+      "cat_USERNAME": 1,
+      "cat_VEHICLE_ID": 1,
+      "categories_covered": 29,
+      "documents": 10,
+      "gold_spans": 59,
+      "negative_terms": 14
+    },
+    "test": {
+      "cat_ACCESSION": 1,
+      "cat_ACCOUNT_NUMBER": 1,
+      "cat_ADDRESS": 3,
+      "cat_AGE_OVER_89": 1,
+      "cat_BIOMETRIC_ID": 1,
+      "cat_CERTIFICATE_NUMBER": 1,
+      "cat_DATE": 4,
+      "cat_DEVICE_ID": 1,
+      "cat_EMAIL": 3,
+      "cat_EMPLOYER": 1,
+      "cat_FAX": 1,
+      "cat_GEOGRAPHY": 2,
+      "cat_HEALTH_PLAN": 1,
+      "cat_HOSPITAL": 3,
+      "cat_IP_ADDRESS": 1,
+      "cat_LICENSE_NUMBER": 1,
+      "cat_MRN": 4,
+      "cat_ORGANIZATION": 1,
+      "cat_PATIENT_ID": 1,
+      "cat_PERSON": 10,
+      "cat_PERSON_CLINICIAN": 2,
+      "cat_PERSON_RELATIVE": 2,
+      "cat_PHONE": 4,
+      "cat_POSTAL_CODE": 3,
+      "cat_SSN": 1,
+      "cat_UNUSUAL_ID": 1,
+      "cat_URL": 2,
+      "cat_USERNAME": 1,
+      "cat_VEHICLE_ID": 1,
+      "categories_covered": 29,
+      "documents": 10,
+      "gold_spans": 59,
+      "negative_terms": 14
+    }
+  },
+  "corpus_version": "canary-v2.0",
+  "environment": {
+    "cuda_available": false,
+    "device": "cpu",
+    "gliner": "0.2.22",
+    "huggingface_hub": "0.24.7",
+    "logical_cpus": 12,
+    "platform": "Windows-10-10.0.26200-SP0",
+    "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+    "python": "3.11.9",
+    "spacy": "3.8.14",
+    "torch": "2.4.1+cpu",
+    "transformers": "4.44.2"
+  },
+  "final_test": {
+    "combined": {
+      "corpus_version": "canary-v2.0",
+      "detector": "combined",
+      "effective_thresholds": {
+        "gliner_multi_pii": 0.1,
+        "stanford_deidentifier": 0.05
+      },
+      "environment": {
+        "cuda_available": false,
+        "device": "cpu",
+        "gliner": "0.2.22",
+        "huggingface_hub": "0.24.7",
+        "logical_cpus": 12,
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+        "python": "3.11.9",
+        "spacy": "3.8.14",
+        "torch": "2.4.1+cpu",
+        "transformers": "4.44.2"
+      },
+      "failures": [],
+      "metrics": {
+        "by_category": {
+          "ACCESSION": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "ACCOUNT_NUMBER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "ADDRESS": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "AGE_OVER_89": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "BIOMETRIC_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "CERTIFICATE_NUMBER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "DATE": {
+            "gold": 4,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "DEVICE_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "EMAIL": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "EMPLOYER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "FAX": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "GEOGRAPHY": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "HEALTH_PLAN": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "HOSPITAL": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.6667
+          },
+          "IP_ADDRESS": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "LICENSE_NUMBER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "MRN": {
+            "gold": 4,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.5
+          },
+          "ORGANIZATION": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PATIENT_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON": {
+            "gold": 10,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON_CLINICIAN": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON_RELATIVE": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PHONE": {
+            "gold": 4,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "POSTAL_CODE": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.6667
+          },
+          "SSN": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "UNUSUAL_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "URL": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "USERNAME": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "VEHICLE_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          }
+        },
+        "composite_cost": 52.0,
+        "detections": 109,
+        "document_leakage_rate": 0.0,
+        "documents": 10,
+        "f1": 0.6941,
+        "false_negatives": 0,
+        "false_positives": 52,
+        "gold_spans": 59,
+        "leaking_documents": [],
+        "negative_terms": 14,
+        "negative_terms_redacted": 11,
+        "precision": 0.5315,
+        "span_recall": 1.0,
+        "true_positives": 59,
+        "typed_recall": 0.9153,
+        "useful_text_preservation": 0.2143
+      },
+      "missed_categories": [],
+      "models": {
+        "gliner_multi_pii": {
+          "license": "Apache-2.0",
+          "repo_id": "urchade/gliner_multi_pii-v1",
+          "revision": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+          "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+        },
+        "mdeberta_backbone": {
+          "license": "MIT",
+          "repo_id": "microsoft/mdeberta-v3-base",
+          "revision": "a0484667b22365f84929a935b5e50a51f71f159d",
+          "weight_sha256": "13c8d666d62a7bc4ac8f040aab68e942c861f93303156cc28f5c7e885d86d6e3"
+        },
+        "stanford_deidentifier": {
+          "license": "MIT",
+          "repo_id": "StanfordAIMI/stanford-deidentifier-base",
+          "revision": "661b9c1c717d3165512d440abc3700c386aefab6",
+          "weight_sha256": "fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716"
+        }
+      },
+      "partition": "test",
+      "performance": {
+        "documents": 10,
+        "latency_ms_max": 6870.82,
+        "latency_ms_mean": 1699.67,
+        "latency_ms_p50": 974.65,
+        "latency_ms_p90": 6870.82,
+        "latency_ms_p99": 6870.82,
+        "model_load_seconds": 34.99,
+        "peak_rss_mib": 2341.8
+      },
+      "threshold": 0.0,
+      "unsupported_documents": [],
+      "wall_seconds": 52.08
+    },
+    "gliner": {
+      "corpus_version": "canary-v2.0",
+      "detector": "gliner",
+      "environment": {
+        "cuda_available": false,
+        "device": "cpu",
+        "gliner": "0.2.22",
+        "huggingface_hub": "0.24.7",
+        "logical_cpus": 12,
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+        "python": "3.11.9",
+        "spacy": "3.8.14",
+        "torch": "2.4.1+cpu",
+        "transformers": "4.44.2"
+      },
+      "failures": [],
+      "metrics": {
+        "by_category": {
+          "ACCESSION": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "ACCOUNT_NUMBER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "ADDRESS": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "AGE_OVER_89": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "age_over_89": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "BIOMETRIC_ID": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "biometric": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "CERTIFICATE_NUMBER": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "certificate": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "DATE": {
+            "gold": 4,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "DEVICE_ID": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "untagged": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "EMAIL": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "EMPLOYER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "FAX": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "GEOGRAPHY": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "HEALTH_PLAN": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "HOSPITAL": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "IP_ADDRESS": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "ip_end_of_sentence": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "LICENSE_NUMBER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "MRN": {
+            "gold": 4,
+            "missed": 1,
+            "missed_tags": {
+              "nested": 1,
+              "overlapping": 1
+            },
+            "span_recall": 0.75,
+            "typed_recall": 0.25
+          },
+          "ORGANIZATION": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PATIENT_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "PERSON": {
+            "gold": 10,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON_CLINICIAN": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON_RELATIVE": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PHONE": {
+            "gold": 4,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.5
+          },
+          "POSTAL_CODE": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "SSN": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "UNUSUAL_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "URL": {
+            "gold": 2,
+            "missed": 1,
+            "missed_tags": {
+              "overlapping": 1
+            },
+            "span_recall": 0.5,
+            "typed_recall": 0.0
+          },
+          "USERNAME": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "VEHICLE_ID": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "vehicle": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          }
+        },
+        "composite_cost": 112.0,
+        "detections": 80,
+        "document_leakage_rate": 0.4,
+        "documents": 10,
+        "f1": 0.7183,
+        "false_negatives": 8,
+        "false_positives": 32,
+        "gold_spans": 59,
+        "leaking_documents": [
+          "test_contact",
+          "test_dates_age",
+          "test_identifiers",
+          "test_multiline_overlap"
+        ],
+        "negative_terms": 14,
+        "negative_terms_redacted": 10,
+        "precision": 0.6145,
+        "span_recall": 0.8644,
+        "true_positives": 51,
+        "typed_recall": 0.7458,
+        "useful_text_preservation": 0.2857
+      },
+      "missed_categories": [
+        "AGE_OVER_89",
+        "BIOMETRIC_ID",
+        "CERTIFICATE_NUMBER",
+        "DEVICE_ID",
+        "IP_ADDRESS",
+        "VEHICLE_ID"
+      ],
+      "models": {
+        "gliner_multi_pii": {
+          "license": "Apache-2.0",
+          "repo_id": "urchade/gliner_multi_pii-v1",
+          "revision": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+          "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+        },
+        "mdeberta_backbone": {
+          "license": "MIT",
+          "repo_id": "microsoft/mdeberta-v3-base",
+          "revision": "a0484667b22365f84929a935b5e50a51f71f159d",
+          "weight_sha256": "13c8d666d62a7bc4ac8f040aab68e942c861f93303156cc28f5c7e885d86d6e3"
+        },
+        "stanford_deidentifier": {
+          "license": "MIT",
+          "repo_id": "StanfordAIMI/stanford-deidentifier-base",
+          "revision": "661b9c1c717d3165512d440abc3700c386aefab6",
+          "weight_sha256": "fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716"
+        }
+      },
+      "partition": "test",
+      "performance": {
+        "documents": 10,
+        "latency_ms_max": 9132.84,
+        "latency_ms_mean": 2170.61,
+        "latency_ms_p50": 1245.39,
+        "latency_ms_p90": 9132.84,
+        "latency_ms_p99": 9132.84,
+        "model_load_seconds": 39.77,
+        "peak_rss_mib": 2726.8
+      },
+      "threshold": 0.1,
+      "unsupported_documents": [],
+      "wall_seconds": 64.64
+    },
+    "residual": {
+      "corpus_version": "canary-v2.0",
+      "detector": "residual_validator",
+      "environment": {
+        "cuda_available": false,
+        "device": "cpu",
+        "gliner": "0.2.22",
+        "huggingface_hub": "0.24.7",
+        "logical_cpus": 12,
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+        "python": "3.11.9",
+        "spacy": "3.8.14",
+        "torch": "2.4.1+cpu",
+        "transformers": "4.44.2"
+      },
+      "models": {
+        "gliner_multi_pii": {
+          "license": "Apache-2.0",
+          "repo_id": "urchade/gliner_multi_pii-v1",
+          "revision": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+          "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+        },
+        "mdeberta_backbone": {
+          "license": "MIT",
+          "repo_id": "microsoft/mdeberta-v3-base",
+          "revision": "a0484667b22365f84929a935b5e50a51f71f159d",
+          "weight_sha256": "13c8d666d62a7bc4ac8f040aab68e942c861f93303156cc28f5c7e885d86d6e3"
+        },
+        "stanford_deidentifier": {
+          "license": "MIT",
+          "repo_id": "StanfordAIMI/stanford-deidentifier-base",
+          "revision": "661b9c1c717d3165512d440abc3700c386aefab6",
+          "weight_sha256": "fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716"
+        }
+      },
+      "partition": "test",
+      "result": {
+        "documents": 10,
+        "documents_with_residual_findings": [
+          "test_chunk_boundary",
+          "test_contact",
+          "test_dates_age",
+          "test_geography",
+          "test_identifiers",
+          "test_multiline_overlap",
+          "test_names",
+          "test_negative_controls",
+          "test_unicode_casing"
+        ],
+        "failures": [],
+        "latencies_ms": [
+          42990.26,
+          2559.17,
+          3370.33,
+          3236.83,
+          3187.14,
+          3668.17,
+          2426.16,
+          1628.21,
+          2065.41,
+          15308.38
+        ],
+        "residual_categories": {
+          "ADDRESS": 2,
+          "DATE_TIME": 1,
+          "DRIVER_LICENSE": 3,
+          "EMAIL_ADDRESS": 1,
+          "MEDICAL_CONDITION": 3,
+          "ORGANIZATION": 8,
+          "PERSON": 21,
+          "PHONE_NUMBER": 1
+        },
+        "surviving_gold_count": 0,
+        "surviving_gold_values": []
+      },
+      "threshold": null,
+      "wall_seconds": 80.57
+    },
+    "rules": {
+      "corpus_version": "canary-v2.0",
+      "detector": "rules",
+      "environment": {
+        "cuda_available": false,
+        "device": "cpu",
+        "gliner": "0.2.22",
+        "huggingface_hub": "0.24.7",
+        "logical_cpus": 12,
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+        "python": "3.11.9",
+        "spacy": "3.8.14",
+        "torch": "2.4.1+cpu",
+        "transformers": "4.44.2"
+      },
+      "failures": [],
+      "metrics": {
+        "by_category": {
+          "ACCESSION": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "ACCOUNT_NUMBER": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "account": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "ADDRESS": {
+            "gold": 3,
+            "missed": 3,
+            "missed_tags": {
+              "abbreviation_context": 1,
+              "address": 1,
+              "multiline": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "AGE_OVER_89": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "age_over_89": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "BIOMETRIC_ID": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "biometric": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "CERTIFICATE_NUMBER": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "certificate": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "DATE": {
+            "gold": 4,
+            "missed": 1,
+            "missed_tags": {
+              "date_written": 1
+            },
+            "span_recall": 0.75,
+            "typed_recall": 0.75
+          },
+          "DEVICE_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "EMAIL": {
+            "gold": 3,
+            "missed": 1,
+            "missed_tags": {
+              "unicode": 1
+            },
+            "span_recall": 0.6667,
+            "typed_recall": 0.6667
+          },
+          "EMPLOYER": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "employer": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "FAX": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "fax": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "GEOGRAPHY": {
+            "gold": 2,
+            "missed": 2,
+            "missed_tags": {
+              "geography": 1,
+              "multiline": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "HEALTH_PLAN": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "HOSPITAL": {
+            "gold": 3,
+            "missed": 3,
+            "missed_tags": {
+              "abbreviation_context": 1,
+              "facility": 2
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "IP_ADDRESS": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "LICENSE_NUMBER": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "license": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "MRN": {
+            "gold": 4,
+            "missed": 1,
+            "missed_tags": {
+              "misspelt_label": 1
+            },
+            "span_recall": 0.75,
+            "typed_recall": 0.5
+          },
+          "ORGANIZATION": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "untagged": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "PATIENT_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON": {
+            "gold": 10,
+            "missed": 10,
+            "missed_tags": {
+              "abbreviation_context": 1,
+              "chunk_boundary": 1,
+              "indian_name": 1,
+              "international_name": 1,
+              "lowercase": 1,
+              "misspelt_value": 1,
+              "mixed_case": 2,
+              "multiline": 1,
+              "transliteration": 1,
+              "unicode": 2,
+              "uppercase": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "PERSON_CLINICIAN": {
+            "gold": 2,
+            "missed": 2,
+            "missed_tags": {
+              "clinician": 2
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "PERSON_RELATIVE": {
+            "gold": 2,
+            "missed": 2,
+            "missed_tags": {
+              "relative": 2
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "PHONE": {
+            "gold": 4,
+            "missed": 4,
+            "missed_tags": {
+              "abbreviation_context": 1,
+              "multiline": 1,
+              "phone": 1,
+              "phone_international": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "POSTAL_CODE": {
+            "gold": 3,
+            "missed": 3,
+            "missed_tags": {
+              "multiline": 1,
+              "postal_code": 2
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "SSN": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "UNUSUAL_ID": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "unusual_format": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "URL": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "USERNAME": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "username": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "VEHICLE_ID": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "vehicle": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          }
+        },
+        "composite_cost": 430.0,
+        "detections": 15,
+        "document_leakage_rate": 1.0,
+        "documents": 10,
+        "f1": 0.4267,
+        "false_negatives": 43,
+        "false_positives": 0,
+        "gold_spans": 59,
+        "leaking_documents": [
+          "test_chunk_boundary",
+          "test_contact",
+          "test_dates_age",
+          "test_geography",
+          "test_identifiers",
+          "test_misspelling_abbrev",
+          "test_multiline_overlap",
+          "test_names",
+          "test_negative_controls",
+          "test_unicode_casing"
+        ],
+        "negative_terms": 14,
+        "negative_terms_redacted": 0,
+        "precision": 1.0,
+        "span_recall": 0.2712,
+        "true_positives": 16,
+        "typed_recall": 0.2542,
+        "useful_text_preservation": 1.0
+      },
+      "missed_categories": [
+        "ACCOUNT_NUMBER",
+        "ADDRESS",
+        "AGE_OVER_89",
+        "BIOMETRIC_ID",
+        "CERTIFICATE_NUMBER",
+        "EMPLOYER",
+        "FAX",
+        "GEOGRAPHY",
+        "HOSPITAL",
+        "LICENSE_NUMBER",
+        "ORGANIZATION",
+        "PERSON",
+        "PERSON_CLINICIAN",
+        "PERSON_RELATIVE",
+        "PHONE",
+        "POSTAL_CODE",
+        "UNUSUAL_ID",
+        "USERNAME",
+        "VEHICLE_ID"
+      ],
+      "models": {
+        "gliner_multi_pii": {
+          "license": "Apache-2.0",
+          "repo_id": "urchade/gliner_multi_pii-v1",
+          "revision": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+          "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+        },
+        "mdeberta_backbone": {
+          "license": "MIT",
+          "repo_id": "microsoft/mdeberta-v3-base",
+          "revision": "a0484667b22365f84929a935b5e50a51f71f159d",
+          "weight_sha256": "13c8d666d62a7bc4ac8f040aab68e942c861f93303156cc28f5c7e885d86d6e3"
+        },
+        "stanford_deidentifier": {
+          "license": "MIT",
+          "repo_id": "StanfordAIMI/stanford-deidentifier-base",
+          "revision": "661b9c1c717d3165512d440abc3700c386aefab6",
+          "weight_sha256": "fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716"
+        }
+      },
+      "partition": "test",
+      "performance": {
+        "documents": 10,
+        "latency_ms_max": 1.53,
+        "latency_ms_mean": 0.42,
+        "latency_ms_p50": 0.28,
+        "latency_ms_p90": 1.53,
+        "latency_ms_p99": 1.53,
+        "model_load_seconds": 0.0,
+        "peak_rss_mib": 20.2
+      },
+      "threshold": 0.0,
+      "unsupported_documents": [],
+      "wall_seconds": 15.23
+    },
+    "spacy": {
+      "corpus_version": "canary-v2.0",
+      "detector": "spacy",
+      "environment": {
+        "cuda_available": false,
+        "device": "cpu",
+        "gliner": "0.2.22",
+        "huggingface_hub": "0.24.7",
+        "logical_cpus": 12,
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+        "python": "3.11.9",
+        "spacy": "3.8.14",
+        "torch": "2.4.1+cpu",
+        "transformers": "4.44.2"
+      },
+      "failures": [],
+      "metrics": {
+        "by_category": {
+          "ACCESSION": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "ACCOUNT_NUMBER": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "account": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "ADDRESS": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "AGE_OVER_89": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "BIOMETRIC_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "CERTIFICATE_NUMBER": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "certificate": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "DATE": {
+            "gold": 4,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "DEVICE_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "EMAIL": {
+            "gold": 3,
+            "missed": 3,
+            "missed_tags": {
+              "email": 1,
+              "second_window": 1,
+              "unicode": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "EMPLOYER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "FAX": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "fax": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "GEOGRAPHY": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "HEALTH_PLAN": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "HOSPITAL": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.6667
+          },
+          "IP_ADDRESS": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "LICENSE_NUMBER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "MRN": {
+            "gold": 4,
+            "missed": 3,
+            "missed_tags": {
+              "misspelt_label": 1,
+              "mrn": 1,
+              "nested": 1,
+              "overlapping": 1
+            },
+            "span_recall": 0.25,
+            "typed_recall": 0.0
+          },
+          "ORGANIZATION": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PATIENT_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "PERSON": {
+            "gold": 10,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON_CLINICIAN": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON_RELATIVE": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PHONE": {
+            "gold": 4,
+            "missed": 3,
+            "missed_tags": {
+              "abbreviation_context": 1,
+              "multiline": 1,
+              "phone": 1
+            },
+            "span_recall": 0.25,
+            "typed_recall": 0.0
+          },
+          "POSTAL_CODE": {
+            "gold": 3,
+            "missed": 3,
+            "missed_tags": {
+              "multiline": 1,
+              "postal_code": 2
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "SSN": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "ssn": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "UNUSUAL_ID": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "unusual_format": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "URL": {
+            "gold": 2,
+            "missed": 2,
+            "missed_tags": {
+              "overlapping": 1,
+              "url": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "USERNAME": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "username": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "VEHICLE_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          }
+        },
+        "composite_cost": 230.0,
+        "detections": 83,
+        "document_leakage_rate": 0.7,
+        "documents": 10,
+        "f1": 0.6094,
+        "false_negatives": 20,
+        "false_positives": 30,
+        "gold_spans": 59,
+        "leaking_documents": [
+          "test_chunk_boundary",
+          "test_contact",
+          "test_geography",
+          "test_identifiers",
+          "test_misspelling_abbrev",
+          "test_multiline_overlap",
+          "test_unicode_casing"
+        ],
+        "negative_terms": 14,
+        "negative_terms_redacted": 9,
+        "precision": 0.5652,
+        "span_recall": 0.661,
+        "true_positives": 39,
+        "typed_recall": 0.3898,
+        "useful_text_preservation": 0.3571
+      },
+      "missed_categories": [
+        "ACCOUNT_NUMBER",
+        "CERTIFICATE_NUMBER",
+        "EMAIL",
+        "FAX",
+        "POSTAL_CODE",
+        "SSN",
+        "UNUSUAL_ID",
+        "URL",
+        "USERNAME"
+      ],
+      "models": {
+        "gliner_multi_pii": {
+          "license": "Apache-2.0",
+          "repo_id": "urchade/gliner_multi_pii-v1",
+          "revision": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+          "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+        },
+        "mdeberta_backbone": {
+          "license": "MIT",
+          "repo_id": "microsoft/mdeberta-v3-base",
+          "revision": "a0484667b22365f84929a935b5e50a51f71f159d",
+          "weight_sha256": "13c8d666d62a7bc4ac8f040aab68e942c861f93303156cc28f5c7e885d86d6e3"
+        },
+        "stanford_deidentifier": {
+          "license": "MIT",
+          "repo_id": "StanfordAIMI/stanford-deidentifier-base",
+          "revision": "661b9c1c717d3165512d440abc3700c386aefab6",
+          "weight_sha256": "fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716"
+        }
+      },
+      "partition": "test",
+      "performance": {
+        "documents": 10,
+        "latency_ms_max": 112.75,
+        "latency_ms_mean": 40.15,
+        "latency_ms_p50": 37.71,
+        "latency_ms_p90": 112.75,
+        "latency_ms_p99": 112.75,
+        "model_load_seconds": 6.35,
+        "peak_rss_mib": 269.2
+      },
+      "threshold": 0.0,
+      "unsupported_documents": [],
+      "wall_seconds": 12.08
+    },
+    "stanford": {
+      "corpus_version": "canary-v2.0",
+      "detector": "stanford",
+      "environment": {
+        "cuda_available": false,
+        "device": "cpu",
+        "gliner": "0.2.22",
+        "huggingface_hub": "0.24.7",
+        "logical_cpus": 12,
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+        "python": "3.11.9",
+        "spacy": "3.8.14",
+        "torch": "2.4.1+cpu",
+        "transformers": "4.44.2"
+      },
+      "failures": [],
+      "metrics": {
+        "by_category": {
+          "ACCESSION": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "ACCOUNT_NUMBER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "ADDRESS": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "AGE_OVER_89": {
+            "gold": 1,
+            "missed": 1,
+            "missed_tags": {
+              "age_over_89": 1
+            },
+            "span_recall": 0.0,
+            "typed_recall": 0.0
+          },
+          "BIOMETRIC_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "CERTIFICATE_NUMBER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "DATE": {
+            "gold": 4,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "DEVICE_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "EMAIL": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "EMPLOYER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "FAX": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "GEOGRAPHY": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "HEALTH_PLAN": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "HOSPITAL": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "IP_ADDRESS": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "LICENSE_NUMBER": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "MRN": {
+            "gold": 4,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "ORGANIZATION": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PATIENT_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON": {
+            "gold": 10,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON_CLINICIAN": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PERSON_RELATIVE": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "PHONE": {
+            "gold": 4,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "POSTAL_CODE": {
+            "gold": 3,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "SSN": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "UNUSUAL_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          },
+          "URL": {
+            "gold": 2,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "USERNAME": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 0.0
+          },
+          "VEHICLE_ID": {
+            "gold": 1,
+            "missed": 0,
+            "missed_tags": {},
+            "span_recall": 1.0,
+            "typed_recall": 1.0
+          }
+        },
+        "composite_cost": 15.0,
+        "detections": 75,
+        "document_leakage_rate": 0.1,
+        "documents": 10,
+        "f1": 0.9508,
+        "false_negatives": 1,
+        "false_positives": 5,
+        "gold_spans": 59,
+        "leaking_documents": [
+          "test_dates_age"
+        ],
+        "negative_terms": 14,
+        "negative_terms_redacted": 0,
+        "precision": 0.9206,
+        "span_recall": 0.9831,
+        "true_positives": 58,
+        "typed_recall": 0.7119,
+        "useful_text_preservation": 1.0
+      },
+      "missed_categories": [
+        "AGE_OVER_89"
+      ],
+      "models": {
+        "gliner_multi_pii": {
+          "license": "Apache-2.0",
+          "repo_id": "urchade/gliner_multi_pii-v1",
+          "revision": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+          "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+        },
+        "mdeberta_backbone": {
+          "license": "MIT",
+          "repo_id": "microsoft/mdeberta-v3-base",
+          "revision": "a0484667b22365f84929a935b5e50a51f71f159d",
+          "weight_sha256": "13c8d666d62a7bc4ac8f040aab68e942c861f93303156cc28f5c7e885d86d6e3"
+        },
+        "stanford_deidentifier": {
+          "license": "MIT",
+          "repo_id": "StanfordAIMI/stanford-deidentifier-base",
+          "revision": "661b9c1c717d3165512d440abc3700c386aefab6",
+          "weight_sha256": "fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716"
+        }
+      },
+      "partition": "test",
+      "performance": {
+        "documents": 10,
+        "latency_ms_max": 2899.76,
+        "latency_ms_mean": 901.77,
+        "latency_ms_p50": 575.07,
+        "latency_ms_p90": 2899.76,
+        "latency_ms_p99": 2899.76,
+        "model_load_seconds": 13.7,
+        "peak_rss_mib": 593.4
+      },
+      "threshold": 0.05,
+      "unsupported_documents": [],
+      "wall_seconds": 27.43
+    }
+  },
+  "generated": "2026-09-05",
+  "joint_calibration": {
+    "baseline_combined_span_recall": 1.0,
+    "baseline_false_positives": 410,
+    "baseline_useful_text_preservation": 0.0,
+    "corpus_version": "canary-v2.0",
+    "grid": [
+      {
+        "composite_cost": 69.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.631,
+        "false_negatives": 0,
+        "false_positives": 69,
+        "gliner": 0.05,
+        "missed_categories": [],
+        "precision": 0.4609,
+        "span_recall": 1.0,
+        "stanford": 0.05,
+        "typed_recall": 0.8305,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 52.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.6941,
+        "false_negatives": 0,
+        "false_positives": 52,
+        "gliner": 0.1,
+        "missed_categories": [],
+        "precision": 0.5315,
+        "span_recall": 1.0,
+        "stanford": 0.05,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.15,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.05,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.2,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.05,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 47.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7152,
+        "false_negatives": 0,
+        "false_positives": 47,
+        "gliner": 0.25,
+        "missed_categories": [],
+        "precision": 0.5566,
+        "span_recall": 1.0,
+        "stanford": 0.05,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 46.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7195,
+        "false_negatives": 0,
+        "false_positives": 46,
+        "gliner": 0.3,
+        "missed_categories": [],
+        "precision": 0.5619,
+        "span_recall": 1.0,
+        "stanford": 0.05,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 45.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7239,
+        "false_negatives": 0,
+        "false_positives": 45,
+        "gliner": 0.4,
+        "missed_categories": [],
+        "precision": 0.5673,
+        "span_recall": 1.0,
+        "stanford": 0.05,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 44.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7284,
+        "false_negatives": 0,
+        "false_positives": 44,
+        "gliner": 0.5,
+        "missed_categories": [],
+        "precision": 0.5728,
+        "span_recall": 1.0,
+        "stanford": 0.05,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 43.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7329,
+        "false_negatives": 0,
+        "false_positives": 43,
+        "gliner": 0.6,
+        "missed_categories": [],
+        "precision": 0.5784,
+        "span_recall": 1.0,
+        "stanford": 0.05,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 37.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7613,
+        "false_negatives": 0,
+        "false_positives": 37,
+        "gliner": 0.7,
+        "missed_categories": [],
+        "precision": 0.6146,
+        "span_recall": 1.0,
+        "stanford": 0.05,
+        "typed_recall": 0.7797,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 69.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.631,
+        "false_negatives": 0,
+        "false_positives": 69,
+        "gliner": 0.05,
+        "missed_categories": [],
+        "precision": 0.4609,
+        "span_recall": 1.0,
+        "stanford": 0.1,
+        "typed_recall": 0.8305,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 52.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.6941,
+        "false_negatives": 0,
+        "false_positives": 52,
+        "gliner": 0.1,
+        "missed_categories": [],
+        "precision": 0.5315,
+        "span_recall": 1.0,
+        "stanford": 0.1,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.15,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.1,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.2,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.1,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 47.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7152,
+        "false_negatives": 0,
+        "false_positives": 47,
+        "gliner": 0.25,
+        "missed_categories": [],
+        "precision": 0.5566,
+        "span_recall": 1.0,
+        "stanford": 0.1,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 46.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7195,
+        "false_negatives": 0,
+        "false_positives": 46,
+        "gliner": 0.3,
+        "missed_categories": [],
+        "precision": 0.5619,
+        "span_recall": 1.0,
+        "stanford": 0.1,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 45.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7239,
+        "false_negatives": 0,
+        "false_positives": 45,
+        "gliner": 0.4,
+        "missed_categories": [],
+        "precision": 0.5673,
+        "span_recall": 1.0,
+        "stanford": 0.1,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 44.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7284,
+        "false_negatives": 0,
+        "false_positives": 44,
+        "gliner": 0.5,
+        "missed_categories": [],
+        "precision": 0.5728,
+        "span_recall": 1.0,
+        "stanford": 0.1,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 43.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7329,
+        "false_negatives": 0,
+        "false_positives": 43,
+        "gliner": 0.6,
+        "missed_categories": [],
+        "precision": 0.5784,
+        "span_recall": 1.0,
+        "stanford": 0.1,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 37.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7613,
+        "false_negatives": 0,
+        "false_positives": 37,
+        "gliner": 0.7,
+        "missed_categories": [],
+        "precision": 0.6146,
+        "span_recall": 1.0,
+        "stanford": 0.1,
+        "typed_recall": 0.7797,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 69.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.631,
+        "false_negatives": 0,
+        "false_positives": 69,
+        "gliner": 0.05,
+        "missed_categories": [],
+        "precision": 0.4609,
+        "span_recall": 1.0,
+        "stanford": 0.15,
+        "typed_recall": 0.8305,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 52.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.6941,
+        "false_negatives": 0,
+        "false_positives": 52,
+        "gliner": 0.1,
+        "missed_categories": [],
+        "precision": 0.5315,
+        "span_recall": 1.0,
+        "stanford": 0.15,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.15,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.15,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.2,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.15,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 47.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7152,
+        "false_negatives": 0,
+        "false_positives": 47,
+        "gliner": 0.25,
+        "missed_categories": [],
+        "precision": 0.5566,
+        "span_recall": 1.0,
+        "stanford": 0.15,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 46.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7195,
+        "false_negatives": 0,
+        "false_positives": 46,
+        "gliner": 0.3,
+        "missed_categories": [],
+        "precision": 0.5619,
+        "span_recall": 1.0,
+        "stanford": 0.15,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 45.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7239,
+        "false_negatives": 0,
+        "false_positives": 45,
+        "gliner": 0.4,
+        "missed_categories": [],
+        "precision": 0.5673,
+        "span_recall": 1.0,
+        "stanford": 0.15,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 44.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7284,
+        "false_negatives": 0,
+        "false_positives": 44,
+        "gliner": 0.5,
+        "missed_categories": [],
+        "precision": 0.5728,
+        "span_recall": 1.0,
+        "stanford": 0.15,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 43.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7329,
+        "false_negatives": 0,
+        "false_positives": 43,
+        "gliner": 0.6,
+        "missed_categories": [],
+        "precision": 0.5784,
+        "span_recall": 1.0,
+        "stanford": 0.15,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 37.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7613,
+        "false_negatives": 0,
+        "false_positives": 37,
+        "gliner": 0.7,
+        "missed_categories": [],
+        "precision": 0.6146,
+        "span_recall": 1.0,
+        "stanford": 0.15,
+        "typed_recall": 0.7797,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 69.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.631,
+        "false_negatives": 0,
+        "false_positives": 69,
+        "gliner": 0.05,
+        "missed_categories": [],
+        "precision": 0.4609,
+        "span_recall": 1.0,
+        "stanford": 0.2,
+        "typed_recall": 0.8305,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 52.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.6941,
+        "false_negatives": 0,
+        "false_positives": 52,
+        "gliner": 0.1,
+        "missed_categories": [],
+        "precision": 0.5315,
+        "span_recall": 1.0,
+        "stanford": 0.2,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.15,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.2,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.2,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.2,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 47.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7152,
+        "false_negatives": 0,
+        "false_positives": 47,
+        "gliner": 0.25,
+        "missed_categories": [],
+        "precision": 0.5566,
+        "span_recall": 1.0,
+        "stanford": 0.2,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 46.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7195,
+        "false_negatives": 0,
+        "false_positives": 46,
+        "gliner": 0.3,
+        "missed_categories": [],
+        "precision": 0.5619,
+        "span_recall": 1.0,
+        "stanford": 0.2,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 45.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7239,
+        "false_negatives": 0,
+        "false_positives": 45,
+        "gliner": 0.4,
+        "missed_categories": [],
+        "precision": 0.5673,
+        "span_recall": 1.0,
+        "stanford": 0.2,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 44.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7284,
+        "false_negatives": 0,
+        "false_positives": 44,
+        "gliner": 0.5,
+        "missed_categories": [],
+        "precision": 0.5728,
+        "span_recall": 1.0,
+        "stanford": 0.2,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 43.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7329,
+        "false_negatives": 0,
+        "false_positives": 43,
+        "gliner": 0.6,
+        "missed_categories": [],
+        "precision": 0.5784,
+        "span_recall": 1.0,
+        "stanford": 0.2,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 37.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7613,
+        "false_negatives": 0,
+        "false_positives": 37,
+        "gliner": 0.7,
+        "missed_categories": [],
+        "precision": 0.6146,
+        "span_recall": 1.0,
+        "stanford": 0.2,
+        "typed_recall": 0.7797,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 69.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.631,
+        "false_negatives": 0,
+        "false_positives": 69,
+        "gliner": 0.05,
+        "missed_categories": [],
+        "precision": 0.4609,
+        "span_recall": 1.0,
+        "stanford": 0.25,
+        "typed_recall": 0.8305,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 52.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.6941,
+        "false_negatives": 0,
+        "false_positives": 52,
+        "gliner": 0.1,
+        "missed_categories": [],
+        "precision": 0.5315,
+        "span_recall": 1.0,
+        "stanford": 0.25,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.15,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.25,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.2,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.25,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 47.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7152,
+        "false_negatives": 0,
+        "false_positives": 47,
+        "gliner": 0.25,
+        "missed_categories": [],
+        "precision": 0.5566,
+        "span_recall": 1.0,
+        "stanford": 0.25,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 46.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7195,
+        "false_negatives": 0,
+        "false_positives": 46,
+        "gliner": 0.3,
+        "missed_categories": [],
+        "precision": 0.5619,
+        "span_recall": 1.0,
+        "stanford": 0.25,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 45.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7239,
+        "false_negatives": 0,
+        "false_positives": 45,
+        "gliner": 0.4,
+        "missed_categories": [],
+        "precision": 0.5673,
+        "span_recall": 1.0,
+        "stanford": 0.25,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 44.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7284,
+        "false_negatives": 0,
+        "false_positives": 44,
+        "gliner": 0.5,
+        "missed_categories": [],
+        "precision": 0.5728,
+        "span_recall": 1.0,
+        "stanford": 0.25,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 43.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7329,
+        "false_negatives": 0,
+        "false_positives": 43,
+        "gliner": 0.6,
+        "missed_categories": [],
+        "precision": 0.5784,
+        "span_recall": 1.0,
+        "stanford": 0.25,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 37.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7613,
+        "false_negatives": 0,
+        "false_positives": 37,
+        "gliner": 0.7,
+        "missed_categories": [],
+        "precision": 0.6146,
+        "span_recall": 1.0,
+        "stanford": 0.25,
+        "typed_recall": 0.7797,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 69.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.631,
+        "false_negatives": 0,
+        "false_positives": 69,
+        "gliner": 0.05,
+        "missed_categories": [],
+        "precision": 0.4609,
+        "span_recall": 1.0,
+        "stanford": 0.3,
+        "typed_recall": 0.8305,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 52.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.6941,
+        "false_negatives": 0,
+        "false_positives": 52,
+        "gliner": 0.1,
+        "missed_categories": [],
+        "precision": 0.5315,
+        "span_recall": 1.0,
+        "stanford": 0.3,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.15,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.3,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.2,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.3,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 47.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7152,
+        "false_negatives": 0,
+        "false_positives": 47,
+        "gliner": 0.25,
+        "missed_categories": [],
+        "precision": 0.5566,
+        "span_recall": 1.0,
+        "stanford": 0.3,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 46.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7195,
+        "false_negatives": 0,
+        "false_positives": 46,
+        "gliner": 0.3,
+        "missed_categories": [],
+        "precision": 0.5619,
+        "span_recall": 1.0,
+        "stanford": 0.3,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 45.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7239,
+        "false_negatives": 0,
+        "false_positives": 45,
+        "gliner": 0.4,
+        "missed_categories": [],
+        "precision": 0.5673,
+        "span_recall": 1.0,
+        "stanford": 0.3,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 44.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7284,
+        "false_negatives": 0,
+        "false_positives": 44,
+        "gliner": 0.5,
+        "missed_categories": [],
+        "precision": 0.5728,
+        "span_recall": 1.0,
+        "stanford": 0.3,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 43.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7329,
+        "false_negatives": 0,
+        "false_positives": 43,
+        "gliner": 0.6,
+        "missed_categories": [],
+        "precision": 0.5784,
+        "span_recall": 1.0,
+        "stanford": 0.3,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 37.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7613,
+        "false_negatives": 0,
+        "false_positives": 37,
+        "gliner": 0.7,
+        "missed_categories": [],
+        "precision": 0.6146,
+        "span_recall": 1.0,
+        "stanford": 0.3,
+        "typed_recall": 0.7797,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 69.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.631,
+        "false_negatives": 0,
+        "false_positives": 69,
+        "gliner": 0.05,
+        "missed_categories": [],
+        "precision": 0.4609,
+        "span_recall": 1.0,
+        "stanford": 0.4,
+        "typed_recall": 0.8305,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 52.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.6941,
+        "false_negatives": 0,
+        "false_positives": 52,
+        "gliner": 0.1,
+        "missed_categories": [],
+        "precision": 0.5315,
+        "span_recall": 1.0,
+        "stanford": 0.4,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.15,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.4,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.2,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.4,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 47.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7152,
+        "false_negatives": 0,
+        "false_positives": 47,
+        "gliner": 0.25,
+        "missed_categories": [],
+        "precision": 0.5566,
+        "span_recall": 1.0,
+        "stanford": 0.4,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 46.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7195,
+        "false_negatives": 0,
+        "false_positives": 46,
+        "gliner": 0.3,
+        "missed_categories": [],
+        "precision": 0.5619,
+        "span_recall": 1.0,
+        "stanford": 0.4,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 45.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7239,
+        "false_negatives": 0,
+        "false_positives": 45,
+        "gliner": 0.4,
+        "missed_categories": [],
+        "precision": 0.5673,
+        "span_recall": 1.0,
+        "stanford": 0.4,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 44.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7284,
+        "false_negatives": 0,
+        "false_positives": 44,
+        "gliner": 0.5,
+        "missed_categories": [],
+        "precision": 0.5728,
+        "span_recall": 1.0,
+        "stanford": 0.4,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 43.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7329,
+        "false_negatives": 0,
+        "false_positives": 43,
+        "gliner": 0.6,
+        "missed_categories": [],
+        "precision": 0.5784,
+        "span_recall": 1.0,
+        "stanford": 0.4,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 37.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7613,
+        "false_negatives": 0,
+        "false_positives": 37,
+        "gliner": 0.7,
+        "missed_categories": [],
+        "precision": 0.6146,
+        "span_recall": 1.0,
+        "stanford": 0.4,
+        "typed_recall": 0.7797,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 69.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.631,
+        "false_negatives": 0,
+        "false_positives": 69,
+        "gliner": 0.05,
+        "missed_categories": [],
+        "precision": 0.4609,
+        "span_recall": 1.0,
+        "stanford": 0.5,
+        "typed_recall": 0.8305,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 52.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.6941,
+        "false_negatives": 0,
+        "false_positives": 52,
+        "gliner": 0.1,
+        "missed_categories": [],
+        "precision": 0.5315,
+        "span_recall": 1.0,
+        "stanford": 0.5,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.15,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.5,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.2,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.5,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 47.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7152,
+        "false_negatives": 0,
+        "false_positives": 47,
+        "gliner": 0.25,
+        "missed_categories": [],
+        "precision": 0.5566,
+        "span_recall": 1.0,
+        "stanford": 0.5,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 46.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7195,
+        "false_negatives": 0,
+        "false_positives": 46,
+        "gliner": 0.3,
+        "missed_categories": [],
+        "precision": 0.5619,
+        "span_recall": 1.0,
+        "stanford": 0.5,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 45.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7239,
+        "false_negatives": 0,
+        "false_positives": 45,
+        "gliner": 0.4,
+        "missed_categories": [],
+        "precision": 0.5673,
+        "span_recall": 1.0,
+        "stanford": 0.5,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 44.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7284,
+        "false_negatives": 0,
+        "false_positives": 44,
+        "gliner": 0.5,
+        "missed_categories": [],
+        "precision": 0.5728,
+        "span_recall": 1.0,
+        "stanford": 0.5,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 43.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7329,
+        "false_negatives": 0,
+        "false_positives": 43,
+        "gliner": 0.6,
+        "missed_categories": [],
+        "precision": 0.5784,
+        "span_recall": 1.0,
+        "stanford": 0.5,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 37.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7613,
+        "false_negatives": 0,
+        "false_positives": 37,
+        "gliner": 0.7,
+        "missed_categories": [],
+        "precision": 0.6146,
+        "span_recall": 1.0,
+        "stanford": 0.5,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 69.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.631,
+        "false_negatives": 0,
+        "false_positives": 69,
+        "gliner": 0.05,
+        "missed_categories": [],
+        "precision": 0.4609,
+        "span_recall": 1.0,
+        "stanford": 0.6,
+        "typed_recall": 0.8305,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 52.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.6941,
+        "false_negatives": 0,
+        "false_positives": 52,
+        "gliner": 0.1,
+        "missed_categories": [],
+        "precision": 0.5315,
+        "span_recall": 1.0,
+        "stanford": 0.6,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.15,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.6,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.2,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.6,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 47.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7152,
+        "false_negatives": 0,
+        "false_positives": 47,
+        "gliner": 0.25,
+        "missed_categories": [],
+        "precision": 0.5566,
+        "span_recall": 1.0,
+        "stanford": 0.6,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 46.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7195,
+        "false_negatives": 0,
+        "false_positives": 46,
+        "gliner": 0.3,
+        "missed_categories": [],
+        "precision": 0.5619,
+        "span_recall": 1.0,
+        "stanford": 0.6,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 45.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7239,
+        "false_negatives": 0,
+        "false_positives": 45,
+        "gliner": 0.4,
+        "missed_categories": [],
+        "precision": 0.5673,
+        "span_recall": 1.0,
+        "stanford": 0.6,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 44.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7284,
+        "false_negatives": 0,
+        "false_positives": 44,
+        "gliner": 0.5,
+        "missed_categories": [],
+        "precision": 0.5728,
+        "span_recall": 1.0,
+        "stanford": 0.6,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 43.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7329,
+        "false_negatives": 0,
+        "false_positives": 43,
+        "gliner": 0.6,
+        "missed_categories": [],
+        "precision": 0.5784,
+        "span_recall": 1.0,
+        "stanford": 0.6,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 37.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7613,
+        "false_negatives": 0,
+        "false_positives": 37,
+        "gliner": 0.7,
+        "missed_categories": [],
+        "precision": 0.6146,
+        "span_recall": 1.0,
+        "stanford": 0.6,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 69.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.631,
+        "false_negatives": 0,
+        "false_positives": 69,
+        "gliner": 0.05,
+        "missed_categories": [],
+        "precision": 0.4609,
+        "span_recall": 1.0,
+        "stanford": 0.7,
+        "typed_recall": 0.8305,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 52.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.6941,
+        "false_negatives": 0,
+        "false_positives": 52,
+        "gliner": 0.1,
+        "missed_categories": [],
+        "precision": 0.5315,
+        "span_recall": 1.0,
+        "stanford": 0.7,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.15,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.7,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 48.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7108,
+        "false_negatives": 0,
+        "false_positives": 48,
+        "gliner": 0.2,
+        "missed_categories": [],
+        "precision": 0.5514,
+        "span_recall": 1.0,
+        "stanford": 0.7,
+        "typed_recall": 0.8475,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 47.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7152,
+        "false_negatives": 0,
+        "false_positives": 47,
+        "gliner": 0.25,
+        "missed_categories": [],
+        "precision": 0.5566,
+        "span_recall": 1.0,
+        "stanford": 0.7,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 46.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7195,
+        "false_negatives": 0,
+        "false_positives": 46,
+        "gliner": 0.3,
+        "missed_categories": [],
+        "precision": 0.5619,
+        "span_recall": 1.0,
+        "stanford": 0.7,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 45.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7239,
+        "false_negatives": 0,
+        "false_positives": 45,
+        "gliner": 0.4,
+        "missed_categories": [],
+        "precision": 0.5673,
+        "span_recall": 1.0,
+        "stanford": 0.7,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 44.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7284,
+        "false_negatives": 0,
+        "false_positives": 44,
+        "gliner": 0.5,
+        "missed_categories": [],
+        "precision": 0.5728,
+        "span_recall": 1.0,
+        "stanford": 0.7,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 43.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7329,
+        "false_negatives": 0,
+        "false_positives": 43,
+        "gliner": 0.6,
+        "missed_categories": [],
+        "precision": 0.5784,
+        "span_recall": 1.0,
+        "stanford": 0.7,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      },
+      {
+        "composite_cost": 37.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.7613,
+        "false_negatives": 0,
+        "false_positives": 37,
+        "gliner": 0.7,
+        "missed_categories": [],
+        "precision": 0.6146,
+        "span_recall": 1.0,
+        "stanford": 0.7,
+        "typed_recall": 0.7627,
+        "useful_text_preservation": 0.2143
+      }
+    ],
+    "partition": "calibration",
+    "selected": {
+      "gliner_candidate_threshold": 0.1,
+      "stanford_candidate_threshold": 0.05
+    },
+    "selected_metrics": {
+      "composite_cost": 52.0,
+      "document_leakage_rate": 0.0,
+      "f1": 0.6941,
+      "false_negatives": 0,
+      "false_positives": 52,
+      "missed_categories": [],
+      "precision": 0.5315,
+      "span_recall": 1.0,
+      "typed_recall": 0.8475,
+      "useful_text_preservation": 0.2143
+    },
+    "selection_rule": "1. combined span recall must not fall below the all-zero baseline - a false negative is a disclosure and is never traded away. 2. zero is excluded for either model: it is not a calibrated value, it is the absence of one. 3. among the rest, maximise typed recall, which improves how a finding is labelled without trading away any span. 4. ties go to the LOWEST thresholds, keeping the widest safety margin on unseen data, because precision gained by raising a threshold is bought with candidates that would otherwise have been redacted.",
+    "selection_status": "selected",
+    "wall_seconds": 67.44
+  },
+  "models": {
+    "gliner_multi_pii": {
+      "license": "Apache-2.0",
+      "repo_id": "urchade/gliner_multi_pii-v1",
+      "revision": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+      "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+    },
+    "mdeberta_backbone": {
+      "license": "MIT",
+      "repo_id": "microsoft/mdeberta-v3-base",
+      "revision": "a0484667b22365f84929a935b5e50a51f71f159d",
+      "weight_sha256": "13c8d666d62a7bc4ac8f040aab68e942c861f93303156cc28f5c7e885d86d6e3"
+    },
+    "stanford_deidentifier": {
+      "license": "MIT",
+      "repo_id": "StanfordAIMI/stanford-deidentifier-base",
+      "revision": "661b9c1c717d3165512d440abc3700c386aefab6",
+      "weight_sha256": "fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716"
+    }
+  },
+  "required_categories": [
+    "ACCESSION",
+    "ACCOUNT_NUMBER",
+    "ADDRESS",
+    "AGE_OVER_89",
+    "BIOMETRIC_ID",
+    "CERTIFICATE_NUMBER",
+    "DATE",
+    "DEVICE_ID",
+    "EMAIL",
+    "EMPLOYER",
+    "FAX",
+    "GEOGRAPHY",
+    "HEALTH_PLAN",
+    "HOSPITAL",
+    "IP_ADDRESS",
+    "LICENSE_NUMBER",
+    "MRN",
+    "ORGANIZATION",
+    "PATIENT_ID",
+    "PERSON",
+    "PERSON_CLINICIAN",
+    "PERSON_RELATIVE",
+    "PHONE",
+    "POSTAL_CODE",
+    "SSN",
+    "UNUSUAL_ID",
+    "URL",
+    "USERNAME",
+    "VEHICLE_ID"
+  ],
+  "selected_thresholds": {
+    "gliner_candidate_threshold": 0.1,
+    "stanford_candidate_threshold": 0.05
+  },
+  "sweeps": {
+    "gliner": {
+      "baseline_span_recall": 1.0,
+      "corpus_version": "canary-v2.0",
+      "detector": "gliner",
+      "environment": {
+        "cuda_available": false,
+        "device": "cpu",
+        "gliner": "0.2.22",
+        "huggingface_hub": "0.24.7",
+        "logical_cpus": 12,
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+        "python": "3.11.9",
+        "spacy": "3.8.14",
+        "torch": "2.4.1+cpu",
+        "transformers": "4.44.2"
+      },
+      "models": {
+        "gliner_multi_pii": {
+          "license": "Apache-2.0",
+          "repo_id": "urchade/gliner_multi_pii-v1",
+          "revision": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+          "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+        },
+        "mdeberta_backbone": {
+          "license": "MIT",
+          "repo_id": "microsoft/mdeberta-v3-base",
+          "revision": "a0484667b22365f84929a935b5e50a51f71f159d",
+          "weight_sha256": "13c8d666d62a7bc4ac8f040aab68e942c861f93303156cc28f5c7e885d86d6e3"
+        },
+        "stanford_deidentifier": {
+          "license": "MIT",
+          "repo_id": "StanfordAIMI/stanford-deidentifier-base",
+          "revision": "661b9c1c717d3165512d440abc3700c386aefab6",
+          "weight_sha256": "fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716"
+        }
+      },
+      "partition": "calibration",
+      "selected_metrics": {
+        "composite_cost": 420.0,
+        "document_leakage_rate": 0.0,
+        "f1": 0.2193,
+        "false_negatives": 0,
+        "false_positives": 420,
+        "precision": 0.1232,
+        "span_recall": 1.0,
+        "typed_recall": 0.7966,
+        "useful_text_preservation": 0.0
+      },
+      "selected_threshold": 0.0,
+      "selection_rule": "no recall loss versus threshold 0.0; then lowest (10*false_negatives + false_positives); ties go to the lower threshold so low-confidence candidates stay redacted",
+      "sweep": [
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 1.0,
+            "BIOMETRIC_ID": 1.0,
+            "CERTIFICATE_NUMBER": 1.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 1.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 1.0,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 1.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 420.0,
+          "document_leakage_rate": 0.0,
+          "f1": 0.2193,
+          "false_negatives": 0,
+          "false_positives": 420,
+          "missed_categories": [],
+          "precision": 0.1232,
+          "span_recall": 1.0,
+          "threshold": 0.0,
+          "typed_recall": 0.7966,
+          "useful_text_preservation": 0.0
+        },
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 0.0,
+            "CERTIFICATE_NUMBER": 1.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 1.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 0.75,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 0.5,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 91.0,
+          "document_leakage_rate": 0.3,
+          "f1": 0.6667,
+          "false_negatives": 4,
+          "false_positives": 51,
+          "missed_categories": [
+            "AGE_OVER_89",
+            "BIOMETRIC_ID"
+          ],
+          "precision": 0.5189,
+          "span_recall": 0.9322,
+          "threshold": 0.05,
+          "typed_recall": 0.7797,
+          "useful_text_preservation": 0.2143
+        },
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 0.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 0.0,
+            "CERTIFICATE_NUMBER": 0.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 0.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 1.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 0.75,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 0.5,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 0.0
+          },
+          "composite_cost": 113.0,
+          "document_leakage_rate": 0.3,
+          "f1": 0.7133,
+          "false_negatives": 8,
+          "false_positives": 33,
+          "missed_categories": [
+            "ACCOUNT_NUMBER",
+            "AGE_OVER_89",
+            "BIOMETRIC_ID",
+            "CERTIFICATE_NUMBER",
+            "DEVICE_ID",
+            "VEHICLE_ID"
+          ],
+          "precision": 0.6071,
+          "span_recall": 0.8644,
+          "threshold": 0.1,
+          "typed_recall": 0.7288,
+          "useful_text_preservation": 0.2857
+        },
+        {
+          "by_category": {
+            "ACCESSION": 0.0,
+            "ACCOUNT_NUMBER": 0.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 0.0,
+            "CERTIFICATE_NUMBER": 0.0,
+            "DATE": 0.75,
+            "DEVICE_ID": 0.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 0.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 0.5,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 0.5,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 0.0
+          },
+          "composite_cost": 149.0,
+          "document_leakage_rate": 0.4,
+          "f1": 0.6963,
+          "false_negatives": 12,
+          "false_positives": 29,
+          "missed_categories": [
+            "ACCESSION",
+            "ACCOUNT_NUMBER",
+            "AGE_OVER_89",
+            "BIOMETRIC_ID",
+            "CERTIFICATE_NUMBER",
+            "DEVICE_ID",
+            "IP_ADDRESS",
+            "VEHICLE_ID"
+          ],
+          "precision": 0.6184,
+          "span_recall": 0.7966,
+          "threshold": 0.15,
+          "typed_recall": 0.678,
+          "useful_text_preservation": 0.2857
+        },
+        {
+          "by_category": {
+            "ACCESSION": 0.0,
+            "ACCOUNT_NUMBER": 0.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 0.0,
+            "CERTIFICATE_NUMBER": 0.0,
+            "DATE": 0.75,
+            "DEVICE_ID": 0.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 0.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 0.5,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 0.75,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 0.5,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 0.0
+          },
+          "composite_cost": 159.0,
+          "document_leakage_rate": 0.4,
+          "f1": 0.6866,
+          "false_negatives": 13,
+          "false_positives": 29,
+          "missed_categories": [
+            "ACCESSION",
+            "ACCOUNT_NUMBER",
+            "AGE_OVER_89",
+            "BIOMETRIC_ID",
+            "CERTIFICATE_NUMBER",
+            "DEVICE_ID",
+            "IP_ADDRESS",
+            "VEHICLE_ID"
+          ],
+          "precision": 0.6133,
+          "span_recall": 0.7797,
+          "threshold": 0.2,
+          "typed_recall": 0.661,
+          "useful_text_preservation": 0.2857
+        },
+        {
+          "by_category": {
+            "ACCESSION": 0.0,
+            "ACCOUNT_NUMBER": 0.0,
+            "ADDRESS": 0.6667,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 0.0,
+            "CERTIFICATE_NUMBER": 0.0,
+            "DATE": 0.75,
+            "DEVICE_ID": 0.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 0.5,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 0.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 0.5,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 0.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 0.75,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 0.0,
+            "URL": 0.5,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 0.0
+          },
+          "composite_cost": 199.0,
+          "document_leakage_rate": 0.5,
+          "f1": 0.6462,
+          "false_negatives": 17,
+          "false_positives": 29,
+          "missed_categories": [
+            "ACCESSION",
+            "ACCOUNT_NUMBER",
+            "AGE_OVER_89",
+            "BIOMETRIC_ID",
+            "CERTIFICATE_NUMBER",
+            "DEVICE_ID",
+            "IP_ADDRESS",
+            "PATIENT_ID",
+            "UNUSUAL_ID",
+            "VEHICLE_ID"
+          ],
+          "precision": 0.5915,
+          "span_recall": 0.7119,
+          "threshold": 0.25,
+          "typed_recall": 0.6102,
+          "useful_text_preservation": 0.2857
+        },
+        {
+          "by_category": {
+            "ACCESSION": 0.0,
+            "ACCOUNT_NUMBER": 0.0,
+            "ADDRESS": 0.6667,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 0.0,
+            "CERTIFICATE_NUMBER": 0.0,
+            "DATE": 0.5,
+            "DEVICE_ID": 0.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 0.5,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 0.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 0.5,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 0.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 0.75,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 0.0,
+            "URL": 0.5,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 0.0
+          },
+          "composite_cost": 208.0,
+          "document_leakage_rate": 0.5,
+          "f1": 0.6406,
+          "false_negatives": 18,
+          "false_positives": 28,
+          "missed_categories": [
+            "ACCESSION",
+            "ACCOUNT_NUMBER",
+            "AGE_OVER_89",
+            "BIOMETRIC_ID",
+            "CERTIFICATE_NUMBER",
+            "DEVICE_ID",
+            "IP_ADDRESS",
+            "PATIENT_ID",
+            "UNUSUAL_ID",
+            "VEHICLE_ID"
+          ],
+          "precision": 0.5942,
+          "span_recall": 0.6949,
+          "threshold": 0.3,
+          "typed_recall": 0.5932,
+          "useful_text_preservation": 0.2857
+        },
+        {
+          "by_category": {
+            "ACCESSION": 0.0,
+            "ACCOUNT_NUMBER": 0.0,
+            "ADDRESS": 0.3333,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 0.0,
+            "CERTIFICATE_NUMBER": 0.0,
+            "DATE": 0.5,
+            "DEVICE_ID": 0.0,
+            "EMAIL": 0.6667,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 0.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 0.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 0.25,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 0.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 0.75,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 0.0,
+            "URL": 0.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 0.0
+          },
+          "composite_cost": 257.0,
+          "document_leakage_rate": 0.6,
+          "f1": 0.5902,
+          "false_negatives": 23,
+          "false_positives": 27,
+          "missed_categories": [
+            "ACCESSION",
+            "ACCOUNT_NUMBER",
+            "AGE_OVER_89",
+            "BIOMETRIC_ID",
+            "CERTIFICATE_NUMBER",
+            "DEVICE_ID",
+            "GEOGRAPHY",
+            "IP_ADDRESS",
+            "PATIENT_ID",
+            "UNUSUAL_ID",
+            "URL",
+            "VEHICLE_ID"
+          ],
+          "precision": 0.5714,
+          "span_recall": 0.6102,
+          "threshold": 0.4,
+          "typed_recall": 0.5593,
+          "useful_text_preservation": 0.2857
+        },
+        {
+          "by_category": {
+            "ACCESSION": 0.0,
+            "ACCOUNT_NUMBER": 0.0,
+            "ADDRESS": 0.3333,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 0.0,
+            "CERTIFICATE_NUMBER": 0.0,
+            "DATE": 0.5,
+            "DEVICE_ID": 0.0,
+            "EMAIL": 0.6667,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 0.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 0.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 0.25,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 0.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 0.75,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 0.0,
+            "URL": 0.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 0.0
+          },
+          "composite_cost": 256.0,
+          "document_leakage_rate": 0.6,
+          "f1": 0.595,
+          "false_negatives": 23,
+          "false_positives": 26,
+          "missed_categories": [
+            "ACCESSION",
+            "ACCOUNT_NUMBER",
+            "AGE_OVER_89",
+            "BIOMETRIC_ID",
+            "CERTIFICATE_NUMBER",
+            "DEVICE_ID",
+            "GEOGRAPHY",
+            "IP_ADDRESS",
+            "PATIENT_ID",
+            "UNUSUAL_ID",
+            "URL",
+            "VEHICLE_ID"
+          ],
+          "precision": 0.5806,
+          "span_recall": 0.6102,
+          "threshold": 0.5,
+          "typed_recall": 0.5593,
+          "useful_text_preservation": 0.2857
+        },
+        {
+          "by_category": {
+            "ACCESSION": 0.0,
+            "ACCOUNT_NUMBER": 0.0,
+            "ADDRESS": 0.3333,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 0.0,
+            "CERTIFICATE_NUMBER": 0.0,
+            "DATE": 0.5,
+            "DEVICE_ID": 0.0,
+            "EMAIL": 0.6667,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 0.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 0.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 0.25,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 0.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 0.5,
+            "POSTAL_CODE": 0.6667,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 0.0,
+            "URL": 0.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 0.0
+          },
+          "composite_cost": 275.0,
+          "document_leakage_rate": 0.6,
+          "f1": 0.5763,
+          "false_negatives": 25,
+          "false_positives": 25,
+          "missed_categories": [
+            "ACCESSION",
+            "ACCOUNT_NUMBER",
+            "AGE_OVER_89",
+            "BIOMETRIC_ID",
+            "CERTIFICATE_NUMBER",
+            "DEVICE_ID",
+            "GEOGRAPHY",
+            "IP_ADDRESS",
+            "PATIENT_ID",
+            "UNUSUAL_ID",
+            "URL",
+            "VEHICLE_ID"
+          ],
+          "precision": 0.5763,
+          "span_recall": 0.5763,
+          "threshold": 0.6,
+          "typed_recall": 0.5424,
+          "useful_text_preservation": 0.2857
+        },
+        {
+          "by_category": {
+            "ACCESSION": 0.0,
+            "ACCOUNT_NUMBER": 0.0,
+            "ADDRESS": 0.3333,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 0.0,
+            "CERTIFICATE_NUMBER": 0.0,
+            "DATE": 0.5,
+            "DEVICE_ID": 0.0,
+            "EMAIL": 0.6667,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 0.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 0.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 0.25,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 0.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 0.5,
+            "POSTAL_CODE": 0.6667,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 0.0,
+            "URL": 0.0,
+            "USERNAME": 0.0,
+            "VEHICLE_ID": 0.0
+          },
+          "composite_cost": 279.0,
+          "document_leakage_rate": 0.6,
+          "f1": 0.5946,
+          "false_negatives": 26,
+          "false_positives": 19,
+          "missed_categories": [
+            "ACCESSION",
+            "ACCOUNT_NUMBER",
+            "AGE_OVER_89",
+            "BIOMETRIC_ID",
+            "CERTIFICATE_NUMBER",
+            "DEVICE_ID",
+            "GEOGRAPHY",
+            "IP_ADDRESS",
+            "PATIENT_ID",
+            "UNUSUAL_ID",
+            "URL",
+            "USERNAME",
+            "VEHICLE_ID"
+          ],
+          "precision": 0.6346,
+          "span_recall": 0.5593,
+          "threshold": 0.7,
+          "typed_recall": 0.5424,
+          "useful_text_preservation": 0.2857
+        },
+        {
+          "by_category": {
+            "ACCESSION": 0.0,
+            "ACCOUNT_NUMBER": 0.0,
+            "ADDRESS": 0.3333,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 0.0,
+            "CERTIFICATE_NUMBER": 0.0,
+            "DATE": 0.5,
+            "DEVICE_ID": 0.0,
+            "EMAIL": 0.6667,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 0.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 0.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 0.25,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 0.0,
+            "PERSON": 0.9,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 0.25,
+            "POSTAL_CODE": 0.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 0.0,
+            "URL": 0.0,
+            "USERNAME": 0.0,
+            "VEHICLE_ID": 0.0
+          },
+          "composite_cost": 313.0,
+          "document_leakage_rate": 0.6,
+          "f1": 0.5743,
+          "false_negatives": 30,
+          "false_positives": 13,
+          "missed_categories": [
+            "ACCESSION",
+            "ACCOUNT_NUMBER",
+            "AGE_OVER_89",
+            "BIOMETRIC_ID",
+            "CERTIFICATE_NUMBER",
+            "DEVICE_ID",
+            "GEOGRAPHY",
+            "IP_ADDRESS",
+            "PATIENT_ID",
+            "POSTAL_CODE",
+            "UNUSUAL_ID",
+            "URL",
+            "USERNAME",
+            "VEHICLE_ID"
+          ],
+          "precision": 0.6905,
+          "span_recall": 0.4915,
+          "threshold": 0.8,
+          "typed_recall": 0.4746,
+          "useful_text_preservation": 0.2857
+        },
+        {
+          "by_category": {
+            "ACCESSION": 0.0,
+            "ACCOUNT_NUMBER": 0.0,
+            "ADDRESS": 0.3333,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 0.0,
+            "CERTIFICATE_NUMBER": 0.0,
+            "DATE": 0.5,
+            "DEVICE_ID": 0.0,
+            "EMAIL": 0.3333,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 0.0,
+            "HEALTH_PLAN": 0.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 0.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 0.0,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 0.0,
+            "PERSON": 0.9,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 0.0,
+            "POSTAL_CODE": 0.0,
+            "SSN": 0.0,
+            "UNUSUAL_ID": 0.0,
+            "URL": 0.0,
+            "USERNAME": 0.0,
+            "VEHICLE_ID": 0.0
+          },
+          "composite_cost": 361.0,
+          "document_leakage_rate": 0.8,
+          "f1": 0.5106,
+          "false_negatives": 35,
+          "false_positives": 11,
+          "missed_categories": [
+            "ACCESSION",
+            "ACCOUNT_NUMBER",
+            "AGE_OVER_89",
+            "BIOMETRIC_ID",
+            "CERTIFICATE_NUMBER",
+            "DEVICE_ID",
+            "GEOGRAPHY",
+            "HEALTH_PLAN",
+            "IP_ADDRESS",
+            "MRN",
+            "PATIENT_ID",
+            "PHONE",
+            "POSTAL_CODE",
+            "SSN",
+            "UNUSUAL_ID",
+            "URL",
+            "USERNAME",
+            "VEHICLE_ID"
+          ],
+          "precision": 0.6857,
+          "span_recall": 0.4068,
+          "threshold": 0.9,
+          "typed_recall": 0.4068,
+          "useful_text_preservation": 0.2857
+        }
+      ],
+      "wall_seconds": 67.04
+    },
+    "stanford": {
+      "baseline_span_recall": 0.9831,
+      "corpus_version": "canary-v2.0",
+      "detector": "stanford",
+      "environment": {
+        "cuda_available": false,
+        "device": "cpu",
+        "gliner": "0.2.22",
+        "huggingface_hub": "0.24.7",
+        "logical_cpus": 12,
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+        "python": "3.11.9",
+        "spacy": "3.8.14",
+        "torch": "2.4.1+cpu",
+        "transformers": "4.44.2"
+      },
+      "models": {
+        "gliner_multi_pii": {
+          "license": "Apache-2.0",
+          "repo_id": "urchade/gliner_multi_pii-v1",
+          "revision": "1fcf13e85f4eef5394e1fcd406cf2ca9ea82351d",
+          "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+        },
+        "stanford_deidentifier": {
+          "license": "MIT",
+          "repo_id": "StanfordAIMI/stanford-deidentifier-base",
+          "revision": "661b9c1c717d3165512d440abc3700c386aefab6",
+          "weight_sha256": "fa49ef069171e479f546ce2ee5ed599aa585d1d33bc7a8f54400ac57d9cd2716"
+        }
+      },
+      "partition": "calibration",
+      "selected_metrics": {
+        "composite_cost": 11.0,
+        "document_leakage_rate": 0.1,
+        "f1": 0.9831,
+        "false_negatives": 1,
+        "false_positives": 1,
+        "precision": 0.9831,
+        "span_recall": 0.9831,
+        "typed_recall": 0.7288,
+        "useful_text_preservation": 1.0
+      },
+      "selected_threshold": 0.0,
+      "selection_rule": "no recall loss versus threshold 0.0; then lowest (10*false_negatives + false_positives); ties go to the lower threshold so low-confidence candidates stay redacted",
+      "sweep": [
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 1.0,
+            "CERTIFICATE_NUMBER": 1.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 1.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 1.0,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 1.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 11.0,
+          "document_leakage_rate": 0.1,
+          "f1": 0.9831,
+          "false_negatives": 1,
+          "false_positives": 1,
+          "missed_categories": [
+            "AGE_OVER_89"
+          ],
+          "precision": 0.9831,
+          "span_recall": 0.9831,
+          "threshold": 0.0,
+          "typed_recall": 0.7288,
+          "useful_text_preservation": 1.0
+        },
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 1.0,
+            "CERTIFICATE_NUMBER": 1.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 1.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 1.0,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 1.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 11.0,
+          "document_leakage_rate": 0.1,
+          "f1": 0.9831,
+          "false_negatives": 1,
+          "false_positives": 1,
+          "missed_categories": [
+            "AGE_OVER_89"
+          ],
+          "precision": 0.9831,
+          "span_recall": 0.9831,
+          "threshold": 0.05,
+          "typed_recall": 0.7288,
+          "useful_text_preservation": 1.0
+        },
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 1.0,
+            "CERTIFICATE_NUMBER": 1.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 1.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 1.0,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 1.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 11.0,
+          "document_leakage_rate": 0.1,
+          "f1": 0.9831,
+          "false_negatives": 1,
+          "false_positives": 1,
+          "missed_categories": [
+            "AGE_OVER_89"
+          ],
+          "precision": 0.9831,
+          "span_recall": 0.9831,
+          "threshold": 0.1,
+          "typed_recall": 0.7288,
+          "useful_text_preservation": 1.0
+        },
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 1.0,
+            "CERTIFICATE_NUMBER": 1.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 1.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 1.0,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 1.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 11.0,
+          "document_leakage_rate": 0.1,
+          "f1": 0.9831,
+          "false_negatives": 1,
+          "false_positives": 1,
+          "missed_categories": [
+            "AGE_OVER_89"
+          ],
+          "precision": 0.9831,
+          "span_recall": 0.9831,
+          "threshold": 0.15,
+          "typed_recall": 0.7288,
+          "useful_text_preservation": 1.0
+        },
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 1.0,
+            "CERTIFICATE_NUMBER": 1.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 1.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 1.0,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 1.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 11.0,
+          "document_leakage_rate": 0.1,
+          "f1": 0.9831,
+          "false_negatives": 1,
+          "false_positives": 1,
+          "missed_categories": [
+            "AGE_OVER_89"
+          ],
+          "precision": 0.9831,
+          "span_recall": 0.9831,
+          "threshold": 0.2,
+          "typed_recall": 0.7288,
+          "useful_text_preservation": 1.0
+        },
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 1.0,
+            "CERTIFICATE_NUMBER": 1.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 1.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 1.0,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 1.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 11.0,
+          "document_leakage_rate": 0.1,
+          "f1": 0.9831,
+          "false_negatives": 1,
+          "false_positives": 1,
+          "missed_categories": [
+            "AGE_OVER_89"
+          ],
+          "precision": 0.9831,
+          "span_recall": 0.9831,
+          "threshold": 0.25,
+          "typed_recall": 0.7288,
+          "useful_text_preservation": 1.0
+        },
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 1.0,
+            "CERTIFICATE_NUMBER": 1.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 1.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 1.0,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 1.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 11.0,
+          "document_leakage_rate": 0.1,
+          "f1": 0.9831,
+          "false_negatives": 1,
+          "false_positives": 1,
+          "missed_categories": [
+            "AGE_OVER_89"
+          ],
+          "precision": 0.9831,
+          "span_recall": 0.9831,
+          "threshold": 0.3,
+          "typed_recall": 0.7288,
+          "useful_text_preservation": 1.0
+        },
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 1.0,
+            "CERTIFICATE_NUMBER": 1.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 1.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 1.0,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 1.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 11.0,
+          "document_leakage_rate": 0.1,
+          "f1": 0.9831,
+          "false_negatives": 1,
+          "false_positives": 1,
+          "missed_categories": [
+            "AGE_OVER_89"
+          ],
+          "precision": 0.9831,
+          "span_recall": 0.9831,
+          "threshold": 0.4,
+          "typed_recall": 0.7288,
+          "useful_text_preservation": 1.0
+        },
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 1.0,
+            "CERTIFICATE_NUMBER": 1.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 1.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 1.0,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 1.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 1.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 11.0,
+          "document_leakage_rate": 0.1,
+          "f1": 0.9831,
+          "false_negatives": 1,
+          "false_positives": 1,
+          "missed_categories": [
+            "AGE_OVER_89"
+          ],
+          "precision": 0.9831,
+          "span_recall": 0.9831,
+          "threshold": 0.5,
+          "typed_recall": 0.7119,
+          "useful_text_preservation": 1.0
+        },
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 1.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 1.0,
+            "CERTIFICATE_NUMBER": 1.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 1.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 1.0,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 0.6667,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 1.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 21.0,
+          "document_leakage_rate": 0.2,
+          "f1": 0.9744,
+          "false_negatives": 2,
+          "false_positives": 1,
+          "missed_categories": [
+            "AGE_OVER_89"
+          ],
+          "precision": 0.9828,
+          "span_recall": 0.9661,
+          "threshold": 0.6,
+          "typed_recall": 0.7119,
+          "useful_text_preservation": 1.0
+        },
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 0.6667,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 1.0,
+            "CERTIFICATE_NUMBER": 1.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 1.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 1.0,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 0.3333,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 1.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 40.0,
+          "document_leakage_rate": 0.3,
+          "f1": 0.9649,
+          "false_negatives": 4,
+          "false_positives": 0,
+          "missed_categories": [
+            "AGE_OVER_89"
+          ],
+          "precision": 1.0,
+          "span_recall": 0.9322,
+          "threshold": 0.7,
+          "typed_recall": 0.7119,
+          "useful_text_preservation": 1.0
+        },
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 0.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 1.0,
+            "CERTIFICATE_NUMBER": 1.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 1.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 1.0,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 0.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 1.0,
+            "ORGANIZATION": 1.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 1.0,
+            "PHONE": 1.0,
+            "POSTAL_CODE": 0.3333,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 1.0,
+            "USERNAME": 1.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 70.0,
+          "document_leakage_rate": 0.5,
+          "f1": 0.9369,
+          "false_negatives": 7,
+          "false_positives": 0,
+          "missed_categories": [
+            "ADDRESS",
+            "AGE_OVER_89",
+            "IP_ADDRESS"
+          ],
+          "precision": 1.0,
+          "span_recall": 0.8814,
+          "threshold": 0.8,
+          "typed_recall": 0.7119,
+          "useful_text_preservation": 1.0
+        },
+        {
+          "by_category": {
+            "ACCESSION": 1.0,
+            "ACCOUNT_NUMBER": 1.0,
+            "ADDRESS": 0.0,
+            "AGE_OVER_89": 0.0,
+            "BIOMETRIC_ID": 0.0,
+            "CERTIFICATE_NUMBER": 0.0,
+            "DATE": 1.0,
+            "DEVICE_ID": 1.0,
+            "EMAIL": 1.0,
+            "EMPLOYER": 0.0,
+            "FAX": 1.0,
+            "GEOGRAPHY": 0.5,
+            "HEALTH_PLAN": 1.0,
+            "HOSPITAL": 1.0,
+            "IP_ADDRESS": 0.0,
+            "LICENSE_NUMBER": 1.0,
+            "MRN": 1.0,
+            "ORGANIZATION": 0.0,
+            "PATIENT_ID": 1.0,
+            "PERSON": 1.0,
+            "PERSON_CLINICIAN": 1.0,
+            "PERSON_RELATIVE": 0.0,
+            "PHONE": 0.75,
+            "POSTAL_CODE": 0.0,
+            "SSN": 1.0,
+            "UNUSUAL_ID": 1.0,
+            "URL": 1.0,
+            "USERNAME": 0.0,
+            "VEHICLE_ID": 1.0
+          },
+          "composite_cost": 170.0,
+          "document_leakage_rate": 0.7,
+          "f1": 0.8317,
+          "false_negatives": 17,
+          "false_positives": 0,
+          "missed_categories": [
+            "ADDRESS",
+            "AGE_OVER_89",
+            "BIOMETRIC_ID",
+            "CERTIFICATE_NUMBER",
+            "EMPLOYER",
+            "IP_ADDRESS",
+            "ORGANIZATION",
+            "PERSON_RELATIVE",
+            "POSTAL_CODE",
+            "USERNAME"
+          ],
+          "precision": 1.0,
+          "span_recall": 0.7119,
+          "threshold": 0.9,
+          "typed_recall": 0.5932,
+          "useful_text_preservation": 1.0
+        }
+      ],
+      "wall_seconds": 23.2
+    }
+  }
+}

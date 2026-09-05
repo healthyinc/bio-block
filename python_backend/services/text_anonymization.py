@@ -13,9 +13,12 @@ from services.ner_phi_detector import (
 )
 from services.local_model_detectors import (
     MODE_OFFLINE,
+    SOURCE_GLINER,
+    SOURCE_STANFORD,
     GlinerPiiDetector,
     LocalModelError,
     StanfordClinicalDetector,
+    calibrated_config_for,
     resolve_model_mode,
 )
 from services.phi_detection import (
@@ -131,10 +134,13 @@ def _build_detectors(
 ) -> Tuple[PhiDetector, ...]:
     """Cached detector chain. Model adapters only propose spans."""
     if model_mode == MODE_OFFLINE:
+        # Each model carries its own calibrated threshold. They were selected
+        # jointly against the combined chain's recall, not in isolation, so
+        # they are not interchangeable.
         return (
             StructuredPatternDetector(),
-            StanfordClinicalDetector(),
-            GlinerPiiDetector(),
+            StanfordClinicalDetector(calibrated_config_for(SOURCE_STANFORD)),
+            GlinerPiiDetector(calibrated_config_for(SOURCE_GLINER)),
             SpacyNerPhiDetector(
                 model_name,
                 high_recall_proper_nouns=profile == "strict",

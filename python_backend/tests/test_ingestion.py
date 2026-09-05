@@ -293,7 +293,10 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertFalse(body["tabular_summary"]["k_anonymity_satisfied"])
         self.assertEqual(body["tabular_summary"]["min_group_size"], 2)
 
-    def test_csv_download_endpoint_returns_anonymized_csv_file(self):
+    def test_csv_download_endpoint_reports_analysis_without_releasing_rows(self):
+        # Phase 9: /anonymize_csv no longer streams rows. It shares the single
+        # release-decision function with /api/v1/ingest, which holds CSV at
+        # manual review, so the analysis comes back but the rows do not.
         csv_content = (
             b"name,email,phone,mrn,age,gender,diagnosis\n"
             b"Alice Adams,alice@example.com,555-111-2222,MRN-001,31,F,flu\n"
@@ -309,28 +312,34 @@ class TestIngestionRouting(unittest.TestCase):
                 data={"k": "2", "l": "2"},
             )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.headers["content-type"].startswith("text/csv"))
-        self.assertIn("anonymized_dataset.csv", response.headers["content-disposition"])
-        self.assertEqual(
-            response.headers["x-bioblock-anonymization-status"],
-            "completed_with_warnings",
+        self.assertEqual(response.status_code, 422)
+        self.assertTrue(
+            response.headers["content-type"].startswith("application/json")
         )
-        self.assertEqual(response.headers["x-bioblock-k-anonymity-satisfied"], "true")
-        self.assertEqual(response.headers["x-bioblock-l-diversity-satisfied"], "true")
+        body = response.json()
+        self.assertEqual(body["anonymization_status"], "completed_with_warnings")
+        self.assertFalse(body["release_decision"]["releasable"])
+        self.assertIsNone(body["release_decision"]["artifact_sha256"])
+        self.assertEqual(body["serialized_output_validation"], "passed")
+        self.assertTrue(body["k_anonymity_satisfied"])
+        self.assertTrue(body["l_diversity_satisfied"])
 
-        downloaded = response.content.decode("utf-8")
-        self.assertIn("age,gender,diagnosis", downloaded)
-        self.assertIn("31-32,*,flu", downloaded)
-        self.assertNotIn("name", downloaded.splitlines()[0])
-        self.assertNotIn("email", downloaded.splitlines()[0])
+        # The analysis is still useful: the removal plan is reported.
+        summary = body["tabular_summary"]
+        self.assertEqual(summary["rows_in"], 4)
+        self.assertIn("name", summary["columns_removed"])
+        self.assertIn("email", summary["columns_removed"])
+        self.assertEqual(summary["output_columns"], ["age", "gender", "diagnosis"])
+
+        # No row content, generalized or otherwise, and no raw identifier.
+        self.assertNotIn("31-32", response.text)
         for raw_identifier in (
             "Alice Adams",
             "alice@example.com",
             "555-111-2222",
             "MRN-001",
         ):
-            self.assertNotIn(raw_identifier, downloaded)
+            self.assertNotIn(raw_identifier, response.text)
 
     def test_csv_download_endpoint_ignores_swagger_placeholder_strings(self):
         csv_content = (
@@ -354,10 +363,17 @@ class TestIngestionRouting(unittest.TestCase):
                 },
             )
 
-        self.assertEqual(response.status_code, 200)
-        downloaded = response.content.decode("utf-8")
-        self.assertIn("31-32,*,flu", downloaded)
-        self.assertNotIn("Alice Adams", downloaded)
+        # The placeholder strings are still ignored rather than treated as
+        # column names: the default classification runs and the analysis
+        # succeeds. Only the row release changed.
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["anonymization_status"], "completed_with_warnings")
+        self.assertEqual(
+            body["tabular_summary"]["output_columns"],
+            ["age", "gender", "diagnosis"],
+        )
+        self.assertNotIn("Alice Adams", response.text)
 
     def test_openapi_includes_csv_download_endpoint(self):
         response = client.get("/openapi.json")

@@ -12,5 +12,20 @@
     "license": "Apache-2.0",
     "weight_file": "pytorch_model.bin",
     "weight_sha256": "3003753fba99e40645cf088c7367a2c6211fc174897dc64f1f9c147c29d18d2d"
+  },
+  "mdeberta_backbone": {
+    "repo_id": "microsoft/mdeberta-v3-base",
+    "revision": "a0484667b22365f84929a935b5e50a51f71f159d",
+    "license": "MIT",
+    "weight_file": "spm.model",
+    "weight_sha256": "13c8d666d62a7bc4ac8f040aab68e942c861f93303156cc28f5c7e885d86d6e3",
+    "role": "tokenizer_backbone",
+    "required_by": "gliner_multi_pii",
+    "allow_patterns": [
+      "config.json",
+      "spm.model",
+      "tokenizer_config.json"
+    ],
+    "alias_ref": "main"
   }
 }

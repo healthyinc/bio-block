@@ -573,9 +573,93 @@ def test_manifest_contains_no_local_paths_or_credentials():
     raw = models.MANIFEST_PATH.read_text(encoding="utf-8")
     parsed = json.loads(raw)
 
-    assert "token" not in raw.casefold()
-    assert "password" not in raw.casefold()
+    # Credential-shaped *keys*, not a bare substring: "tokenizer_backbone" is
+    # legitimate vocabulary and a substring check on "token" flags it.
+    credential_keys = {
+        "token",
+        "auth_token",
+        "access_token",
+        "hf_token",
+        "api_key",
+        "apikey",
+        "password",
+        "secret",
+        "credential",
+    }
+    for entry in parsed.values():
+        assert not credential_keys & {key.casefold() for key in entry}
+
+    # No bearer-style literal anywhere, and no absolute machine path.
+    assert "hf_" not in raw.replace("hf_token", "").casefold()
+    assert "c:\\" not in raw.casefold()
+    assert "/users/" not in raw.casefold()
+    assert "/home/" not in raw.casefold()
     assert all("revision" in entry for entry in parsed.values())
+
+
+def test_manifest_declares_the_gliner_tokenizer_backbone():
+    """GLiNER resolves a tokenizer by repository name at construction time.
+
+    That is a second supply-chain input, so it is pinned and checksummed like
+    any other rather than being picked up from whatever happens to be cached.
+    """
+    manifest = models.load_model_manifest()
+
+    assert "mdeberta_backbone" in manifest
+    backbone = manifest["mdeberta_backbone"]
+    assert backbone.repo_id == "microsoft/mdeberta-v3-base"
+    assert len(backbone.revision) == 40
+    assert len(backbone.weight_sha256) == 64
+    assert backbone.role == "tokenizer_backbone"
+    assert backbone.required_by == "gliner_multi_pii"
+    # Only the tokenizer files, not the backbone's own 1 GB of weights.
+    assert "spm.model" in backbone.allow_patterns
+    assert "pytorch_model.bin" not in backbone.allow_patterns
+
+
+def test_backbones_are_excluded_from_the_detector_set():
+    assert set(models.detector_specs()) == {
+        "stanford_deidentifier",
+        "gliner_multi_pii",
+    }
+    assert [s.repo_id for s in models.backbone_specs_for("gliner_multi_pii")] == [
+        "microsoft/mdeberta-v3-base"
+    ]
+
+
+def test_locked_thresholds_are_calibrated_and_non_zero():
+    """Zero is the uncalibrated default and must not survive as production."""
+    locked = models.load_locked_thresholds()
+
+    assert locked, "no calibrated thresholds are locked"
+    for name in ("stanford_deidentifier", "gliner_multi_pii"):
+        assert locked[name]["candidate_threshold"] > 0.0
+        config = models.calibrated_config_for(name)
+        assert config.calibrated is True
+        assert config.candidate_threshold > 0.0
+
+
+def test_environment_override_beats_the_locked_calibration(monkeypatch):
+    monkeypatch.setenv("PHI_CANDIDATE_THRESHOLD", "0.42")
+    monkeypatch.setenv("PHI_REDACTION_THRESHOLD", "0.42")
+
+    config = models.calibrated_config_for("gliner_multi_pii")
+
+    assert config.candidate_threshold == 0.42
+    # An operator override is not the committed calibration.
+    assert config.calibrated is False
+
+
+def test_missing_calibration_falls_back_to_redacting_everything(monkeypatch):
+    monkeypatch.setattr(models, "load_locked_thresholds", lambda: {})
+    monkeypatch.delenv("PHI_CANDIDATE_THRESHOLD", raising=False)
+    monkeypatch.delenv("PHI_REDACTION_THRESHOLD", raising=False)
+
+    config = models.calibrated_config_for("gliner_multi_pii")
+
+    # Absent calibration over-redacts rather than under-redacts.
+    assert config.candidate_threshold == 0.0
+    assert config.calibrated is False
 
 
 def test_model_errors_never_carry_detected_values(monkeypatch):

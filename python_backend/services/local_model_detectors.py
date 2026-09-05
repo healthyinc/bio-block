@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from services.privacy_contracts import PhiEntity
 
@@ -98,6 +98,19 @@ class ModelSpec:
     license: str
     weight_file: str
     weight_sha256: str
+    #: "detector" for a model that proposes spans, "tokenizer_backbone" for a
+    #: transitive dependency a detector loads by name at construction time.
+    role: str = "detector"
+    #: Which detector requires this entry, for backbone specs.
+    required_by: Optional[str] = None
+    #: Restrict a download to the files actually needed. GLiNER's backbone is
+    #: used for its tokenizer only, so its 1 GB of encoder weights are skipped.
+    allow_patterns: Tuple[str, ...] = ()
+    #: A backbone is resolved by repo name at load time, not by path, so the
+    #: cache needs a branch ref pointing at the pinned commit for offline
+    #: resolution to succeed. The content is still the pinned revision and is
+    #: still checksum-verified.
+    alias_ref: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -146,6 +159,65 @@ def detector_config_from_env() -> DetectorConfig:
         raise LocalModelError("invalid_model_configuration", 500) from exc
 
 
+THRESHOLDS_PATH = (
+    Path(__file__).resolve().parent.parent / "config" / "detection_thresholds.json"
+)
+
+
+@lru_cache(maxsize=1)
+def load_locked_thresholds() -> Dict[str, Dict[str, Any]]:
+    """Load the calibrated, locked per-detector thresholds.
+
+    Absent or unreadable, this returns an empty mapping and callers fall back
+    to the uncalibrated zero defaults, which redact every candidate. Missing
+    calibration therefore over-redacts rather than under-redacts.
+    """
+    try:
+        if not THRESHOLDS_PATH.is_file():
+            return {}
+        data = json.loads(THRESHOLDS_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise LocalModelError("invalid_threshold_configuration", 500) from exc
+    return data.get("detectors", {})
+
+
+def calibrated_config_for(detector_name: str) -> DetectorConfig:
+    """Config for one detector, preferring an explicit environment override.
+
+    Precedence: environment variable, then the locked calibration file, then
+    the conservative zero default. An environment override always wins so an
+    operator can tighten or loosen a single deployment without editing the
+    committed calibration.
+    """
+    env_candidate = os.getenv("PHI_CANDIDATE_THRESHOLD")
+    env_redaction = os.getenv("PHI_REDACTION_THRESHOLD")
+    locked = load_locked_thresholds().get(detector_name, {})
+
+    try:
+        candidate = float(
+            env_candidate
+            if env_candidate is not None
+            else locked.get("candidate_threshold", DEFAULT_CANDIDATE_THRESHOLD)
+        )
+        redaction = float(
+            env_redaction
+            if env_redaction is not None
+            else locked.get("redaction_threshold", candidate)
+        )
+        base = detector_config_from_env()
+        return DetectorConfig(
+            candidate_threshold=candidate,
+            redaction_threshold=max(candidate, redaction),
+            chunk_size=base.chunk_size,
+            chunk_overlap=base.chunk_overlap,
+            batch_size=base.batch_size,
+            inference_budget_seconds=base.inference_budget_seconds,
+            calibrated=bool(locked) and env_candidate is None,
+        )
+    except (TypeError, ValueError) as exc:
+        raise LocalModelError("invalid_model_configuration", 500) from exc
+
+
 def resolve_model_mode() -> str:
     """Return the validated model mode; unknown values fail closed."""
     mode = os.getenv(MODEL_MODE_ENV_VAR, DEFAULT_MODEL_MODE).strip()
@@ -162,12 +234,34 @@ def local_models_enabled() -> bool:
 def load_model_manifest() -> Dict[str, ModelSpec]:
     try:
         data = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-        return {
-            name: ModelSpec(name=name, **values)
-            for name, values in data.items()
-        }
+        specs: Dict[str, ModelSpec] = {}
+        for name, values in data.items():
+            fields = dict(values)
+            # Lists are not hashable and ModelSpec is frozen.
+            if "allow_patterns" in fields:
+                fields["allow_patterns"] = tuple(fields["allow_patterns"])
+            specs[name] = ModelSpec(name=name, **fields)
+        return specs
     except Exception as exc:
         raise LocalModelError("invalid_model_manifest", 500) from exc
+
+
+def detector_specs() -> Dict[str, ModelSpec]:
+    """Manifest entries that are detectors, excluding transitive backbones."""
+    return {
+        name: spec
+        for name, spec in load_model_manifest().items()
+        if spec.role == "detector"
+    }
+
+
+def backbone_specs_for(detector_name: str) -> List[ModelSpec]:
+    """Pinned dependencies a detector loads by repository name at load time."""
+    return [
+        spec
+        for spec in load_model_manifest().values()
+        if spec.role != "detector" and spec.required_by == detector_name
+    ]
 
 
 def overlapping_chunks(
@@ -276,6 +370,7 @@ def _offline_snapshot(spec: ModelSpec) -> str:
             repo_id=spec.repo_id,
             revision=spec.revision,
             local_files_only=True,
+            **({"allow_patterns": list(spec.allow_patterns)} if spec.allow_patterns else {}),
         )
     except Exception as exc:
         raise LocalModelError("model_files_unavailable") from exc
@@ -313,9 +408,18 @@ def load_stanford_pipeline() -> Any:
 
 @lru_cache(maxsize=1)
 def load_gliner_model() -> Any:
-    """Load the open-ended PII model once per worker, offline only."""
+    """Load the open-ended PII model once per worker, offline only.
+
+    GLiNER's snapshot ships only its own weights and config. At construction
+    it resolves a tokenizer backbone *by repository name*, which is a second
+    supply-chain input. That backbone is pinned and checksum-verified here
+    before the model is built, so an unpinned or tampered tokenizer cannot be
+    picked up silently.
+    """
     spec = load_model_manifest()["gliner_multi_pii"]
     snapshot = _offline_snapshot(spec)
+    for backbone in backbone_specs_for("gliner_multi_pii"):
+        _offline_snapshot(backbone)
     try:
         from gliner import GLiNER
 
