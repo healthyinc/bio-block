@@ -399,7 +399,7 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertNotIn("john.doe@example.com", body["anonymized_text"])
         self.assertEqual(body["date_strategy"], "redact")
         self.assertEqual(body["text_identifier_strategy"], "redact")
-        self.assertIn("<REDACTED_MRN>", body["anonymized_text"])
+        self.assertRegex(body["anonymized_text"], r"RECORD_\d{3,}")
         self.assertIn("<REDACTED_EMAIL>", body["anonymized_text"])
         self.assertIn("diabetes", body["anonymized_text"])
         self.assertEqual(body["detected_entities"]["MEDICAL_RECORD_NUMBER"], 1)
@@ -425,7 +425,7 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(body["detected_modality"], "text")
         self.assertEqual(body["anonymization_status"], "completed")
         self.assertNotIn("PT-1001", body["anonymized_text"])
-        self.assertIn("<REDACTED_PATIENT_ID>", body["anonymized_text"])
+        self.assertRegex(body["anonymized_text"], r"PATIENTID_\d{3,}")
 
     def test_dicom_extension_routes_to_dicom_handler(self):
         with patch("services.ingestion.redact_dicom_pixels", fake_dicom_pixel_redaction):
@@ -554,8 +554,8 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertNotIn("Rahul Sharma", serialized)
         self.assertNotIn("Amit Verma", serialized)
         self.assertNotIn("458921", serialized)
-        self.assertIn("<REDACTED_NAME>", body["anonymized_text"])
-        self.assertIn("<REDACTED_MRN>", body["anonymized_text"])
+        self.assertRegex(body["anonymized_text"], r"(?:PATIENT|PROVIDER)_\d{3,}")
+        self.assertRegex(body["anonymized_text"], r"RECORD_\d{3,}")
         self.assertEqual(body["detected_entities"]["PERSON"], 2)
         self.assertEqual(body["detected_entities"]["MEDICAL_RECORD_NUMBER"], 1)
         for raw_span_key in (
@@ -598,7 +598,7 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertNotIn("Kartik", response.text)
-        self.assertIn("<REDACTED_NAME>", body["anonymized_text"])
+        self.assertRegex(body["anonymized_text"], r"(?:PATIENT|PROVIDER)_\d{3,}")
         self.assertEqual(body["anonymization_status"], "completed")
         self.assertEqual(body["detected_entities"], {"PERSON": 1})
         self.assertEqual(body["detection_sources"], {"strict_proper_noun": 1})

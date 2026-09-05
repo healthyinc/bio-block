@@ -1,9 +1,24 @@
 import os
+import re
 import sys
 
 import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Phase 10: identifiers are replaced with consistent study-local surrogates
+# (PATIENT_001, PROVIDER_001, RECORD_001) rather than a single fixed
+# placeholder, so coreference survives. The privacy assertions below are
+# unchanged: the original value must still be absent.
+SURROGATE_RE = re.compile(
+    r"\b(?:PATIENT|PROVIDER|FACILITY|ORG|PLACE|ADDRESS|RECORD|PATIENTID|"
+    r"PLAN|ACCESSION|DEVICE|IDENTIFIER|USER)_\d{3,}"
+)
+
+
+def surrogate_count(text):
+    return len(SURROGATE_RE.findall(text))
+
 
 from services import ner_phi_detector  # noqa: E402
 from services.ingestion import anonymize_text  # noqa: E402
@@ -44,7 +59,7 @@ def test_contextual_person_names_are_replaced(text, name):
     result = anonymize_clinical_text(text, study_salt="study-a")
 
     assert name not in result["anonymized_text"]
-    assert "<REDACTED_NAME>" in result["anonymized_text"]
+    assert SURROGATE_RE.search(result["anonymized_text"])
     assert result["detected_entities"]["PERSON"] == 1
     assert result["detection_sources"][SOURCE_CONTEXT_RULE] == 1
 
@@ -56,7 +71,7 @@ def test_arbitrary_name_failure_case_is_now_safe():
     )
 
     assert result["anonymized_text"] == (
-        "Patient <REDACTED_NAME> was admitted for treatment."
+        "Patient PATIENT_001 was admitted for treatment."
     )
     assert result["trained_ner_active"] is True
     assert result["ner_model"] == DEFAULT_NER_MODEL
@@ -68,7 +83,7 @@ def test_strict_profile_redacts_each_repeated_and_distinct_person():
         "Rahul Sharma was discharged later."
     )
     result = anonymize_clinical_text(text, study_salt="study-a")
-    assert result["anonymized_text"].count("<REDACTED_NAME>") == 3
+    assert surrogate_count(result["anonymized_text"]) == 3
     assert result["detected_entities"]["PERSON"] == 3
     assert "Rahul Sharma" not in result["anonymized_text"]
     assert "Amit Verma" not in result["anonymized_text"]
@@ -80,7 +95,7 @@ def test_strict_person_redaction_does_not_depend_on_study_salt():
     second = anonymize_clinical_text(text, study_salt="study-b")
 
     assert first["anonymized_text"] == second["anonymized_text"]
-    assert "<REDACTED_NAME>" in first["anonymized_text"]
+    assert SURROGATE_RE.search(first["anonymized_text"])
 
 
 def test_surrogate_digest_includes_entity_type():
@@ -326,7 +341,7 @@ def test_strict_profile_records_proper_noun_fallback_when_model_misses_name():
         study_salt="study-a",
     )
 
-    assert result["anonymized_text"].startswith("<REDACTED_NAME>")
+    assert SURROGATE_RE.match(result["anonymized_text"])
     assert result["detection_sources"] == {SOURCE_STRICT_PROPER_NOUN: 1}
 
 
@@ -452,7 +467,7 @@ def test_duplicate_overlapping_detections_replace_once(monkeypatch):
 
     result = _anonymize_with_fake(monkeypatch, text, entities)
 
-    assert result["anonymized_text"].count("<REDACTED_NAME>") == 1
+    assert surrogate_count(result["anonymized_text"]) == 1
     assert "Amit" not in result["anonymized_text"]
     assert result["entity_count"] == 1
 
@@ -465,8 +480,12 @@ def test_adjacent_entities_do_not_corrupt_offsets(monkeypatch):
     ]
 
     result = _anonymize_with_fake(monkeypatch, text, entities)
+    anonymized = result["anonymized_text"]
 
-    assert result["anonymized_text"] == "<REDACTED_NAME><REDACTED_NAME>"
+    # Two adjacent names with no separator: each must get its own surrogate,
+    # they must differ, and nothing of the originals may remain.
+    assert anonymized == "PATIENT_001PATIENT_002"
+    assert "John" not in anonymized and "Sarah" not in anonymized
     assert result["entity_count"] == 2
 
 

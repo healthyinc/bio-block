@@ -41,6 +41,7 @@ from services.privacy_contracts import (
     manual_review_decision,
 )
 from services.privacy_policy import PrivacyPolicyError, resolve_privacy_policy
+from services.utility_contract import UTILITY_VALIDATION_FAILED, contract_for
 
 SUPPORTED_PROFILES = {"safe_harbor_v1", "strict", "research"}
 SUPPORTED_MODALITIES = {"csv", "text", "pdf", "workbook", "dicom", "nifti", "wsi"}
@@ -155,11 +156,30 @@ def _release_decision_for(
     if modality == "text" and handler_result.get("anonymization_status") == "completed":
         residual = handler_result.get("residual_phi_categories") or {}
         if residual:
-            # Redaction did not clear the text. Categories only, never values.
+            # Privacy first, and it is never traded against utility. Redaction
+            # did not clear the text. Categories only, never values.
             return manual_review_decision(
                 "privacy_requirements_not_met",
                 *sorted(f"residual_{category.lower()}" for category in residual),
             )
+
+        # Content the pipeline could not judge safely needs a human.
+        review_reasons = handler_result.get("review_required_reasons") or []
+        if review_reasons:
+            return manual_review_decision(*sorted(set(review_reasons)))
+
+        # Privacy passed. A technically safe but medically useless document is
+        # not a successful research artifact, so utility gates release too.
+        verdict = handler_result.get("utility_verdict")
+        if verdict is not None and not verdict.get("passed", False):
+            reasons = [UTILITY_VALIDATION_FAILED]
+            reasons.extend(f"utility_below_minimum_{n}" for n in sorted(verdict.get("shortfalls", {})))
+            reasons.extend(
+                f"utility_metric_not_measured_{n}"
+                for n in verdict.get("missing_metrics", [])
+            )
+            return manual_review_decision(*reasons)
+
         artifact = SanitizedArtifact(
             content=handler_result["anonymized_text"].encode("utf-8"),
             media_type="text/plain; charset=utf-8",
@@ -168,6 +188,7 @@ def _release_decision_for(
                 "typed_phi_detection",
                 "deterministic_redaction",
                 "residual_phi_rescan",
+                "utility_contract_v1",
             ),
         )
         return issue_release(artifact, "safe_harbor_technical_checks_passed")
@@ -366,8 +387,20 @@ def anonymize_text(
     except TextAnonymizationError as exc:
         raise IngestionError(exc.detail, status_code=exc.status_code) from exc
 
+    # Utility is measured on every run, not only when privacy passes, so the
+    # manifest records both halves of the picture. The measurement happens
+    # inside the anonymizer, which is the only place holding both the original
+    # spans and the output.
+    utility = result.get("utility_metrics", {})
+    contract = contract_for("text")
+    verdict = contract.evaluate(utility) if contract else None
+
     return {
         "residual_phi_categories": residual,
+        "utility_metrics": utility,
+        "utility_verdict": verdict.to_public_dict() if verdict else None,
+        "review_required_reasons": result.get("review_required_reasons", []),
+        "surrogate_counts": result.get("surrogate_counts", {}),
         "handler": "anonymize_text",
         "routing_status": "handler_selected",
         "anonymization_status": result["anonymization_status"],
@@ -609,6 +642,10 @@ def route_for_ingestion(
         response["metadata_summary"] = handler_result["metadata_summary"]
     if "residual_phi_categories" in handler_result:
         response["residual_phi_categories"] = handler_result["residual_phi_categories"]
+    for utility_key in ("utility_metrics", "utility_verdict", "surrogate_counts",
+                        "review_required_reasons"):
+        if handler_result.get(utility_key):
+            response[utility_key] = handler_result[utility_key]
     for document_key in (
         "pdf_summary",
         "workbook_summary",

@@ -31,12 +31,24 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, List, Sequence, Tuple
 
-CORPUS_VERSION = "canary-v2.0"
+CORPUS_VERSION = "canary-v3.0"
 
 PARTITION_DEV = "development"
 PARTITION_CALIB = "calibration"
-PARTITION_TEST = "test"
-PARTITIONS = (PARTITION_DEV, PARTITION_CALIB, PARTITION_TEST)
+#: Phase 9's held-out partition. It has been inspected, so it is diagnostic
+#: data now and must never again be used as evidence of generalisation.
+PARTITION_DIAGNOSTIC = "test"
+#: Phase 10's held-out partition. Untouched until every rule and threshold was
+#: frozen, then run once.
+PARTITION_HELDOUT = "heldout_v2"
+PARTITIONS = (
+    PARTITION_DEV,
+    PARTITION_CALIB,
+    PARTITION_DIAGNOSTIC,
+    PARTITION_HELDOUT,
+)
+#: Kept for callers written before the Phase 9 partition was retired.
+PARTITION_TEST = PARTITION_DIAGNOSTIC
 
 
 # ---------------------------------------------------------------------------
@@ -288,6 +300,43 @@ POOLS: Dict[str, ValuePool] = {
         url="https://portal.example.invalid/chart/4417",
         ip_address="198.51.100.77",
         username="r.balasub2020",
+    ),
+    PARTITION_HELDOUT: ValuePool(
+        person=("Padmavathi Venkataraghavan", "Algernon Fitzwilliam-Crewe"),
+        person_unicode=("Åsa Lindqvist-Öberg", "Bhāskara Rāmānujan"),
+        relative=("Ganesan Venkataraghavan", "Hortensia Fitzwilliam-Crewe"),
+        clinician=("Dr. Shalini Muthukrishnan", "Dr. Peregrine Wolstenholme"),
+        employer="Larkspur Instrumentation GmbH",
+        hospital="Duskwater Priory Teaching Hospital",
+        organization="Ardent Meridian Research Society",
+        address="93 Quillon Hollow Way, Unit 12D",
+        geography="Umberfield Reach, Calderstone Hundred",
+        postal_code="27615",
+        date_iso="2015-08-14",
+        date_us="02/09/1969",
+        date_long="5 November 2013",
+        age_over_89="102",
+        phone="555-0171",
+        phone_intl="+81 3 5550 2244",
+        fax="555-0139",
+        email="p.venkataraghavan@example.invalid",
+        email_unicode="åsa.lindqvist@example.invalid",
+        ssn="321-54-9876",
+        mrn="SYN-2748903",
+        mrn_misspelt_label="Medical Recrod Numbr",
+        patient_id="SYN-PT-6612",
+        health_plan="SYN-PLAN-332211",
+        account_number="ACCT-61204497",
+        license_number="DL-P2748903Q",
+        certificate_number="CERT-PT-90214",
+        device_id="SYN-DEV-554120",
+        vehicle_id="VIN-WBA3A5C56DF123789",
+        accession="SYN-ACC-611903",
+        biometric_id="RETINA-TEMPLATE-D2290",
+        unusual_id="NN;;3391-V7;;RR",
+        url="https://notes.example.invalid/case/6612",
+        ip_address="198.18.51.203",
+        username="p.venkat_1969",
     ),
     PARTITION_TEST: ValuePool(
         person=("Meenakshi Raghunathan", "Cornelius Ashdown-Blythe"),

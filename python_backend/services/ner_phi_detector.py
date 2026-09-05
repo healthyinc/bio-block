@@ -3,6 +3,10 @@ import re
 from functools import lru_cache
 from typing import Any, List
 
+from services.clinical_vocabulary import (
+    is_unconditional_clinical_term,
+    protects_from_person_label,
+)
 from services.phi_detection import (
     SOURCE_CONTEXT_RULE,
     SOURCE_NER,
@@ -35,6 +39,7 @@ _NON_PHI_CLINICAL_TERMS = {
 }
 _NON_PHI_PERSON_TERMS = {"parkinson", "alzheimer", "crohn", "hodgkin", "covid-19"}
 _DATE_LIKE_TEXT = re.compile(r"(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4})")
+_AGE_PHRASE = re.compile(r"\d{1,3}\s*(?:-|\s)?\s*(?:years?|yrs?|y/?o|year[- ]old)\b.*")
 _CLINICAL_SUBJECT_PREDICATES = {
     "admit",
     "complain",
@@ -206,25 +211,31 @@ def _context_name_end(rule_name: str, doc: Any, start: int, end: int) -> int:
     return name_end
 
 
+def _following_words(entity: Any, count: int = 4) -> List[str]:
+    """Surface tokens after an entity, for clinical-construction lookahead."""
+    doc = entity.doc
+    return [doc[i].text for i in range(entity.end, min(entity.end + count, len(doc)))]
+
+
 def _should_keep_ner_entity(entity: Any) -> bool:
     normalized = entity.text.strip().casefold()
     if entity.label_ not in {"DATE", "TIME"} and _DATE_LIKE_TEXT.fullmatch(normalized):
         return False
-    person_term = re.sub(r"\s+(?:disease|lymphoma)$", "", normalized)
-    if entity.label_ == "PERSON" and person_term in _NON_PHI_PERSON_TERMS:
-        if person_term == "covid-19":
+
+    # The vocabulary is consulted for every name-shaped label, not only
+    # PERSON. spaCy routinely tags eponyms such as Addison, Bell and Cushing
+    # as ORG, and the previous PERSON-only check never saw them.
+    if entity.label_ in {"PERSON", "ORG", "FAC", "NORP", "LOC", "GPE"}:
+        if protects_from_person_label(entity.text, _following_words(entity)):
             return False
-        has_clinical_suffix = normalized != person_term
-        next_token_is_clinical = (
-            entity.end < len(entity.doc)
-            and entity.doc[entity.end].lower_ in {"disease", "lymphoma"}
-        )
-        if has_clinical_suffix or next_token_is_clinical:
-            return False
-    if entity.label_ == "ORG" and normalized in _NON_PHI_CLINICAL_TERMS:
-        return False
+
     if entity.label_ == "DATE" and normalized.isdigit():
         return len(normalized) == 4 and 1800 <= int(normalized) <= 2199
+    # "62 years old" is an age, not a date. Ages are handled by the dedicated
+    # age rule, which knows the Safe Harbor 90+ threshold; letting the date
+    # label swallow them destroys an ordinary clinical fact.
+    if entity.label_ == "DATE" and _AGE_PHRASE.fullmatch(normalized):
+        return False
     return True
 
 
@@ -233,25 +244,19 @@ def _spans_overlap(start: int, end: int, entities: List[DetectedEntity]) -> bool
 
 
 def _is_safe_strict_proper_noun(doc: Any, start: int, end: int) -> bool:
-    normalized = doc[start:end].text.strip().casefold()
+    """True when this proper noun is clinical vocabulary rather than a name."""
+    span_text = doc[start:end].text
+    normalized = span_text.strip().casefold()
     if normalized in _NON_NAME_PROPER_NOUNS:
         return True
-    if normalized in _NON_PHI_CLINICAL_TERMS:
-        return True
-    proper_tokens = [token.lower_ for token in doc[start:end] if token.is_alpha]
-    if proper_tokens and all(
-        token in _NON_PHI_CLINICAL_TERMS for token in proper_tokens
-    ):
+    if is_unconditional_clinical_term(span_text):
         return True
 
-    person_term = re.sub(r"\s+(?:disease|lymphoma)$", "", normalized)
-    if person_term not in _NON_PHI_PERSON_TERMS:
-        return False
-    if person_term == "covid-19":
-        return True
-    if normalized != person_term:
-        return True
-    return end < len(doc) and doc[end].lower_ in {"disease", "lymphoma"}
+    # Lookahead skips the possessive: "Parkinson's disease" tokenizes as
+    # Parkinson + 's + disease, so a single-token lookahead lands on the
+    # apostrophe and wrongly concludes the eponym is a surname.
+    following = [doc[i].text for i in range(end, min(end + 4, len(doc)))]
+    return protects_from_person_label(span_text, following)
 
 
 def _strict_proper_noun_entities(

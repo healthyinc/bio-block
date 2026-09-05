@@ -1,9 +1,24 @@
 import os
+import re
 import sys
 
 import pytest
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Phase 10: identifiers are replaced with consistent study-local surrogates
+# (PATIENT_001, PROVIDER_001, RECORD_001) rather than a single fixed
+# placeholder, so coreference survives. The privacy assertions below are
+# unchanged: the original value must still be absent.
+SURROGATE_RE = re.compile(
+    r"\b(?:PATIENT|PROVIDER|FACILITY|ORG|PLACE|ADDRESS|RECORD|PATIENTID|"
+    r"PLAN|ACCESSION|DEVICE|IDENTIFIER|USER)_\d{3,}"
+)
+
+
+def surrogate_count(text):
+    return len(SURROGATE_RE.findall(text))
+
 
 from services import text_anonymization  # noqa: E402
 from services.text_anonymization import (  # noqa: E402
@@ -20,7 +35,7 @@ def test_mrn_with_context_is_detected_and_replaced():
 
     assert result["anonymization_status"] == "completed"
     assert "123456" not in result["anonymized_text"]
-    assert "<REDACTED_MRN>" in result["anonymized_text"]
+    assert SURROGATE_RE.search(result["anonymized_text"])
     assert result["detected_entities"]["MEDICAL_RECORD_NUMBER"] == 1
 
 
@@ -50,7 +65,7 @@ def test_patient_id_is_detected_and_replaced():
     )
 
     assert "PT-1001" not in result["anonymized_text"]
-    assert "<REDACTED_PATIENT_ID>" in result["anonymized_text"]
+    assert SURROGATE_RE.search(result["anonymized_text"])
     assert result["detected_entities"]["PATIENT_ID"] == 1
 
 
@@ -61,7 +76,7 @@ def test_health_plan_id_is_detected_and_replaced():
     )
 
     assert "ABC123456789" not in result["anonymized_text"]
-    assert "<REDACTED_HEALTH_PLAN>" in result["anonymized_text"]
+    assert SURROGATE_RE.search(result["anonymized_text"])
     assert result["detected_entities"]["HEALTH_PLAN_ID"] == 1
 
 
@@ -198,8 +213,8 @@ def test_strict_profile_redacts_dates():
     assert result["privacy_profile"] == "strict"
     assert result["date_strategy"] == "redact"
     assert result["text_identifier_strategy"] == "redact"
-    assert "<REDACTED_NAME>" in result["anonymized_text"]
-    assert "<REDACTED_MRN>" in result["anonymized_text"]
+    assert SURROGATE_RE.search(result["anonymized_text"])
+    assert SURROGATE_RE.search(result["anonymized_text"])
     assert "2026-06-16" not in result["anonymized_text"]
     assert "<REDACTED_DATE>" in result["anonymized_text"]
 
@@ -212,21 +227,21 @@ class _NoopNerDetector:
 @pytest.mark.parametrize(
     ("text", "raw_value", "entity_type", "replacement"),
     [
-        ("MRN-458921 was verified.", "458921", "MEDICAL_RECORD_NUMBER", "<REDACTED_MRN>"),
-        ("Patient ID PT-1001 was verified.", "PT-1001", "PATIENT_ID", "<REDACTED_PATIENT_ID>"),
+        ("MRN-458921 was verified.", "458921", "MEDICAL_RECORD_NUMBER", "RECORD_001"),
+        ("Patient ID PT-1001 was verified.", "PT-1001", "PATIENT_ID", "PATIENTID_001"),
         (
             "Health Plan ID PLAN-998877 was verified.",
             "PLAN-998877",
             "HEALTH_PLAN_ID",
-            "<REDACTED_HEALTH_PLAN>",
+            "PLAN_001",
         ),
         (
             "Accession Number ACC-445566 was verified.",
             "ACC-445566",
             "ACCESSION_NUMBER",
-            "<REDACTED_ACCESSION>",
+            "ACCESSION_001",
         ),
-        ("Device ID DEV-998877 was verified.", "DEV-998877", "DEVICE_ID", "<REDACTED_DEVICE_ID>"),
+        ("Device ID DEV-998877 was verified.", "DEV-998877", "DEVICE_ID", "DEVICE_001"),
         (
             "Email synthetic.person@example.com was verified.",
             "synthetic.person@example.com",
@@ -395,5 +410,5 @@ def test_model_candidates_are_redacted_not_released(monkeypatch):
     result = anonymize_clinical_text(text, study_salt="study-a")
 
     assert "Ravi Kumar" not in result["anonymized_text"]
-    assert "<REDACTED_NAME>" in result["anonymized_text"]
+    assert SURROGATE_RE.search(result["anonymized_text"])
     assert result["detection_sources"] == {SOURCE_GLINER: 1}

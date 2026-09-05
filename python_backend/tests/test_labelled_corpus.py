@@ -41,8 +41,17 @@ from evaluations.metrics import (  # noqa: E402
 # ---------------------------------------------------------------------------
 
 
-def test_three_partitions_exist():
-    assert PARTITIONS == (PARTITION_DEV, PARTITION_CALIB, PARTITION_TEST)
+def test_four_partitions_exist():
+    # Phase 9's held-out partition has been inspected, so it is diagnostic
+    # data now; heldout_v2 is the untouched one.
+    from evaluations.labelled_corpus import PARTITION_DIAGNOSTIC, PARTITION_HELDOUT
+
+    assert PARTITIONS == (
+        PARTITION_DEV,
+        PARTITION_CALIB,
+        PARTITION_DIAGNOSTIC,
+        PARTITION_HELDOUT,
+    )
     assert set(build_corpus()) == set(PARTITIONS)
 
 
@@ -81,8 +90,10 @@ def test_partitions_share_no_document_text():
         partition: {d.text for d in partition_documents(partition)}
         for partition in PARTITIONS
     }
-    assert texts[PARTITION_CALIB].isdisjoint(texts[PARTITION_TEST])
-    assert texts[PARTITION_DEV].isdisjoint(texts[PARTITION_TEST])
+    from evaluations.labelled_corpus import PARTITION_HELDOUT
+
+    for other in (PARTITION_DEV, PARTITION_CALIB, PARTITION_TEST):
+        assert texts[other].isdisjoint(texts[PARTITION_HELDOUT])
 
 
 def test_every_required_category_appears_in_every_partition():

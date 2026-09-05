@@ -1,0 +1,205 @@
+{
+  "calibration": {
+    "corpus_version": "canary-v3.0",
+    "failures": [],
+    "manifest_count": 10,
+    "manifest_example": {
+      "artifact_id": "calibration_names",
+      "categories_transformed": {
+        "FACILITY": 1,
+        "ORGANIZATION": 3,
+        "PERSON": 5
+      },
+      "contract_version": "utility-contract-v1",
+      "detection_sources": {
+        "context_rule": 3,
+        "ner": 5,
+        "strict_proper_noun": 1
+      },
+      "fields_changed": {
+        "by_surrogate_kind": {
+          "FACILITY": 1,
+          "ORG": 3,
+          "PATIENT": 4,
+          "PROVIDER": 1
+        },
+        "distinct_entities_replaced": 9,
+        "removed_or_replaced": 9
+      },
+      "manifest_version": "transformation-manifest-v1",
+      "modality": "text",
+      "model_mode": "offline",
+      "policy_version": "safe_harbor_v1",
+      "privacy_checks": {
+        "passed": true,
+        "residual_categories": {}
+      },
+      "reason_codes": [
+        "safe_harbor_technical_checks_passed"
+      ],
+      "regions_modified": {
+        "pixel_regions": 0,
+        "text_spans": 9
+      },
+      "release_decision": "releasable",
+      "transformation_types": {
+        "generalized": 0,
+        "redacted_fixed_placeholder": 0,
+        "replaced_with_surrogate": 9
+      },
+      "utility_checks": {
+        "metrics": {
+          "clinical_numbers_in_input": 0,
+          "clinical_numbers_preserved": 0,
+          "clinical_term_preservation": 1.0,
+          "clinical_terms_in_input": 0,
+          "clinical_terms_preserved": 0,
+          "content_token_preservation": 1.0,
+          "content_tokens_in_input": 28,
+          "content_tokens_preserved": 28,
+          "numeric_preservation": 1.0
+        },
+        "passed": true
+      }
+    },
+    "model_mode": "offline",
+    "partition": "calibration",
+    "performance": {
+      "documents": 10,
+      "latency_ms_max": 55939.24,
+      "latency_ms_mean": 10000.62
+    },
+    "privacy": {
+      "document_leakage_rate": 0.0,
+      "documents_with_residual_findings": 6,
+      "f1": 0.8551,
+      "false_negatives": 0,
+      "false_positives": 20,
+      "manual_review_rate": 0.6,
+      "missed_categories": [],
+      "phi_precision": 0.7468,
+      "phi_recall": 1.0,
+      "residual_canaries": 0,
+      "typed_recall": 0.8475
+    },
+    "release_decisions": {
+      "blocked_privacy": 6,
+      "releasable": 4
+    },
+    "utility": {
+      "clinical_term_preservation": 1.0,
+      "content_token_preservation": 0.9625,
+      "negative_terms": 14,
+      "negative_terms_redacted": 1,
+      "numeric_preservation": 1.0,
+      "useful_text_preservation": 0.9286
+    }
+  },
+  "contract_version": "utility-contract-v1",
+  "corpus_version": "canary-v3.0",
+  "heldout_v2": {
+    "corpus_version": "canary-v3.0",
+    "failures": [],
+    "manifest_count": 10,
+    "manifest_example": {
+      "artifact_id": "heldout_v2_names",
+      "categories_transformed": {
+        "ORGANIZATION": 3,
+        "PERSON": 6
+      },
+      "contract_version": "utility-contract-v1",
+      "detection_sources": {
+        "context_rule": 3,
+        "ner": 5,
+        "strict_proper_noun": 1
+      },
+      "fields_changed": {
+        "by_surrogate_kind": {
+          "ORG": 3,
+          "PATIENT": 5,
+          "PROVIDER": 1
+        },
+        "distinct_entities_replaced": 9,
+        "removed_or_replaced": 9
+      },
+      "manifest_version": "transformation-manifest-v1",
+      "modality": "text",
+      "model_mode": "offline",
+      "policy_version": "safe_harbor_v1",
+      "privacy_checks": {
+        "passed": false,
+        "residual_categories": {
+          "PERSON": 1
+        }
+      },
+      "reason_codes": [
+        "privacy_requirements_not_met"
+      ],
+      "regions_modified": {
+        "pixel_regions": 0,
+        "text_spans": 9
+      },
+      "release_decision": "blocked_privacy",
+      "transformation_types": {
+        "generalized": 0,
+        "redacted_fixed_placeholder": 0,
+        "replaced_with_surrogate": 9
+      },
+      "utility_checks": {
+        "metrics": {
+          "clinical_numbers_in_input": 0,
+          "clinical_numbers_preserved": 0,
+          "clinical_term_preservation": 1.0,
+          "clinical_terms_in_input": 0,
+          "clinical_terms_preserved": 0,
+          "content_token_preservation": 1.0,
+          "content_tokens_in_input": 29,
+          "content_tokens_preserved": 29,
+          "numeric_preservation": 1.0
+        },
+        "passed": true
+      }
+    },
+    "model_mode": "offline",
+    "partition": "heldout_v2",
+    "performance": {
+      "documents": 10,
+      "latency_ms_max": 44686.5,
+      "latency_ms_mean": 9328.18
+    },
+    "privacy": {
+      "document_leakage_rate": 0.0,
+      "documents_with_residual_findings": 6,
+      "f1": 0.8429,
+      "false_negatives": 0,
+      "false_positives": 22,
+      "manual_review_rate": 0.6,
+      "missed_categories": [],
+      "phi_precision": 0.7284,
+      "phi_recall": 1.0,
+      "residual_canaries": 0,
+      "typed_recall": 0.8305
+    },
+    "release_decisions": {
+      "blocked_privacy": 6,
+      "releasable": 4
+    },
+    "utility": {
+      "clinical_term_preservation": 1.0,
+      "content_token_preservation": 0.9596,
+      "negative_terms": 14,
+      "negative_terms_redacted": 1,
+      "numeric_preservation": 1.0,
+      "useful_text_preservation": 0.9286
+    }
+  },
+  "phase": 10,
+  "phase9_baseline_for_comparison": {
+    "manual_review_rate": 0.9,
+    "note": "Phase 9 held-out partition, now diagnostic data.",
+    "phi_precision": 0.5315,
+    "phi_recall": 1.0,
+    "residual_canaries": 0,
+    "useful_text_preservation": 0.2143
+  }
+}

@@ -7,6 +7,7 @@ from services.privacy_contracts import PhiEntity
 
 SOURCE_NER = "ner"
 SOURCE_STRUCTURED_PATTERN = "structured_pattern"
+SOURCE_AGE_RULE = "age_rule"
 SOURCE_CONTEXT_RULE = "context_rule"
 SOURCE_STRICT_PROPER_NOUN = "strict_proper_noun"
 
@@ -20,6 +21,10 @@ class _PatternDefinition:
     name: str
     entity_type: str
     regex: Pattern[str]
+    #: When set, the detected span is this capture group rather than the whole
+    #: match, so surrounding clinical words are preserved. "94 years old"
+    #: yields a span over "94" alone, which redacts to "90+ years old".
+    group: int = 0
 
 
 def _compile(pattern: str) -> Pattern[str]:
@@ -129,12 +134,82 @@ class StructuredPatternDetector:
                 entities.append(
                     DetectedEntity(
                         entity_type=definition.entity_type,
-                        start=match.start(),
-                        end=match.end(),
+                        start=match.start(definition.group),
+                        end=match.end(definition.group),
                         source=SOURCE_STRUCTURED_PATTERN,
                         original_label=definition.name,
                     )
                 )
+        return entities
+
+
+# Safe Harbor requires ages over 89 to be aggregated. An age at or below 89 is
+# not an identifier on its own and is ordinary clinical fact, so it is left
+# alone. A bare number is never treated as an age: an explicit age cue must be
+# present, or "the patient received 94 mg" would be destroyed.
+_AGE_WITH_CUE = _compile(
+    r"(?:\bage[ds]?\b\s*[:\-]?\s*|\baged\s+)(\d{1,3})\b"
+)
+_AGE_WITH_UNIT = _compile(
+    r"\b(\d{1,3})\s*(?:-\s*)?(?:years?|yrs?)\s*(?:-\s*)?old\b"
+)
+_AGE_YO = _compile(r"\b(\d{1,3})\s*(?:y/?o|yo)\b")
+
+_AGE_PATTERNS = (_AGE_WITH_CUE, _AGE_WITH_UNIT, _AGE_YO)
+
+#: Age references that cannot be resolved to a number. Safe Harbor turns on
+#: whether the age exceeds 89, so an unresolvable reference is escalated
+#: rather than guessed at in either direction.
+_UNCERTAIN_AGE = _compile(
+    r"\b(?:nonagenarian|centenarian|in\s+(?:his|her|their)\s+(?:nineties|90s|"
+    r"late\s+eighties)|over\s+(?:ninety|90)|aged\s+over\s+\d{1,3}|"
+    r"more\s+than\s+\d{1,3}\s+years\s+old)\b"
+)
+
+AGE_SAFE_HARBOR_THRESHOLD = 89
+
+
+class AgeOverThresholdDetector:
+    """Deterministic detector for ages that Safe Harbor requires aggregating.
+
+    Emits ``AGE_OVER_89`` for a resolvable age above 89, spanning the number
+    only so the surrounding clinical phrasing survives. Emits
+    ``AGE_UNCERTAIN`` for an age reference that cannot be resolved to a
+    number, which routes the document to review instead of guessing.
+    """
+
+    def detect(self, text: str) -> List[DetectedEntity]:
+        entities: List[DetectedEntity] = []
+        for pattern in _AGE_PATTERNS:
+            for match in pattern.finditer(text):
+                try:
+                    value = int(match.group(1))
+                except (TypeError, ValueError):
+                    continue
+                if value <= AGE_SAFE_HARBOR_THRESHOLD or value > 130:
+                    # At or below the threshold it is ordinary clinical fact;
+                    # above 130 it is not a human age and some other rule owns
+                    # the number.
+                    continue
+                entities.append(
+                    DetectedEntity(
+                        entity_type="AGE_OVER_89",
+                        start=match.start(1),
+                        end=match.end(1),
+                        source=SOURCE_AGE_RULE,
+                        original_label="age_over_threshold",
+                    )
+                )
+        for match in _UNCERTAIN_AGE.finditer(text):
+            entities.append(
+                DetectedEntity(
+                    entity_type="AGE_UNCERTAIN",
+                    start=match.start(),
+                    end=match.end(),
+                    source=SOURCE_AGE_RULE,
+                    original_label="uncertain_age_reference",
+                )
+            )
         return entities
 
 

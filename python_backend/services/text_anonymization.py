@@ -23,11 +23,20 @@ from services.local_model_detectors import (
 )
 from services.phi_detection import (
     SOURCE_STRICT_PROPER_NOUN,
+    AgeOverThresholdDetector,
     DetectedEntity,
     PhiDetector,
     StructuredPatternDetector,
     resolve_overlaps,
 )
+from services.clinical_vocabulary import protects_from_person_label
+from services.surrogates import (
+    SURROGATE_PATTERN,
+    SurrogateAllocator,
+    looks_like_provider,
+)
+from services.model_client import RemoteModelDetector, worker_enabled
+from services.text_utility import measure_text_utility
 
 from services.privacy_profiles import (
     PrivacyProfileError,
@@ -39,6 +48,8 @@ SUPPORTED_PROFILES = {"strict", "research"}
 STUDY_SALT_ENV_VAR = "BIOBLOCK_STUDY_SALT"
 HASH_LENGTH = 8
 MAX_TEXT_BYTES = 256 * 1024
+#: Safe Harbor aggregation for an age above 89.
+AGE_AGGREGATE_REPLACEMENT = "90+"
 
 _ID_ENTITY_TYPES = {
     "MEDICAL_RECORD_NUMBER",
@@ -137,10 +148,22 @@ def _build_detectors(
         # Each model carries its own calibrated threshold. They were selected
         # jointly against the combined chain's recall, not in isolation, so
         # they are not interchangeable.
+        #
+        # The main API environment cannot hold the model stack without
+        # downgrading ChromaDB's pins, so when the worker is enabled inference
+        # runs out of process. Both paths apply the same calibration; only the
+        # execution boundary differs.
+        if worker_enabled():
+            stanford: PhiDetector = RemoteModelDetector("stanford", SOURCE_STANFORD)
+            gliner: PhiDetector = RemoteModelDetector("gliner", SOURCE_GLINER)
+        else:
+            stanford = StanfordClinicalDetector(calibrated_config_for(SOURCE_STANFORD))
+            gliner = GlinerPiiDetector(calibrated_config_for(SOURCE_GLINER))
         return (
             StructuredPatternDetector(),
-            StanfordClinicalDetector(calibrated_config_for(SOURCE_STANFORD)),
-            GlinerPiiDetector(calibrated_config_for(SOURCE_GLINER)),
+            AgeOverThresholdDetector(),
+            stanford,
+            gliner,
             SpacyNerPhiDetector(
                 model_name,
                 high_recall_proper_nouns=profile == "strict",
@@ -148,6 +171,7 @@ def _build_detectors(
         )
     return (
         StructuredPatternDetector(),
+        AgeOverThresholdDetector(),
         SpacyNerPhiDetector(
             model_name,
             high_recall_proper_nouns=profile == "strict",
@@ -172,7 +196,83 @@ def _detect_entities(
         raise
     except Exception as exc:
         raise NerPhiDetectionError("phi_detection_failed", status_code=500) from exc
-    return resolve_overlaps(detected, len(text))
+
+    detected = _drop_clinical_vocabulary(detected, text)
+    return _merge_adjacent_same_type(resolve_overlaps(detected, len(text)), text)
+
+
+#: Labels that a clinical term can be wrongly assigned. A detection of one of
+#: these over recorded clinical vocabulary is a misclassification, whichever
+#: detector produced it.
+_NAME_SHAPED_TYPES = frozenset(
+    {"PERSON", "ORGANIZATION", "FACILITY", "LOCATION", "ADDRESS", "MEDICAL_CONDITION"}
+)
+
+
+def _drop_clinical_vocabulary(
+    entities: List[DetectedEntity],
+    text: str,
+) -> List[DetectedEntity]:
+    """Remove name-shaped detections that are actually clinical vocabulary.
+
+    Applied to every source, not just spaCy. The pinned models label
+    "Parkinson" a PERSON as readily as spaCy does, and filtering only the
+    detectors we happen to control leaves the same clinical term destroyed by
+    a different route.
+    """
+    kept: List[DetectedEntity] = []
+    for entity in entities:
+        if entity.entity_type in _NAME_SHAPED_TYPES:
+            span = text[entity.start : entity.end]
+            following = re.findall(r"[^\s]+", text[entity.end : entity.end + 64])[:4]
+            if protects_from_person_label(span, following):
+                continue
+        kept.append(entity)
+    return kept
+
+
+#: Only whitespace, a hyphen or a possessive may sit between two fragments of
+#: one name. Anything else is two different entities.
+_NAME_GAP = re.compile(r"^[\s\-']*$")
+
+
+def _merge_adjacent_same_type(
+    entities: List[DetectedEntity],
+    text: str,
+) -> List[DetectedEntity]:
+    """Join same-type spans split across a name by different detectors.
+
+    Two detectors proposing "Padmavathi" and "Venkataraghavan" separately
+    resolve to two adjacent spans, which would then receive two different
+    surrogates for one person. Merging them keeps one person as one entity.
+    """
+    if not entities:
+        return entities
+    ordered = sorted(entities, key=lambda e: (e.start, e.end))
+    merged: List[DetectedEntity] = [ordered[0]]
+    for entity in ordered[1:]:
+        previous = merged[-1]
+        gap = text[previous.end : entity.start]
+        if (
+            entity.entity_type == previous.entity_type
+            and entity.entity_type in _NAME_SHAPED_TYPES
+            # A real separator must be present. Two spans that touch with no
+            # gap at all are two entities written without a space, not one
+            # name that detectors split.
+            and 1 <= len(gap) <= 2
+            and _NAME_GAP.match(gap)
+        ):
+            merged[-1] = DetectedEntity(
+                entity_type=previous.entity_type,
+                start=previous.start,
+                end=entity.end,
+                source=previous.source,
+                score=previous.score,
+                original_label=previous.original_label,
+            )
+            continue
+        merged.append(entity)
+    return merged
 
 
 def _hash_value(entity_type: str, value: str) -> str:
@@ -213,12 +313,34 @@ def _replacement_for(
     value: str,
     salt: str,
     settings: Dict[str, Any],
+    allocator: "SurrogateAllocator | None" = None,
+    is_provider: bool = False,
 ) -> str:
-    if (
-        entity_type in DIRECT_IDENTIFIER_REDACTIONS
-        and settings["text_identifier_strategy"] == "redact"
-    ):
-        return DIRECT_IDENTIFIER_REDACTIONS[entity_type]
+    # Safe Harbor requires ages over 89 to be aggregated rather than removed.
+    # "94 years old" becomes "90+ years old", which keeps the clinical fact.
+    if entity_type == "AGE_OVER_89":
+        return AGE_AGGREGATE_REPLACEMENT
+    if entity_type == "AGE_UNCERTAIN":
+        # Cannot be resolved to a number, so it is removed and the document is
+        # routed to review rather than guessed at in either direction.
+        return "<REDACTED_AGE>"
+
+    if settings["text_identifier_strategy"] == "redact":
+        # A consistent study-local surrogate preserves coreference where a
+        # fixed placeholder would collapse every mention into one token. Any
+        # type with a surrogate form uses one, not only the direct-identifier
+        # set, so a facility or organisation stays distinguishable too.
+        if allocator is not None:
+            surrogate_type = (
+                "PERSON_PROVIDER"
+                if entity_type == "PERSON" and is_provider
+                else entity_type
+            )
+            surrogate = allocator.surrogate_for(surrogate_type, value)
+            if surrogate is not None:
+                return surrogate
+        if entity_type in DIRECT_IDENTIFIER_REDACTIONS:
+            return DIRECT_IDENTIFIER_REDACTIONS[entity_type]
 
     hash_value = _hash_value(entity_type, value)
     if entity_type == "PERSON":
@@ -257,15 +379,37 @@ def _replace_entities(
     entities: Iterable[DetectedEntity],
     salt: str,
     settings: Dict[str, Any],
+    allocator: "SurrogateAllocator | None" = None,
 ) -> str:
+    ordered = sorted(entities, key=lambda item: item.start, reverse=True)
+
+    # Allocate surrogates in reading order so numbering follows first
+    # appearance, then apply replacements from the end so earlier offsets stay
+    # valid. Without this pass the numbering would run backwards through the
+    # document, which is harmless but confusing to a reader.
+    if allocator is not None:
+        for entity in reversed(ordered):
+            surrogate_type = (
+                "PERSON_PROVIDER"
+                if entity.entity_type == "PERSON"
+                and looks_like_provider(text, entity.start)
+                else entity.entity_type
+            )
+            allocator.surrogate_for(surrogate_type, text[entity.start : entity.end])
+
     anonymized_text = text
-    for entity in sorted(entities, key=lambda item: item.start, reverse=True):
+    for entity in ordered:
         original_value = text[entity.start : entity.end]
         replacement = _replacement_for(
             entity.entity_type,
             original_value,
             salt,
             settings,
+            allocator=allocator,
+            is_provider=(
+                entity.entity_type == "PERSON"
+                and looks_like_provider(text, entity.start)
+            ),
         )
         anonymized_text = (
             anonymized_text[: entity.start]
@@ -372,15 +516,50 @@ def anonymize_clinical_text(
             status_code=exc.status_code,
         ) from exc
 
+    # One allocator per call. It dies with the request, so two studies
+    # containing the same person get unrelated surrogates and no cross-study
+    # linkage is created. The mapping is never returned or persisted.
+    allocator = (
+        SurrogateAllocator()
+        if settings["text_identifier_strategy"] == "redact"
+        else None
+    )
+    anonymized_text = _replace_entities(text, entities, salt, settings, allocator)
+
+    # An age reference that cannot be resolved to a number cannot be judged
+    # against the Safe Harbor threshold, so the document needs a human.
+    review_reasons = sorted(
+        {
+            "uncertain_age_reference"
+            for entity in entities
+            if entity.entity_type == "AGE_UNCERTAIN"
+        }
+    )
+
+    # Measured here because this is the only place that holds both the
+    # original spans and the output. The removed values are needed to score
+    # utility honestly - deleting PHI is the goal, not a utility loss - and
+    # they never leave this function: only ratios and counts are returned.
+    utility_metrics = measure_text_utility(
+        text,
+        anonymized_text,
+        redacted_values=[text[e.start : e.end] for e in entities],
+    )
+
     return {
         "anonymization_status": "completed",
         "privacy_profile": privacy_profile,
+        "utility_metrics": utility_metrics,
         "date_strategy": settings["date_strategy"],
         "text_identifier_strategy": settings["text_identifier_strategy"],
-        "anonymized_text": _replace_entities(text, entities, salt, settings),
+        "anonymized_text": anonymized_text,
         "entity_count": len(entities),
         "detected_entities": _entity_summary(entities),
         "detection_sources": _source_summary(entities),
+        # Counts of distinct entities replaced, per surrogate kind. Never the
+        # mapping and never an original value.
+        "surrogate_counts": allocator.counts() if allocator else {},
+        "review_required_reasons": review_reasons,
         "ner_model": model_name,
         "trained_ner_active": True,
     }
@@ -403,9 +582,15 @@ _SURROGATE_PATTERN = re.compile(
 
 
 def mask_release_placeholders(text: str) -> str:
-    """Blank out our own replacement tokens, preserving offsets."""
+    """Blank out our own replacement tokens, preserving offsets.
+
+    Study-local surrogates and the Safe Harbor age aggregate are our own
+    output, so the residual scan must not re-detect them as PHI.
+    """
     masked = _PLACEHOLDER_PATTERN.sub(lambda match: " " * len(match.group(0)), text)
-    return _SURROGATE_PATTERN.sub(lambda match: " " * len(match.group(0)), masked)
+    masked = _SURROGATE_PATTERN.sub(lambda match: " " * len(match.group(0)), masked)
+    masked = SURROGATE_PATTERN.sub(lambda match: " " * len(match.group(0)), masked)
+    return masked.replace(AGE_AGGREGATE_REPLACEMENT, " " * len(AGE_AGGREGATE_REPLACEMENT))
 
 
 def residual_phi_categories(anonymized_text: str) -> Dict[str, int]:
@@ -443,4 +628,21 @@ def residual_phi_categories(anonymized_text: str) -> Dict[str, int]:
         entity
         for entity in entities
         if entity.source != SOURCE_STRICT_PROPER_NOUN
+        and _is_substantive_residual(masked, entity)
     )
+
+
+#: A residual span must be mostly real characters. Masking replaces each
+#: placeholder with spaces of the same length, and the models reliably predict
+#: that a name belongs in the resulting hole - "Dr.<blank>at" comes back as a
+#: PERSON. Such a span contains no surviving text and is not evidence of a
+#: leak.
+_MIN_RESIDUAL_SUBSTANCE = 0.5
+
+
+def _is_substantive_residual(masked: str, entity: DetectedEntity) -> bool:
+    span = masked[entity.start : entity.end]
+    if not span:
+        return False
+    non_space = sum(1 for character in span if not character.isspace())
+    return (non_space / len(span)) >= _MIN_RESIDUAL_SUBSTANCE
