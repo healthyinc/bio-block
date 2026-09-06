@@ -164,6 +164,9 @@ class TestAPI(unittest.TestCase):
             self.assertIn("total_entities", result)
             self.assertEqual(result["total_pages"], 1)
             self.assertGreater(result["total_entities"], 0)
+            self.assertNotIn("original_text", resp.text)
+            self.assertNotIn("John Smith", resp.text)
+            self.assertNotIn("123-45-6789", resp.text)
         except ImportError:
             self.skipTest("reportlab not installed, skipping PDF generation test")
 
@@ -205,20 +208,12 @@ class TestAPI(unittest.TestCase):
 
             os.unlink(tmp.name)
 
-            self.assertEqual(resp.status_code, 200)
-            self.assertTrue(resp.headers["content-type"].startswith("application/dicom"))
-            self.assertIn("anonymized_test.dcm", resp.headers["content-disposition"])
-            self.assertGreater(int(resp.headers["x-bioblock-fields-scrubbed"]), 0)
-
-            downloaded = pydicom.dcmread(BytesIO(resp.content), force=False)
-            self.assertEqual(str(downloaded.PatientName), "")
-            self.assertEqual(str(downloaded.PatientID), "")
-            self.assertEqual(str(downloaded.PatientBirthDate), "19000101")
-            self.assertEqual(str(downloaded.ReferringPhysicianName), "")
-            self.assertEqual(str(downloaded.InstitutionName), "")
-            self.assertEqual(str(downloaded.PatientIdentityRemoved), "YES")
-            self.assertNotIn(b"John Smith", resp.content)
-            self.assertNotIn(b"PAT12345", resp.content)
+            self.assertEqual(resp.status_code, 409)
+            decision = resp.json()["detail"]
+            self.assertEqual(decision["disposition"], "manual_review_required")
+            self.assertFalse(decision["releasable"])
+            self.assertNotIn("John Smith", resp.text)
+            self.assertNotIn("PAT12345", resp.text)
         except ImportError:
             self.skipTest("pydicom not installed, skipping DICOM test")
 
@@ -246,13 +241,10 @@ class TestAPI(unittest.TestCase):
 
             os.unlink(tmp.name)
 
-            self.assertEqual(resp.status_code, 200)
-            self.assertTrue(resp.headers["content-type"].startswith("application/dicom"))
-            self.assertIn("anonymized_clean.dcm", resp.headers["content-disposition"])
-            self.assertEqual(int(resp.headers["x-bioblock-fields-scrubbed"]), 0)
-
-            downloaded = pydicom.dcmread(BytesIO(resp.content), force=False)
-            self.assertEqual(downloaded.Modality, "CT")
+            self.assertEqual(resp.status_code, 409)
+            decision = resp.json()["detail"]
+            self.assertEqual(decision["disposition"], "manual_review_required")
+            self.assertFalse(decision["releasable"])
         except ImportError:
             self.skipTest("pydicom not installed, skipping DICOM test")
 

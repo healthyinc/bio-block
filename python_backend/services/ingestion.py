@@ -1,8 +1,21 @@
-from typing import Any, Callable, Dict, Optional
+import hashlib
+import os
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from services.text_anonymization import (
+    MAX_TEXT_BYTES,
     TextAnonymizationError,
     anonymize_clinical_text,
+)
+from services.document_sanitization import (
+    REASON_NO_VALIDATED_WRITER,
+    DocumentSanitizationError,
+    scan_pdf_for_ingestion,
+)
+from services.workbook_sanitization import (
+    REASON_NO_VALIDATED_WRITER as WORKBOOK_NO_VALIDATED_WRITER,
+    WorkbookSanitizationError,
+    scan_workbook_for_ingestion,
 )
 from services.dicom_anonymization import (
     DicomAnonymizationError,
@@ -13,16 +26,51 @@ from services.nifti_anonymization import (
     anonymize_nifti_metadata,
 )
 from services.ocr_redaction import redact_dicom_pixels, safe_ocr_response
+from services.tabular_anonymization import (
+    TabularAnonymizationError,
+    anonymize_tabular_csv,
+)
 from services.wsi_tiling import scan_wsi_bytes
 from services.privacy_profiles import (
     PrivacyProfileError,
     validate_privacy_profile as validate_config_privacy_profile,
 )
+from services.privacy_contracts import (
+    SanitizedArtifact,
+    expert_determination_decision,
+    issue_release,
+    manual_review_decision,
+)
+from services.privacy_policy import PrivacyPolicyError, resolve_privacy_policy
+from services.transformation_manifest import build_manifest
+from services.utility_contract import UTILITY_VALIDATION_FAILED, contract_for
 
-SUPPORTED_PROFILES = {"strict", "research"}
-SUPPORTED_MODALITIES = {"csv", "text", "dicom", "nifti", "wsi"}
+SUPPORTED_PROFILES = {"safe_harbor_v1", "strict", "research"}
+SUPPORTED_MODALITIES = {"csv", "text", "pdf", "workbook", "dicom", "nifti", "wsi"}
 HEADER_READ_LIMIT = 4096
-TEXT_READ_LIMIT_BYTES = 256 * 1024
+TEXT_READ_LIMIT_BYTES = min(256 * 1024, MAX_TEXT_BYTES)
+TABULAR_SUMMARY_KEYS = (
+    "rows_in",
+    "rows_out",
+    "k",
+    "l",
+    "direct_identifiers_removed",
+    "precise_geography_columns_removed",
+    "columns_removed",
+    "quasi_identifiers_used",
+    "sensitive_column",
+    "output_columns",
+    "safe_harbor_report",
+    "equivalence_classes",
+    "min_group_size",
+    "k_anonymity_satisfied",
+    "l_diversity_satisfied",
+    "generalized_cells_count",
+    "suppressed_cells_count",
+    "generalization_rate",
+    "suppression_rate",
+    "warnings",
+)
 
 
 class IngestionError(ValueError):
@@ -34,9 +82,231 @@ class IngestionError(ValueError):
 
 def validate_privacy_profile(profile: str) -> str:
     try:
-        return validate_config_privacy_profile(profile)
-    except PrivacyProfileError as exc:
-        raise IngestionError(exc.detail, status_code=exc.status_code) from exc
+        resolved = resolve_privacy_policy(profile)
+        validate_config_privacy_profile(resolved.config_profile)
+        return resolved.requested_profile
+    except (PrivacyProfileError, PrivacyPolicyError) as exc:
+        detail = getattr(exc, "detail", str(exc))
+        status_code = getattr(exc, "status_code", 400)
+        raise IngestionError(detail, status_code=status_code) from exc
+
+
+def _blocked_downstream(status: str) -> Dict[str, str]:
+    return {
+        "ipfs_chunking": status,
+        "cid_encryption": status,
+        "metadata_indexing": status,
+        "blockchain_transaction": status,
+    }
+
+
+def _expert_determination_response(
+    safe_name: str,
+    modality: str,
+) -> Dict[str, Any]:
+    decision = expert_determination_decision()
+    return {
+        "status": "success",
+        "filename": safe_name,
+        "detected_modality": modality,
+        "privacy_profile": "research",
+        "privacy_policy": decision.policy.value,
+        "handler": HANDLER_REGISTRY[modality].__name__,
+        "routing_status": "release_blocked",
+        "anonymization_status": decision.disposition.value,
+        "message": "Research processing requires an expert determination.",
+        "release_decision": decision.to_public_dict(),
+        "downstream": _blocked_downstream("blocked"),
+    }
+
+
+FACIAL_RECONSTRUCTION_REASON = "facial_reconstruction_not_mitigated"
+
+
+def _imaging_reason_codes(
+    handler_result: Dict[str, Any],
+    status_key: str,
+    base_reason: str,
+) -> Tuple[str, ...]:
+    """Reason codes for volumetric imaging, always including the standing one."""
+    reasons = [base_reason, FACIAL_RECONSTRUCTION_REASON]
+    status = handler_result.get(status_key)
+    if status and status not in {"completed", "completed_no_text_detected"}:
+        reasons.append(str(status))
+    return tuple(sorted(set(reasons)))
+
+
+def release_decision_for(
+    modality: str,
+    handler_result: Dict[str, Any],
+    safe_name: str,
+):
+    """The single release authority for every modality and every route.
+
+    Both the ingest route and the direct download routes call this. Routing a
+    second endpoint through its own copy of the policy is how one route ends up
+    releasing what the other blocks, so there is deliberately only one.
+    """
+    return _release_decision_for(modality, handler_result, safe_name)
+
+
+def _artifact_id(release_decision, file_content: Optional[bytes]) -> str:
+    """A stable id that is never the uploaded filename.
+
+    Filenames routinely carry a patient's name, and a manifest is a record
+    that travels, so the artifact is identified by the hash of its bytes.
+    """
+    existing = release_decision.to_public_dict().get("artifact_sha256")
+    if existing:
+        return str(existing)
+    if file_content:
+        return hashlib.sha256(file_content).hexdigest()
+    return "unidentified_artifact"
+
+
+def _manifest_for(
+    modality: str,
+    handler_result: Dict[str, Any],
+    release_decision,
+    artifact_id: str,
+    policy: str,
+) -> Dict[str, Any]:
+    """One provenance record per processed artifact, whatever the modality.
+
+    The manifest reports the decision the release logic already made; it does
+    not re-derive it. Anything the pipeline could not clear arrives here as an
+    unsupported reason, so a blocked artifact carries a record explaining
+    itself rather than no record at all.
+    """
+    decision = release_decision.to_public_dict()
+    reasons = list(decision.get("reason_codes") or [])
+    review = list(handler_result.get("review_required_reasons") or [])
+    unsupported = list(handler_result.get("unscannable_reasons") or [])
+    if not decision.get("releasable"):
+        unsupported = sorted(set(unsupported + reasons))
+
+    verdict = handler_result.get("utility_verdict") or {}
+    utility_metrics = handler_result.get("utility_metrics") or {}
+    return build_manifest(
+        artifact_id=artifact_id,
+        modality=modality,
+        policy=policy,
+        detected=handler_result.get("detected_entities") or {},
+        sources=handler_result.get("detection_sources") or {},
+        surrogate_counts=handler_result.get("surrogate_counts") or {},
+        utility=utility_metrics,
+        utility_passed=bool(verdict.get("passed")) if verdict else False,
+        residual_categories=handler_result.get("residual_phi_categories") or {},
+        review_reasons=review,
+        model_mode=os.getenv("PHI_MODEL_MODE", "offline"),
+        pixel_regions_modified=int(
+            handler_result.get("boxes_redacted")
+            or utility_metrics.get("redaction_regions")
+            or 0
+        ),
+        generated_regions=handler_result.get("provenance_counts") or {},
+        unsupported_reasons=unsupported,
+    )
+
+
+def _release_decision_for(
+    modality: str,
+    handler_result: Dict[str, Any],
+    safe_name: str,
+):
+    if modality == "text" and handler_result.get("anonymization_status") == "completed":
+        residual = handler_result.get("residual_phi_categories") or {}
+        if residual:
+            # Privacy first, and it is never traded against utility. Redaction
+            # did not clear the text. Categories only, never values.
+            return manual_review_decision(
+                "privacy_requirements_not_met",
+                *sorted(f"residual_{category.lower()}" for category in residual),
+            )
+
+        # Content the pipeline could not judge safely needs a human.
+        review_reasons = handler_result.get("review_required_reasons") or []
+        if review_reasons:
+            return manual_review_decision(*sorted(set(review_reasons)))
+
+        # Privacy passed. A technically safe but medically useless document is
+        # not a successful research artifact, so utility gates release too.
+        verdict = handler_result.get("utility_verdict")
+        if verdict is not None and not verdict.get("passed", False):
+            reasons = [UTILITY_VALIDATION_FAILED]
+            reasons.extend(f"utility_below_minimum_{n}" for n in sorted(verdict.get("shortfalls", {})))
+            reasons.extend(
+                f"utility_metric_not_measured_{n}"
+                for n in verdict.get("missing_metrics", [])
+            )
+            return manual_review_decision(*reasons)
+
+        artifact = SanitizedArtifact(
+            content=handler_result["anonymized_text"].encode("utf-8"),
+            media_type="text/plain; charset=utf-8",
+            filename=safe_name,
+            validators=(
+                "typed_phi_detection",
+                "deterministic_redaction",
+                "residual_phi_rescan",
+                "utility_contract_v1",
+            ),
+        )
+        return issue_release(artifact, "safe_harbor_technical_checks_passed")
+    if modality == "pdf":
+        # No validated PDF writer exists, so a PDF is never auto-releasable.
+        return manual_review_decision(
+            *(handler_result.get("unscannable_reasons") or [REASON_NO_VALIDATED_WRITER])
+        )
+    if modality == "workbook":
+        # No validated workbook writer exists, so a workbook never releases.
+        return manual_review_decision(
+            *(
+                handler_result.get("unscannable_reasons")
+                or [WORKBOOK_NO_VALIDATED_WRITER]
+            )
+        )
+    if modality == "csv":
+        # Serialized-output validation now runs (see tabular_validation), but
+        # the ingest route's release posture is unchanged: it stays blocked.
+        # Whether generalized quasi-identifiers clear the release bar is a
+        # re-identification-risk judgment rather than a Safe Harbor
+        # determination, and that policy decision has not been made. The
+        # /anonymize_csv download route remains the reviewed path.
+        if handler_result.get("serialized_output_validation") == "passed":
+            return manual_review_decision(
+                "serialized_output_validation_passed",
+                "tabular_release_policy_review_pending",
+            )
+        return manual_review_decision(
+            "privacy_requirements_not_met",
+            *(
+                handler_result.get("validation_failures")
+                or ["serialized_output_validation_failed"]
+            ),
+        )
+    if modality == "dicom":
+        # Cross-sectional imaging permits facial reconstruction, which Safe
+        # Harbor treats as a comparable image. No defacing step exists, so
+        # this blocks regardless of how the pixel scan went.
+        return manual_review_decision(
+            *_imaging_reason_codes(
+                handler_result,
+                "pixel_redaction_status",
+                "dicom_validation_incomplete",
+            )
+        )
+    if modality == "nifti":
+        return manual_review_decision(
+            *_imaging_reason_codes(
+                handler_result,
+                "anonymization_status",
+                "nifti_serialization_pending",
+            )
+        )
+    if modality == "wsi":
+        return manual_review_decision("validated_wsi_writer_unavailable")
+    return manual_review_decision("validation_incomplete")
 
 
 def _safe_filename(filename: str) -> str:
@@ -59,6 +329,10 @@ def _has_dicom_preamble(header: bytes) -> bool:
     return len(header) >= 132 and header[128:132] == b"DICM"
 
 
+def _has_pdf_magic(header: bytes) -> bool:
+    return header[:1024].lstrip().startswith(b"%PDF-")
+
+
 def detect_modality(
     filename: str,
     content_type: Optional[str],
@@ -70,11 +344,17 @@ def detect_modality(
 
     if _has_dicom_preamble(header):
         return "dicom"
+    if _has_pdf_magic(header):
+        return "pdf"
 
     if ext == ".csv":
         return "csv"
     if ext == ".txt":
         return "text"
+    if ext == ".pdf":
+        return "pdf"
+    if ext in {".xlsx", ".xlsm"}:
+        return "workbook"
     if ext in {".dcm", ".dicom"}:
         return "dicom"
     if ext in {".nii", ".nii.gz"}:
@@ -86,6 +366,13 @@ def detect_modality(
         return "csv"
     if mime == "text/plain":
         return "text"
+    if mime == "application/pdf":
+        return "pdf"
+    if mime in {
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel.sheet.macroenabled.12",
+    }:
+        return "workbook"
     if mime in {"application/dicom", "application/x-dicom"} or "dicom" in mime:
         return "dicom"
     if mime in {"image/tiff", "image/tif"}:
@@ -106,8 +393,35 @@ def _placeholder_result(handler_name: str) -> Dict[str, str]:
     }
 
 
-def anonymize_csv() -> Dict[str, str]:
-    return _placeholder_result("anonymize_csv")
+def anonymize_csv(
+    file_content: bytes,
+    k: int = 5,
+    l: int = 2,
+    direct_identifiers: Optional[list[str]] = None,
+    quasi_identifiers: Optional[list[str]] = None,
+    sensitive_column: Optional[str] = None,
+    safe_harbor_mappings: Optional[dict[str, list[str]]] = None,
+) -> Dict[str, Any]:
+    try:
+        result = anonymize_tabular_csv(
+            file_content,
+            k=k,
+            l=l,
+            direct_identifiers=direct_identifiers,
+            quasi_identifiers=quasi_identifiers,
+            sensitive_column=sensitive_column,
+            safe_harbor_mappings=safe_harbor_mappings,
+        )
+    except TabularAnonymizationError as exc:
+        raise IngestionError(exc.detail, status_code=exc.status_code) from exc
+    # This route stays summary-only: the anonymized rows are never serialized
+    # into the response. Validation still runs inside anonymize_tabular_csv.
+    return {
+        "handler": "anonymize_csv",
+        "routing_status": "handler_selected",
+        "message": "CSV tabular anonymization completed.",
+        **result,
+    }
 
 
 def anonymize_text(
@@ -119,6 +433,10 @@ def anonymize_text(
         text = text_content.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise IngestionError("Text uploads must be UTF-8 encoded") from exc
+    if "\x00" in text:
+        # A NUL byte can split a value the detector would otherwise match, so
+        # the upload is unscannable rather than clean.
+        raise IngestionError("Text uploads must not contain NUL bytes")
 
     try:
         result = anonymize_clinical_text(
@@ -126,10 +444,24 @@ def anonymize_text(
             profile=profile,
             study_salt=study_salt,
         )
+        residual = result["residual_phi_categories"]
     except TextAnonymizationError as exc:
         raise IngestionError(exc.detail, status_code=exc.status_code) from exc
 
+    # Utility is measured on every run, not only when privacy passes, so the
+    # manifest records both halves of the picture. The measurement happens
+    # inside the anonymizer, which is the only place holding both the original
+    # spans and the output.
+    utility = result.get("utility_metrics", {})
+    contract = contract_for("text")
+    verdict = contract.evaluate(utility) if contract else None
+
     return {
+        "residual_phi_categories": residual,
+        "utility_metrics": utility,
+        "utility_verdict": verdict.to_public_dict() if verdict else None,
+        "review_required_reasons": result.get("review_required_reasons", []),
+        "surrogate_counts": result.get("surrogate_counts", {}),
         "handler": "anonymize_text",
         "routing_status": "handler_selected",
         "anonymization_status": result["anonymization_status"],
@@ -138,7 +470,43 @@ def anonymize_text(
         "date_strategy": result["date_strategy"],
         "text_identifier_strategy": result["text_identifier_strategy"],
         "detected_entities": result["detected_entities"],
+        "entity_count": result["entity_count"],
+        "detection_sources": result["detection_sources"],
+        "ner_model": result["ner_model"],
+        "trained_ner_active": result["trained_ner_active"],
     }
+
+
+def scan_pdf(file_content: bytes, profile: str) -> Dict[str, Any]:
+    """Inventory and scan PDF surfaces. Never produces releasable bytes."""
+    try:
+        result = scan_pdf_for_ingestion(file_content, profile=profile)
+    except DocumentSanitizationError as exc:
+        raise IngestionError(exc.detail, status_code=exc.status_code) from exc
+
+    return {
+        "handler": "scan_pdf",
+        "routing_status": "handler_selected",
+        "anonymization_status": result["anonymization_status"],
+        "message": result["message"],
+        "pdf_summary": result["pdf_summary"],
+        "unscannable_reasons": result["unscannable_reasons"],
+        "detected_entities": result["detected_entities"],
+        "entity_count": result["entity_count"],
+        "detection_sources": result["detection_sources"],
+        "residual_phi_categories": result["residual_phi_categories"],
+        "text_layer_complete": result["text_layer_complete"],
+        "pages": result["pages"],
+    }
+
+
+def scan_workbook(file_content: bytes, profile: str) -> Dict[str, Any]:
+    """Inventory and scan workbook surfaces. Never produces releasable bytes."""
+    try:
+        result = scan_workbook_for_ingestion(file_content, profile=profile)
+    except WorkbookSanitizationError as exc:
+        raise IngestionError(exc.detail, status_code=exc.status_code) from exc
+    return result
 
 
 def anonymize_dicom(file_content: bytes, profile: str) -> Dict[str, Any]:
@@ -209,6 +577,8 @@ def anonymize_wsi(
 HANDLER_REGISTRY: Dict[str, Callable[..., Dict[str, Any]]] = {
     "csv": anonymize_csv,
     "text": anonymize_text,
+    "pdf": scan_pdf,
+    "workbook": scan_workbook,
     "dicom": anonymize_dicom,
     "nifti": anonymize_nifti,
     "wsi": anonymize_wsi,
@@ -223,10 +593,20 @@ def route_for_ingestion(
     text_content: Optional[bytes] = None,
     file_content: Optional[bytes] = None,
     study_salt: Optional[str] = None,
+    csv_k: int = 5,
+    csv_l: int = 2,
+    csv_direct_identifiers: Optional[list[str]] = None,
+    csv_quasi_identifiers: Optional[list[str]] = None,
+    csv_sensitive_column: Optional[str] = None,
+    csv_safe_harbor_mappings: Optional[dict[str, list[str]]] = None,
 ) -> Dict[str, Any]:
     safe_name = _safe_filename(filename)
     privacy_profile = validate_privacy_profile(profile)
+    resolved_policy = resolve_privacy_policy(privacy_profile)
     modality = detect_modality(safe_name, content_type, header)
+
+    if not resolved_policy.automatic_release_allowed:
+        return _expert_determination_response(safe_name, modality)
 
     handler = HANDLER_REGISTRY.get(modality)
     if handler is None:
@@ -235,52 +615,91 @@ def route_for_ingestion(
             status_code=500,
         )
 
-    if modality == "text":
+    if modality == "csv":
+        if file_content is None:
+            raise IngestionError(
+                "CSV content was not provided for anonymization",
+                status_code=500,
+            )
+        handler_result = handler(
+            file_content,
+            csv_k,
+            csv_l,
+            csv_direct_identifiers,
+            csv_quasi_identifiers,
+            csv_sensitive_column,
+            csv_safe_harbor_mappings,
+        )
+    elif modality == "text":
         if text_content is None:
             raise IngestionError(
                 "Text content was not provided for anonymization",
                 status_code=500,
             )
-        handler_result = handler(text_content, privacy_profile, study_salt)
+        handler_result = handler(text_content, resolved_policy.config_profile, study_salt)
+    elif modality == "pdf":
+        if file_content is None:
+            raise IngestionError(
+                "PDF content was not provided for scanning",
+                status_code=500,
+            )
+        handler_result = handler(file_content, resolved_policy.config_profile)
+    elif modality == "workbook":
+        if file_content is None:
+            raise IngestionError(
+                "Workbook content was not provided for scanning",
+                status_code=500,
+            )
+        handler_result = handler(file_content, resolved_policy.config_profile)
     elif modality == "dicom":
         if file_content is None:
             raise IngestionError(
                 "DICOM content was not provided for anonymization",
                 status_code=500,
             )
-        handler_result = handler(file_content, privacy_profile)
+        handler_result = handler(file_content, resolved_policy.config_profile)
     elif modality == "nifti":
         if file_content is None:
             raise IngestionError(
                 "NIfTI content was not provided for anonymization",
                 status_code=500,
             )
-        handler_result = handler(file_content, safe_name, privacy_profile)
+        handler_result = handler(file_content, safe_name, resolved_policy.config_profile)
     elif modality == "wsi":
         if file_content is None:
             raise IngestionError(
                 "WSI content was not provided for OCR scan planning",
                 status_code=500,
             )
-        handler_result = handler(file_content, safe_name, privacy_profile)
+        handler_result = handler(file_content, safe_name, resolved_policy.config_profile)
     else:
         handler_result = handler()
 
+    release_decision = _release_decision_for(modality, handler_result, safe_name)
     response = {
         "status": "success",
         "filename": safe_name,
         "detected_modality": modality,
         "privacy_profile": privacy_profile,
+        "privacy_policy": resolved_policy.policy.value,
         "handler": handler_result["handler"],
         "routing_status": handler_result["routing_status"],
         "anonymization_status": handler_result["anonymization_status"],
         "message": handler_result["message"],
-        "downstream": {
-            "ipfs_chunking": "pending",
-            "cid_encryption": "pending",
-            "metadata_indexing": "pending",
-            "blockchain_transaction": "pending",
-        },
+        "release_decision": release_decision.to_public_dict(),
+        "downstream": _blocked_downstream(
+            "pending" if release_decision.releasable else "blocked"
+        ),
+        # Every processed artifact gets a provenance record, released or not.
+        # Counts, categories, statuses and versions; never a value and never
+        # the uploaded filename.
+        "transformation_manifest": _manifest_for(
+            modality,
+            handler_result,
+            release_decision,
+            _artifact_id(release_decision, file_content),
+            resolved_policy.policy.value,
+        ),
     }
     if "anonymized_text" in handler_result:
         response["anonymized_text"] = handler_result["anonymized_text"]
@@ -292,6 +711,29 @@ def route_for_ingestion(
         response["detected_entities"] = handler_result["detected_entities"]
     if "metadata_summary" in handler_result:
         response["metadata_summary"] = handler_result["metadata_summary"]
+    if "residual_phi_categories" in handler_result:
+        response["residual_phi_categories"] = handler_result["residual_phi_categories"]
+    for utility_key in ("utility_metrics", "utility_verdict", "surrogate_counts",
+                        "review_required_reasons"):
+        if handler_result.get(utility_key):
+            response[utility_key] = handler_result[utility_key]
+    for document_key in (
+        "pdf_summary",
+        "workbook_summary",
+        "unscannable_reasons",
+        "text_layer_complete",
+        "pages",
+        "serialized_output_validation",
+        "validation_failures",
+    ):
+        if document_key in handler_result:
+            response[document_key] = handler_result[document_key]
+    if "rows_in" in handler_result:
+        response["tabular_summary"] = {
+            key: handler_result[key]
+            for key in TABULAR_SUMMARY_KEYS
+            if key in handler_result
+        }
     if "pixel_redaction_status" in handler_result:
         response["pixel_redaction_status"] = handler_result["pixel_redaction_status"]
     for safe_key in (
@@ -311,5 +753,13 @@ def route_for_ingestion(
         if safe_key in handler_result:
             response[safe_key] = handler_result[safe_key]
 
+    if "entity_count" in handler_result:
+        response["entity_count"] = handler_result["entity_count"]
+    if "detection_sources" in handler_result:
+        response["detection_sources"] = handler_result["detection_sources"]
+    if "ner_model" in handler_result:
+        response["ner_model"] = handler_result["ner_model"]
+    if "trained_ner_active" in handler_result:
+        response["trained_ner_active"] = handler_result["trained_ner_active"]
     return response
 

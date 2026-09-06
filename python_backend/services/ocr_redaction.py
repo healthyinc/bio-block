@@ -14,9 +14,11 @@ from services.privacy_profiles import PrivacyProfileError, get_privacy_profile
 try:
     import pydicom
     from pydicom.errors import InvalidDicomError
+    from pydicom.uid import ExplicitVRLittleEndian
 except ImportError:
     pydicom = None
     InvalidDicomError = Exception
+    ExplicitVRLittleEndian = None
 
 
 DEFAULT_MIN_CONFIDENCE = 0.5
@@ -45,7 +47,7 @@ class OCRBox:
 
 @dataclass
 class ImageRedactionResult:
-    image: Image.Image
+    image: Optional[Image.Image]
     boxes_detected: int
     boxes_redacted: int
     redaction_status: str
@@ -139,9 +141,8 @@ def redact_image_with_backend(
     engine_status = _backend_status(backend)
 
     if engine_status == "unavailable":
-        pil_image = _ensure_pil_image(image)
         return ImageRedactionResult(
-            image=pil_image,
+            image=None,
             boxes_detected=0,
             boxes_redacted=0,
             redaction_status="skipped_ocr_unavailable",
@@ -152,7 +153,7 @@ def redact_image_with_backend(
         boxes = backend.detect_text_boxes(_ensure_pil_image(image))
     except OCREngineUnavailable:
         return ImageRedactionResult(
-            image=_ensure_pil_image(image),
+            image=None,
             boxes_detected=0,
             boxes_redacted=0,
             redaction_status="skipped_ocr_unavailable",
@@ -160,7 +161,7 @@ def redact_image_with_backend(
         )
     except Exception:
         return ImageRedactionResult(
-            image=_ensure_pil_image(image),
+            image=None,
             boxes_detected=0,
             boxes_redacted=0,
             redaction_status="ocr_failed",
@@ -273,7 +274,6 @@ def redact_dicom_pixels(
         return _dicom_result(
             pixel_redaction_status="skipped_ocr_unavailable",
             ocr_engine_status=engine_status,
-            sanitized_bytes=file_bytes,
             include_sanitized_bytes=include_sanitized_bytes,
         )
 
@@ -290,7 +290,6 @@ def redact_dicom_pixels(
         return _dicom_result(
             pixel_redaction_status="no_pixel_data",
             ocr_engine_status=engine_status,
-            sanitized_bytes=file_bytes,
             include_sanitized_bytes=include_sanitized_bytes,
         )
 
@@ -300,7 +299,6 @@ def redact_dicom_pixels(
         return _dicom_result(
             pixel_redaction_status="unsupported_pixel_data",
             ocr_engine_status=engine_status,
-            sanitized_bytes=file_bytes,
             include_sanitized_bytes=include_sanitized_bytes,
         )
 
@@ -309,13 +307,15 @@ def redact_dicom_pixels(
         return _dicom_result(
             pixel_redaction_status="unsupported_pixel_format",
             ocr_engine_status=engine_status,
-            sanitized_bytes=file_bytes,
             include_sanitized_bytes=include_sanitized_bytes,
         )
 
     boxes_detected = 0
     boxes_redacted = 0
     frames_processed = 0
+    # (frame index, left, top, right, bottom, expected fill) for final-byte
+    # validation. Nothing here carries OCR text.
+    redacted_regions: List[Tuple[int, int, int, int, int, Any]] = []
 
     try:
         for frame_index, frame in frames:
@@ -324,6 +324,7 @@ def redact_dicom_pixels(
             boxes_detected += len(boxes)
 
             image_width, image_height = ocr_image.size
+            fill_value = _redaction_pixel_value(frame)
             for box in boxes:
                 if box.confidence < effective_min_confidence:
                     continue
@@ -333,15 +334,17 @@ def redact_dicom_pixels(
                     continue
 
                 left, top, right, bottom = clipped
-                frame[top:bottom, left:right] = _redaction_pixel_value(frame)
+                frame[top:bottom, left:right] = fill_value
                 boxes_redacted += 1
+                redacted_regions.append(
+                    (frame_index, left, top, right, bottom, fill_value)
+                )
 
             frames_processed += 1
     except OCREngineUnavailable:
         return _dicom_result(
             pixel_redaction_status="skipped_ocr_unavailable",
             ocr_engine_status="unavailable",
-            sanitized_bytes=file_bytes,
             include_sanitized_bytes=include_sanitized_bytes,
         )
     except Exception:
@@ -349,21 +352,61 @@ def redact_dicom_pixels(
             pixel_redaction_status="ocr_failed",
             ocr_engine_status="error",
             frames_processed=frames_processed,
-            sanitized_bytes=file_bytes,
             include_sanitized_bytes=include_sanitized_bytes,
         )
 
-    sanitized_bytes = file_bytes
-    if boxes_redacted:
-        dataset.PixelData = pixel_array.tobytes()
-        sanitized_bytes = _dataset_to_bytes(dataset)
+    if boxes_detected and not boxes_redacted:
+        # Text was found and none of it was cleared, so these bytes still
+        # carry it. They must never be handed back as sanitized.
+        return _dicom_result(
+            pixel_redaction_status="privacy_requirements_not_met",
+            ocr_boxes_detected=boxes_detected,
+            boxes_redacted=0,
+            frames_processed=frames_processed,
+            scanned_regions=frames_processed,
+            ocr_engine_status=engine_status,
+            include_sanitized_bytes=include_sanitized_bytes,
+            ocr_confidence_threshold=effective_min_confidence,
+            pixel_validation_status="not_attempted",
+        )
 
     if boxes_redacted:
+        try:
+            sanitized_bytes = _write_uncompressed_pixels(dataset, pixel_array)
+        except Exception:
+            return _dicom_result(
+                pixel_redaction_status="serialization_failed",
+                ocr_boxes_detected=boxes_detected,
+                boxes_redacted=boxes_redacted,
+                frames_processed=frames_processed,
+                scanned_regions=frames_processed,
+                ocr_engine_status=engine_status,
+                include_sanitized_bytes=include_sanitized_bytes,
+                ocr_confidence_threshold=effective_min_confidence,
+                pixel_validation_status="serialization_failed",
+            )
         status = "completed"
-    elif boxes_detected:
-        status = "completed_no_boxes_redacted"
     else:
+        sanitized_bytes = file_bytes
         status = "completed_no_text_detected"
+
+    # Final-byte validation: re-read what we are about to hand out and confirm
+    # the redaction actually survived serialization. A compressed or otherwise
+    # unwritable transfer syntax fails here instead of shipping intact pixels.
+    if not _validate_sanitized_dicom(
+        sanitized_bytes, pixel_array.shape, redacted_regions
+    ):
+        return _dicom_result(
+            pixel_redaction_status="privacy_requirements_not_met",
+            ocr_boxes_detected=boxes_detected,
+            boxes_redacted=boxes_redacted,
+            frames_processed=frames_processed,
+            scanned_regions=frames_processed,
+            ocr_engine_status=engine_status,
+            include_sanitized_bytes=include_sanitized_bytes,
+            ocr_confidence_threshold=effective_min_confidence,
+            pixel_validation_status="verification_failed",
+        )
 
     return _dicom_result(
         pixel_redaction_status=status,
@@ -375,7 +418,48 @@ def redact_dicom_pixels(
         sanitized_bytes=sanitized_bytes,
         include_sanitized_bytes=include_sanitized_bytes,
         ocr_confidence_threshold=effective_min_confidence,
+        pixel_validation_status="verified",
     )
+
+
+def _write_uncompressed_pixels(dataset: Any, pixel_array: np.ndarray) -> bytes:
+    """Write redacted pixels back, forcing an uncompressed transfer syntax.
+
+    Leaving a compressed UID in place while writing raw bytes produces a file
+    no decoder can read, which the validation step below would reject anyway.
+    """
+    dataset.PixelData = pixel_array.tobytes()
+    file_meta = getattr(dataset, "file_meta", None)
+    if file_meta is not None:
+        transfer_syntax = getattr(file_meta, "TransferSyntaxUID", None)
+        if transfer_syntax is None or getattr(transfer_syntax, "is_compressed", False):
+            file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
+    return _dataset_to_bytes(dataset)
+
+
+def _validate_sanitized_dicom(
+    sanitized_bytes: bytes,
+    expected_shape: Tuple[int, ...],
+    redacted_regions: Sequence[Tuple[int, int, int, int, int, Any]],
+) -> bool:
+    """Re-read the emitted bytes and confirm every redaction is present."""
+    if pydicom is None or not sanitized_bytes:
+        return False
+    try:
+        dataset = pydicom.dcmread(BytesIO(sanitized_bytes), force=False)
+        pixels = np.array(dataset.pixel_array, copy=False)
+    except Exception:
+        return False
+
+    if tuple(pixels.shape) != tuple(expected_shape):
+        return False
+
+    for frame_index, left, top, right, bottom, fill_value in redacted_regions:
+        frame = pixels if pixels.ndim == 2 else pixels[frame_index]
+        region = frame[top:bottom, left:right]
+        if region.size == 0 or not np.all(region == fill_value):
+            return False
+    return True
 
 
 def safe_ocr_response(result: Dict[str, Any]) -> Dict[str, Any]:
@@ -492,6 +576,7 @@ def _dicom_result(
     sanitized_bytes: Optional[bytes] = None,
     include_sanitized_bytes: bool = True,
     ocr_confidence_threshold: Optional[float] = None,
+    pixel_validation_status: str = "not_applicable",
 ) -> Dict[str, Any]:
     result: Dict[str, Any] = {
         "pixel_redaction_status": pixel_redaction_status,
@@ -500,6 +585,7 @@ def _dicom_result(
         "frames_processed": frames_processed,
         "scanned_regions": scanned_regions,
         "ocr_engine_status": ocr_engine_status,
+        "pixel_validation_status": pixel_validation_status,
     }
     if ocr_confidence_threshold is not None:
         result["ocr_confidence_threshold"] = ocr_confidence_threshold

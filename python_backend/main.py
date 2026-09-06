@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import chromadb
@@ -24,19 +24,49 @@ import tempfile
 from eth_account.messages import encode_defunct
 from eth_account import Account
 
-# Preview factory imports
-from services.preview.factory import PreviewFactory
+# The preview generators in services/preview are no longer wired to any
+# endpoint: they return raw or raw-rendered pixels. Previews go through
+# services/release_gate.sanitized_preview instead.
 from services.audit_logger import AuditLogger
 from services.ingestion import (
     HEADER_READ_LIMIT,
+    TABULAR_SUMMARY_KEYS,
     TEXT_READ_LIMIT_BYTES,
     IngestionError,
+    _safe_filename,
     detect_modality,
+    release_decision_for,
     route_for_ingestion,
 )
-from services.dicom_anonymization import (
-    DicomAnonymizationError,
-    anonymize_dicom_file_bytes,
+from services.document_sanitization import (
+    DocumentSanitizationError,
+    scan_pdf_bytes,
+)
+from services.raster_redaction import (
+    RasterRedactionError,
+    redact_raster_bytes,
+    verified_raster_response,
+    verify_redacted_raster_bytes,
+)
+from services.release_gate import (
+    ReleaseGateError,
+    sanitize_for_index,
+    sanitized_preview,
+)
+from services.tabular_anonymization import (
+    TabularAnonymizationError,
+    anonymize_tabular_csv,
+)
+from services.privacy_contracts import (
+    SanitizedArtifact,
+    expert_determination_decision,
+    issue_release,
+    manual_review_decision,
+)
+from services.privacy_policy import PrivacyPolicyError, resolve_privacy_policy
+from services.text_anonymization import (
+    TextAnonymizationError,
+    anonymize_clinical_text,
 )
 
 # PDF extraction imports
@@ -228,56 +258,11 @@ def generate_id() -> str:
     random_suffix = hash(str(uuid.uuid4())) % 10000
     return f"{timestamp}{random_suffix}"
 
-def mask_phi_in_image_presidio(pil_image):
-    """
-    Advanced PHI detection and redaction using Presidio Image Redactor
-    This uses state-of-the-art ML models for better accuracy
-    """
-    if not presidio_available or presidio_image_redactor is None:
-        raise HTTPException(
-            status_code=500, 
-            detail="Presidio image redactor not available. Please install with: pip install presidio_analyzer presidio_anonymizer presidio_image_redactor"
-        )
-    
-    try:
-        # Use Presidio's advanced image redaction
-        redacted_image = presidio_image_redactor.redact(pil_image)
-        return redacted_image
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing image with Presidio: {str(e)}")
-
-def mask_phi_in_image_legacy(image_cv):
-    """
-    Legacy PHI detection using OCR and spaCy (fallback method)
-    """
-    if nlp is None:
-        raise HTTPException(status_code=500, detail="spaCy English model not available. Please install it with: python -m spacy download en_core_web_sm")
-    
-    if not tesseract_available:
-        raise HTTPException(status_code=500, detail="Tesseract OCR not available. Please install Tesseract: Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki, macOS: brew install tesseract, Linux: sudo apt install tesseract-ocr")
-    
-    try:
-        # Convert BGR to RGB for OCR processing
-        rgb_image = cv2.cvtColor(image_cv, cv2.COLOR_BGR2RGB)
-        
-        ocr_data = pytesseract.image_to_data(rgb_image, output_type=Output.DICT)
-        
-        full_text = " ".join(ocr_data["text"])
-        
-        doc = nlp(full_text)
-        
-        phi_entities = set(ent.text.strip() for ent in doc.ents if ent.label_ in PHI_LABELS)
-        
-        for i, word in enumerate(ocr_data["text"]):
-            if word.strip() in phi_entities:
-                x, y, w, h = ocr_data["left"][i], ocr_data["top"][i], ocr_data["width"][i], ocr_data["height"][i]
-                cv2.rectangle(image_cv, (x, y), (x + w, y + h), (0, 0, 0), -1)
-        
-        return image_cv
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
+# The former mask_phi_in_image_presidio / mask_phi_in_image_legacy helpers were
+# removed. The legacy one masked only OCR tokens whose exact text matched a
+# spaCy entity and returned the image unchanged otherwise, which is fail-open.
+# Raster redaction now goes through services/raster_redaction.py, which fills
+# every detected text region and verifies the encoded result before release.
 
 @app.get("/")
 async def root():
@@ -294,6 +279,7 @@ async def root():
             "/anonymize_text": "Anonymize PHI in plain text (Presidio + spaCy fallback)",
             "/anonymize_pdf": "Anonymize PHI in PDF documents (per-page extraction and redaction)",
             "/anonymize_dicom": "Anonymize DICOM files with strict/research privacy profiles",
+            "/anonymize_csv": "Anonymize CSV files and return a downloadable CSV",
             "/api/v1/ingest": "Route uploaded biomedical files through profile-aware anonymization handlers"
         },
         "status": {
@@ -339,7 +325,7 @@ async def ingest_file(
                 )
 
         file_content = None
-        if modality in {"dicom", "nifti", "wsi"}:
+        if modality in {"csv", "pdf", "dicom", "nifti", "wsi"}:
             await file.seek(0)
             file_content = await file.read()
 
@@ -360,197 +346,133 @@ async def ingest_file(
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to route uploaded file")
 
+SUPPORTED_IMAGE_MEDIA_TYPES = {"image/jpeg", "image/jpg", "image/png"}
+
+
+def _validate_image_upload(file: UploadFile) -> None:
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image")
+    if file.content_type not in SUPPORTED_IMAGE_MEDIA_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Only JPEG, JPG, and PNG images are supported",
+        )
+
+
+def _raster_redaction_response(outcome, filename: str, prefix: str):
+    """Stream bytes only for a verified redaction; otherwise report a block."""
+    if not outcome.released:
+        audit_logger.log_operation(
+            operation="ANONYMIZE",
+            details=(
+                f"image blocked, status: {outcome.status}, "
+                f"reasons: {','.join(outcome.reason_codes)}"
+            ),
+        )
+        return JSONResponse(
+            status_code=422,
+            content=verified_raster_response(outcome),
+        )
+
+    audit_logger.log_operation(
+        operation="ANONYMIZE",
+        details=(
+            f"image redacted, boxes: {outcome.boxes_redacted}, "
+            f"validation: {outcome.validation_status}"
+        ),
+    )
+    safe_name = _safe_filename(filename or "image")
+    return StreamingResponse(
+        io.BytesIO(outcome.released_bytes),
+        media_type=outcome.media_type,
+        headers={
+            "Content-Disposition": f"attachment; filename={prefix}_{safe_name}.png",
+            "X-Redaction-Validation": outcome.validation_status,
+            "X-Boxes-Redacted": str(outcome.boxes_redacted),
+        },
+    )
+
+
 @app.post("/anonymize_image")
 async def anonymize_image(file: UploadFile = File(...)):
     """
-    Anonymize PHI in JPEG/JPG/PNG images using Presidio (preferred) or legacy OCR+spaCy
+    Redact burned-in text from JPEG/JPG/PNG images.
+
+    Every text region the OCR engine reports above the profile confidence
+    threshold is filled, because on a medical raster any burned-in text is
+    presumptively identifying. The encoded output is then re-read and verified
+    both structurally and by a residual OCR pass. If OCR is unavailable, OCR
+    fails, detected text was not cleared, or verification does not pass, no
+    image bytes are returned at all - the response is a blocked summary.
+
+    Input EXIF/XMP metadata is never carried into the output.
     """
+    _validate_image_upload(file)
+
     try:
-        # Validate file type
-        if not file.content_type or not file.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File must be an image")
-        
-        if file.content_type not in ['image/jpeg', 'image/jpg', 'image/png']:
-            raise HTTPException(status_code=400, detail="Only JPEG, JPG, and PNG images are supported")
-        
-        # Read and convert image
         contents = await file.read()
-        pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
-        
-        # Try Presidio first (preferred method)
-        if presidio_available and presidio_image_redactor is not None:
-            try:
-                print("Using Presidio advanced image redaction")
-                redacted_image_pil = mask_phi_in_image_presidio(pil_image)
-                
-                # Save redacted image
-                img_buffer = io.BytesIO()
-                redacted_image_pil.save(img_buffer, format='JPEG', quality=95)
-                img_buffer.seek(0)
-                
-                audit_logger.log_operation(
-                    operation="ANONYMIZE",
-                    details=f"file: {file.filename}, method: presidio",
-                )
+        outcome = redact_raster_bytes(contents, profile="strict")
+    except RasterRedactionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except Exception as exc:
+        # The message must never echo image content.
+        raise HTTPException(status_code=500, detail="Failed to redact image") from exc
 
-                return StreamingResponse(
-                    io.BytesIO(img_buffer.read()),
-                    media_type="image/jpeg",
-                    headers={"Content-Disposition": f"attachment; filename=presidio_anonymized_{file.filename}"}
-                )
-                
-            except Exception as e:
-                print(f"Presidio failed, falling back to legacy method: {str(e)}")
-        
-        # Fallback to legacy OCR + spaCy method
-        print("Using legacy OCR + spaCy image redaction")
-        image_cv = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-        masked_image_cv = mask_phi_in_image_legacy(image_cv)
-        
-        # Convert back to PIL and save
-        masked_image_rgb = cv2.cvtColor(masked_image_cv, cv2.COLOR_BGR2RGB)
-        masked_pil = Image.fromarray(masked_image_rgb)
-        
-        img_buffer = io.BytesIO()
-        masked_pil.save(img_buffer, format='JPEG', quality=95)
-        img_buffer.seek(0)
-
-        audit_logger.log_operation(
-            operation="ANONYMIZE",
-            details=f"file: {file.filename}, method: legacy",
-        )
-
-        return StreamingResponse(
-            io.BytesIO(img_buffer.read()),
-            media_type="image/jpeg",
-            headers={"Content-Disposition": f"attachment; filename=legacy_anonymized_{file.filename}"}
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to anonymize image: {str(e)}")
+    return _raster_redaction_response(outcome, file.filename, "redacted")
 
 
 @app.post("/anonymize_image_presidio")
 async def anonymize_image_presidio_only(file: UploadFile = File(...)):
     """
-    Anonymize PHI in images using ONLY Presidio (force advanced method)
+    Redact an image with Presidio, then verify the result independently.
+
+    Presidio redacts selectively, by PHI classification. On a medical raster a
+    misclassified burned-in identifier would survive, so its output is put
+    through the same residual OCR verification: any text the engine can still
+    read blocks the release. Presidio-only remains available for compatibility;
+    /anonymize_image is the stricter path.
     """
+    if not presidio_available or presidio_image_redactor is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Presidio not available. Install with: pip install presidio_analyzer presidio_anonymizer presidio_image_redactor && python -m spacy download en_core_web_lg",
+        )
+
+    _validate_image_upload(file)
+
     try:
-        if not presidio_available or presidio_image_redactor is None:
-            raise HTTPException(
-                status_code=503, 
-                detail="Presidio not available. Install with: pip install presidio_analyzer presidio_anonymizer presidio_image_redactor && python -m spacy download en_core_web_lg"
-            )
-        
-        # Validate file type
-        if not file.content_type or not file.content_type.startswith('image/'):
-            raise HTTPException(status_code=400, detail="File must be an image")
-        
-        if file.content_type not in ['image/jpeg', 'image/jpg', 'image/png']:
-            raise HTTPException(status_code=400, detail="Only JPEG, JPG, and PNG images are supported")
-        
-        # Read and process image
         contents = await file.read()
         pil_image = Image.open(io.BytesIO(contents)).convert("RGB")
-        
-        print("Processing image with Presidio advanced redaction")
-        redacted_image_pil = mask_phi_in_image_presidio(pil_image)
-        
-        # Save and return redacted image
-        img_buffer = io.BytesIO()
-        redacted_image_pil.save(img_buffer, format='PNG', quality=95)
-        img_buffer.seek(0)
-        
-        return StreamingResponse(
-            io.BytesIO(img_buffer.read()),
-            media_type="image/png",
-            headers={"Content-Disposition": f"attachment; filename=presidio_redacted_{file.filename}"}
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to anonymize image with Presidio: {str(e)}")
+        redacted = presidio_image_redactor.redact(pil_image)
+        buffer = io.BytesIO()
+        redacted.save(buffer, format="PNG")
+        # Verify Presidio's own output with the shared residual scan.
+        outcome = verify_redacted_raster_bytes(buffer.getvalue(), profile="strict")
+    except RasterRedactionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Failed to redact image") from exc
+
+    return _raster_redaction_response(outcome, file.filename, "presidio_redacted")
 
 
 def anonymize_text_content(text: str) -> dict:
-    """
-    Core text anonymization logic using Presidio with spaCy NER fallback.
-    Returns dict with anonymized_text, entities, and method used.
-    """
-    entities_found = []
+    """Compatibility wrapper over the fail-closed typed detector pipeline."""
+    try:
+        result = anonymize_clinical_text(text, profile="strict")
+    except TextAnonymizationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
 
-    # Try Presidio first
-    if presidio_available and presidio_analyzer and presidio_anonymizer:
-        try:
-            results = presidio_analyzer.analyze(
-                text=text,
-                language="en",
-                entities=[
-                    "PERSON", "PHONE_NUMBER", "EMAIL_ADDRESS", "US_SSN",
-                    "DATE_TIME", "LOCATION", "MEDICAL_LICENSE", "IP_ADDRESS",
-                    "US_DRIVER_LICENSE", "US_PASSPORT", "CREDIT_CARD", "URL"
-                ]
-            )
-
-            anonymized = presidio_anonymizer.anonymize(
-                text=text,
-                analyzer_results=results
-            )
-
-            for result in results:
-                entities_found.append({
-                    "entity_type": result.entity_type,
-                    "start": result.start,
-                    "end": result.end,
-                    "score": round(result.score, 3),
-                    "original_text": text[result.start:result.end]
-                })
-
-            return {
-                "anonymized_text": anonymized.text,
-                "entities_found": entities_found,
-                "entity_count": len(entities_found),
-                "method": "presidio"
-            }
-        except Exception as e:
-            print(f"Presidio text anonymization failed, trying spaCy fallback: {str(e)}")
-
-    # Fallback to spaCy NER
-    if nlp is not None:
-        doc = nlp(text)
-        anonymized_text = text
-
-        sorted_ents = sorted(doc.ents, key=lambda e: e.start_char, reverse=True)
-        for ent in sorted_ents:
-            if ent.label_ in PHI_LABELS:
-                entities_found.append({
-                    "entity_type": ent.label_,
-                    "start": ent.start_char,
-                    "end": ent.end_char,
-                    "score": 1.0,
-                    "original_text": ent.text
-                })
-                anonymized_text = (
-                    anonymized_text[:ent.start_char]
-                    + f"<{ent.label_}>"
-                    + anonymized_text[ent.end_char:]
-                )
-
-        entities_found.reverse()
-        return {
-            "anonymized_text": anonymized_text,
-            "entities_found": entities_found,
-            "entity_count": len(entities_found),
-            "method": "spacy"
-        }
-
-    raise HTTPException(
-        status_code=503,
-        detail="No anonymization engine available. Install Presidio or spaCy."
-    )
+    return {
+        "anonymized_text": result["anonymized_text"],
+        "entities_found": [
+            {"entity_type": entity_type, "count": count}
+            for entity_type, count in sorted(result["detected_entities"].items())
+        ],
+        "entity_count": result["entity_count"],
+        "method": "typed_phi_pipeline",
+        "privacy_policy": "safe_harbor_v1",
+    }
 
 
 @app.post("/anonymize_text")
@@ -578,76 +500,64 @@ async def anonymize_text(request: AnonymizeTextRequest):
 @app.post("/anonymize_pdf")
 async def anonymize_pdf(file: UploadFile = File(...)):
     """
-    Anonymize PHI in PDF documents. Extracts text from each page,
-    runs PHI detection and anonymization, returns per-page results.
-    """
-    if not pymupdf_available:
-        raise HTTPException(
-            status_code=503,
-            detail="PyMuPDF not available. Install with: pip install PyMuPDF"
-        )
+    Scan every PHI-bearing surface of a PDF: page text, document and XMP
+    metadata, annotations, form fields, links, bookmarks, embedded files, and
+    raster images.
 
+    A PDF is never automatically releasable: there is no validated PDF writer,
+    so the outcome is manual_review_required at best. Redacted page text is
+    returned only when every text surface was read and came back clear;
+    otherwise it is withheld so a partial scan cannot be mistaken for a clean
+    document. Original bytes are never returned.
+    """
     if not file.filename or not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="File must be a PDF document")
 
     try:
         contents = await file.read()
+        # Scanned in memory; PHI is never written to a temporary file.
+        result = scan_pdf_bytes(contents, profile="strict")
+    except DocumentSanitizationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except TextAnonymizationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except Exception as exc:
+        # The message must never echo document content.
+        raise HTTPException(
+            status_code=500, detail="Failed to scan PDF"
+        ) from exc
 
-        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-            tmp.write(contents)
-            tmp_path = tmp.name
+    entities_found = [
+        {"entity_type": entity_type, "count": count}
+        for entity_type, count in sorted(result["detected_entities"].items())
+    ]
+    audit_logger.log_operation(
+        operation="ANONYMIZE",
+        details=(
+            f"pdf pages: {result['pdf_summary'].get('page_count', 0)}, "
+            f"entities: {result['entity_count']}, "
+            f"status: {result['anonymization_status']}"
+        ),
+    )
 
-        try:
-            doc = fitz.open(tmp_path)
-            pages_result = []
-            total_entities = 0
-
-            for page_num in range(len(doc)):
-                page = doc[page_num]
-                page_text = page.get_text()
-
-                if page_text.strip():
-                    page_anonymized = anonymize_text_content(page_text)
-                    total_entities += page_anonymized["entity_count"]
-                    pages_result.append({
-                        "page_number": page_num + 1,
-                        "original_text": page_text,
-                        "anonymized_text": page_anonymized["anonymized_text"],
-                        "entities_found": page_anonymized["entities_found"],
-                        "entity_count": page_anonymized["entity_count"]
-                    })
-                else:
-                    pages_result.append({
-                        "page_number": page_num + 1,
-                        "original_text": "",
-                        "anonymized_text": "",
-                        "entities_found": [],
-                        "entity_count": 0
-                    })
-
-            method = "presidio" if (presidio_available and presidio_analyzer) else "spacy"
-            doc.close()
-
-            audit_logger.log_operation(
-                operation="ANONYMIZE",
-                details=f"pdf: {file.filename}, pages: {len(pages_result)}, entities: {total_entities}, method: {method}",
-            )
-
-            return {
-                "filename": file.filename,
-                "total_pages": len(pages_result),
-                "total_entities": total_entities,
-                "method": method,
-                "pages": pages_result
-            }
-
-        finally:
-            os.unlink(tmp_path)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to anonymize PDF: {str(e)}")
+    return {
+        "filename": _safe_filename(file.filename),
+        "total_pages": result["pdf_summary"].get("page_count", 0),
+        "total_entities": result["entity_count"],
+        "method": "typed_phi_pipeline",
+        "privacy_policy": "safe_harbor_v1",
+        "anonymization_status": result["anonymization_status"],
+        "release_decision": manual_review_decision(
+            *result["unscannable_reasons"]
+        ).to_public_dict(),
+        "pdf_summary": result["pdf_summary"],
+        "unscannable_reasons": result["unscannable_reasons"],
+        "text_layer_complete": result["text_layer_complete"],
+        "entities_found": entities_found,
+        "detection_sources": result["detection_sources"],
+        "residual_phi_categories": result["residual_phi_categories"],
+        "pages": result["pages"],
+    }
 
 
 # HIPAA Safe Harbor: 18 identifier types mapped to DICOM tags
@@ -690,67 +600,271 @@ async def anonymize_dicom(
     file: UploadFile = File(...),
     profile: str = Form("strict"),
 ):
-    """
-    Anonymize DICOM metadata using the selected privacy profile and return a downloadable DICOM file.
+    """Block downloads until the unified DICOM sanitizer validates all layers."""
+    safe_name = (file.filename or "").strip().lower()
+    if not safe_name.endswith((".dcm", ".dicom")):
+        raise HTTPException(status_code=400, detail="File must be a DICOM document")
 
-    The response is a valid .dcm attachment so it can be saved and opened
-    in a DICOM viewer. Raw PHI values are never returned in the response.
+    try:
+        resolved_policy = resolve_privacy_policy(profile)
+    except PrivacyPolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if resolved_policy.automatic_release_allowed:
+        decision = manual_review_decision("dicom_pixel_validation_incomplete")
+    else:
+        decision = expert_determination_decision()
+    raise HTTPException(status_code=409, detail=decision.to_public_dict())
+
+def _parse_optional_csv_columns(columns: Optional[str]) -> Optional[List[str]]:
+    if columns is None:
+        return None
+    if columns.strip().lower() == "string":
+        return None
+    parsed = [column.strip() for column in columns.split(",") if column.strip()]
+    return parsed or None
+
+
+def _parse_optional_csv_column(column: Optional[str]) -> Optional[str]:
+    if column is None:
+        return None
+    parsed = column.strip()
+    if not parsed or parsed.lower() == "string":
+        return None
+    return parsed
+
+
+def _parse_safe_harbor_mappings(
+    mappings: Optional[str],
+) -> Optional[Dict[str, List[str]]]:
+    if mappings is None or not mappings.strip() or mappings.strip().lower() == "string":
+        return None
+    try:
+        parsed = json.loads(mappings)
+    except json.JSONDecodeError as exc:
+        raise TabularAnonymizationError(
+            "safe_harbor_mappings must be a valid JSON object"
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise TabularAnonymizationError(
+            "safe_harbor_mappings must be a JSON object"
+        )
+    normalized: Dict[str, List[str]] = {}
+    for category, columns in parsed.items():
+        if isinstance(columns, str):
+            columns = [columns]
+        if not isinstance(columns, list) or not all(
+            isinstance(column, str) for column in columns
+        ):
+            raise TabularAnonymizationError(
+                "Safe Harbor mapping values must be column-name lists"
+            )
+        normalized[str(category)] = columns
+    return normalized
+
+
+@app.post("/anonymize_csv")
+async def anonymize_csv_file(
+    file: UploadFile = File(...),
+    k: int = Form(5),
+    l: int = Form(2),
+    direct_identifiers: Optional[str] = Form(None),
+    quasi_identifiers: Optional[str] = Form(None),
+    sensitive_column: Optional[str] = Form(None),
+    safe_harbor_mappings: Optional[str] = Form(None),
+    profile: str = Form("strict"),
+):
+    """
+    Anonymize a CSV file and return a downloadable anonymized CSV.
+
+    This route is policy-gated like every other release path: only
+    safe_harbor_v1 (and its strict alias) can produce downloadable bytes, and
+    research always returns expert_determination_required with no rows. A run
+    whose privacy validation failed, or whose serialized output did not match
+    the removal plan, is reported as blocked rather than streamed.
     """
     try:
-        contents = await file.read()
-        result = anonymize_dicom_file_bytes(contents, profile=profile)
-    except DicomAnonymizationError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail="Failed to anonymize DICOM") from exc
+        resolved_policy = resolve_privacy_policy(profile)
+    except PrivacyPolicyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    safe_name = (file.filename or "dicom.dcm").strip().replace("\\", "/").rsplit("/", 1)[-1]
+    if not resolved_policy.automatic_release_allowed:
+        decision = expert_determination_decision()
+        return JSONResponse(
+            status_code=200,
+            content={
+                "anonymization_status": decision.disposition.value,
+                "privacy_profile": resolved_policy.requested_profile,
+                "privacy_policy": decision.policy.value,
+                "release_decision": decision.to_public_dict(),
+                "message": "Research processing requires an expert determination.",
+            },
+        )
+
+    try:
+        contents = await file.read()
+        result = anonymize_tabular_csv(
+            contents,
+            k=k,
+            l=l,
+            direct_identifiers=_parse_optional_csv_columns(direct_identifiers),
+            quasi_identifiers=_parse_optional_csv_columns(quasi_identifiers),
+            sensitive_column=_parse_optional_csv_column(sensitive_column),
+            safe_harbor_mappings=_parse_safe_harbor_mappings(
+                safe_harbor_mappings
+            ),
+            include_anonymized_csv=True,
+        )
+    except TabularAnonymizationError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to anonymize CSV")
+
+    safe_name = (
+        (file.filename or "dataset.csv")
+        .strip()
+        .replace("\\", "/")
+        .rsplit("/", 1)[-1]
+    )
     if not safe_name:
-        safe_name = "dicom.dcm"
+        safe_name = "dataset.csv"
     stem = safe_name.rsplit(".", 1)[0] if "." in safe_name else safe_name
-    download_name = f"anonymized_{stem}.dcm"
-    metadata_summary = result["metadata_summary"]
+    download_name = "anonymized_dataset.csv"
+    # Serialized so validation runs against the bytes a download would produce.
+    # Kept only for the guarded release branch below, which the current policy
+    # never reaches; it is never written into a blocked response.
+    anonymized_csv = result.pop("_internal_anonymized_csv", "")
+
+    # One release authority, shared with /api/v1/ingest. A second endpoint with
+    # its own copy of the policy is how one route releases what the other
+    # blocks, so this calls the same function rather than deciding for itself.
+    release_decision = release_decision_for("csv", result, safe_name)
+
+    if not release_decision.releasable:
+        audit_logger.log_operation(
+            operation="ANONYMIZE",
+            details=(
+                f"csv blocked, status: {result['anonymization_status']}, "
+                f"serialized_validation: "
+                f"{result.get('serialized_output_validation')}"
+            ),
+        )
+        return JSONResponse(
+            status_code=422,
+            content={
+                "anonymization_status": result["anonymization_status"],
+                "privacy_profile": resolved_policy.requested_profile,
+                "privacy_policy": resolved_policy.policy.value,
+                "release_decision": release_decision.to_public_dict(),
+                "serialized_output_validation": result.get(
+                    "serialized_output_validation"
+                ),
+                "validation_failures": result.get("validation_failures", []),
+                "k_anonymity_satisfied": result["k_anonymity_satisfied"],
+                "l_diversity_satisfied": result["l_diversity_satisfied"],
+                "tabular_summary": {
+                    key: result[key]
+                    for key in TABULAR_SUMMARY_KEYS
+                    if key in result
+                },
+                "warnings": result["warnings"],
+                "message": (
+                    "CSV analysis completed. Rows are not automatically "
+                    "releasable; this decision matches /api/v1/ingest."
+                ),
+            },
+        )
 
     audit_logger.log_operation(
         operation="ANONYMIZE",
         details=(
-            f"dicom: {safe_name}, fields_scrubbed: "
-            f"{metadata_summary['fields_scrubbed']}, "
-            f"private_tags_removed: {metadata_summary['private_tags_removed']}"
+            f"csv upload, rows_in: {result['rows_in']}, "
+            f"rows_out: {result['rows_out']}, k_satisfied: "
+            f"{result['k_anonymity_satisfied']}"
         ),
     )
 
     return StreamingResponse(
-        io.BytesIO(result["anonymized_dicom_bytes"]),
-        media_type="application/dicom",
+        io.BytesIO(anonymized_csv.encode("utf-8")),
+        media_type="text/csv",
         headers={
             "Content-Disposition": f'attachment; filename="{download_name}"',
             "X-BioBlock-Anonymization-Status": result["anonymization_status"],
-            "X-BioBlock-Fields-Scrubbed": str(metadata_summary["fields_scrubbed"]),
-            "X-BioBlock-Private-Tags-Removed": str(metadata_summary["private_tags_removed"]),
-            "X-BioBlock-Pixel-Data-Preserved": str(metadata_summary["pixel_data_preserved"]).lower(),
+            "X-BioBlock-Rows-In": str(result["rows_in"]),
+            "X-BioBlock-Rows-Out": str(result["rows_out"]),
+            "X-BioBlock-K-Anonymity-Satisfied": str(
+                result["k_anonymity_satisfied"]
+            ).lower(),
+            "X-BioBlock-L-Diversity-Satisfied": str(
+                result["l_diversity_satisfied"]
+            ).lower(),
+            "X-BioBlock-Equivalence-Classes": str(result["equivalence_classes"]),
+            "X-BioBlock-Min-Group-Size": str(result["min_group_size"]),
+            "X-BioBlock-Safe-Harbor-Status": result["safe_harbor_report"][
+                "safe_harbor_validation_status"
+            ],
+            "X-BioBlock-Serialized-Output-Validation": str(
+                result.get("serialized_output_validation", "not_run")
+            ),
+            "X-BioBlock-Artifact-Sha256": release_decision.artifact_sha256 or "",
+            "X-BioBlock-Privacy-Policy": resolved_policy.policy.value,
         },
     )
+
+
+def _gate_store_request(request: StoreWithContentRequest):
+    """Redact and verify everything before it reaches the vector store.
+
+    Client-supplied content used to be indexed verbatim, so an upload the
+    ingest route blocked could be posted here and become searchable.
+    """
+    try:
+        gate = sanitize_for_index(
+            {
+                "dataset_title": request.dataset_title,
+                "summary": request.summary,
+                "extracted_content": request.extracted_content or "",
+            },
+            metadata=request.metadata or {},
+        )
+    except ReleaseGateError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+    if not gate.cleared:
+        audit_logger.log_operation(
+            operation="STORE",
+            details=(
+                f"store blocked, status: {gate.status}, "
+                f"fields: {','.join(gate.blocked_fields)}"
+            ),
+        )
+        raise HTTPException(status_code=422, detail=gate.safe_summary())
+    return gate
+
 
 @app.post("/store")
 async def store_data(request: StoreWithContentRequest):
     """
     Store document data with metadata and content vectors
     """
+    gate = _gate_store_request(request)
+    safe_title = gate.fields["dataset_title"]
+    safe_summary = gate.fields["summary"]
+    safe_content = gate.fields["extracted_content"]
+
     try:
-        print(f"Received enhanced storage request: {request.dataset_title}")
         doc_id = generate_id()
-         
-        # Prepare metadata document
-        combined_metadata = f"Dataset Title: {request.dataset_title}\n{request.summary}"
+
+        # Built from the redacted fields only.
+        combined_metadata = f"Dataset Title: {safe_title}\n{safe_summary}"
         disease_tags = request.metadata.get("disease_tags", "")
-     
+
         if disease_tags:
             combined_metadata += f"\nDisease Tags: {disease_tags}"
-        
+
         metadata = {
             "cid": request.cid,
-            "dataset_title": request.dataset_title,
+            "dataset_title": safe_title,
             "file_type": request.file_type,
             **request.metadata
         }
@@ -759,12 +873,12 @@ async def store_data(request: StoreWithContentRequest):
             documents=[combined_metadata],
             metadatas=[metadata]
         )
-        
-     # Store content if available
-        if request.extracted_content and request.extracted_content.strip():
-            # Chunk content for better vectorization
+
+        # Store content if available
+        if safe_content and safe_content.strip():
+            # Chunk the redacted content for vectorization.
             extractor = ContentExtractor()
-            content_chunks = extractor.chunk_content(request.extracted_content)
+            content_chunks = extractor.chunk_content(safe_content)
             
             # Add each chunk with reference to original document
             chunk_ids = []
@@ -794,41 +908,45 @@ async def store_data(request: StoreWithContentRequest):
             operation="STORE",
             wallet_address=request.metadata.get("owner_address", ""),
             document_id=doc_id,
-            details=f"CID: {request.cid}, title: {request.dataset_title}",
+            details=f"CID: {request.cid}, sanitized: {gate.status}",
         )
 
         return {
             "message": "Stored successfully with enhanced content indexing",
             "cid": request.cid,
             "doc_id": doc_id,
-            "content_chunks": len(request.extracted_content.split()) if request.extracted_content else 0
-        }   
-        
-    except Exception as e:
-        print(f"Error in enhanced storage: {str(e)}")
+            "content_chunks": len(safe_content.split()) if safe_content else 0,
+            "sanitization": gate.safe_summary(),
+        }
 
-        import traceback
-        traceback.print_exc()  
-        raise HTTPException(status_code=500, detail=f"Failed to store data: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception:
+        # The message must never echo stored content.
+        raise HTTPException(status_code=500, detail="Failed to store data")
 
 @app.post("/store_enhanced")
 async def store_data_enhanced(request: StoreWithContentRequest):
     """
     Enhanced storage with both metadata and content vectors
     """
+    gate = _gate_store_request(request)
+    safe_title = gate.fields["dataset_title"]
+    safe_summary = gate.fields["summary"]
+    safe_content = gate.fields["extracted_content"]
+
     try:
-        print(f"Received enhanced storage request: {request.dataset_title}")
         doc_id = generate_id()
-        
-        # Prepare metadata document
-        combined_metadata = f"Dataset Title: {request.dataset_title}\n{request.summary}"
+
+        # Built from the redacted fields only.
+        combined_metadata = f"Dataset Title: {safe_title}\n{safe_summary}"
         disease_tags = request.metadata.get("disease_tags", "")
         if disease_tags:
             combined_metadata += f"\nDisease Tags: {disease_tags}"
-        
+
         metadata = {
             "cid": request.cid,
-            "dataset_title": request.dataset_title,
+            "dataset_title": safe_title,
             "file_type": request.file_type,
             **request.metadata
         }
@@ -841,10 +959,10 @@ async def store_data_enhanced(request: StoreWithContentRequest):
         )
         
         # Store content if available
-        if request.extracted_content and request.extracted_content.strip():
+        if safe_content and safe_content.strip():
             extractor = ContentExtractor()
-            content_chunks = extractor.chunk_content(request.extracted_content)
-            
+            content_chunks = extractor.chunk_content(safe_content)
+
             chunk_ids = []
             chunk_docs = []
             chunk_metas = []
@@ -872,21 +990,22 @@ async def store_data_enhanced(request: StoreWithContentRequest):
             operation="STORE",
             wallet_address=request.metadata.get("owner_address", ""),
             document_id=doc_id,
-            details=f"CID: {request.cid}, title: {request.dataset_title} (enhanced)",
+            details=f"CID: {request.cid}, sanitized: {gate.status} (enhanced)",
         )
 
         return {
             "message": "Stored successfully with enhanced content indexing",
             "cid": request.cid,
             "doc_id": doc_id,
-            "content_chunks": len(request.extracted_content.split()) if request.extracted_content else 0
+            "content_chunks": len(safe_content.split()) if safe_content else 0,
+            "sanitization": gate.safe_summary(),
         }
-        
-    except Exception as e:
-        print(f"Error in enhanced storage: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to store data: {str(e)}")
+
+    except HTTPException:
+        raise
+    except Exception:
+        # The message must never echo stored content.
+        raise HTTPException(status_code=500, detail="Failed to store data")
 
 @app.post("/search")
 async def search_data(request: SearchRequest):
@@ -1070,7 +1189,36 @@ async def update_document(doc_id: str, request: UpdateRequest):
         
         new_dataset_title = request.dataset_title if request.dataset_title else old_metadata.get("dataset_title", "")
         new_summary = request.summary if request.summary else existing["documents"][0]
-        
+
+        # An update writes into the same searchable index a store does, so it
+        # goes through the same gate. Only the caller-supplied fields are
+        # re-sanitized; already-stored text was gated when it was written.
+        if request.dataset_title or request.summary or request.metadata:
+            try:
+                gate = sanitize_for_index(
+                    {
+                        "dataset_title": request.dataset_title or "",
+                        "summary": request.summary or "",
+                    },
+                    metadata=request.metadata or {},
+                )
+            except ReleaseGateError as exc:
+                raise HTTPException(
+                    status_code=exc.status_code, detail=exc.detail
+                ) from exc
+            if not gate.cleared:
+                audit_logger.log_operation(
+                    operation="UPDATE",
+                    wallet_address=request.owner_address,
+                    document_id=doc_id,
+                    details=f"update blocked, status: {gate.status}",
+                )
+                raise HTTPException(status_code=422, detail=gate.safe_summary())
+            if request.dataset_title:
+                new_dataset_title = gate.fields["dataset_title"]
+            if request.summary:
+                new_summary = gate.fields["summary"]
+
         updated_metadata = {**old_metadata}
         if request.metadata:
             updated_metadata.update(request.metadata)
@@ -1143,84 +1291,72 @@ async def delete_document(doc_id: str, request: DeleteRequest):
 
 # --- START: SIMPLE PREVIEW ENDPOINT ---
 
+async def _sanitized_preview_response(file: UploadFile):
+    """Shared preview gate. Streams only verified sanitized pixels."""
+    try:
+        file_contents = await file.read()
+        outcome = sanitized_preview(
+            file_contents,
+            filename=file.filename,
+            content_type=file.content_type,
+            profile="strict",
+        )
+    except ReleaseGateError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # The message must never echo file content.
+        raise HTTPException(
+            status_code=500, detail="Failed to generate preview"
+        ) from exc
+
+    if not outcome.released:
+        audit_logger.log_operation(
+            operation="PREVIEW",
+            details=(
+                f"preview blocked, status: {outcome.status}, "
+                f"reasons: {','.join(outcome.reason_codes)}"
+            ),
+        )
+        return JSONResponse(status_code=422, content=outcome.safe_summary())
+
+    return StreamingResponse(
+        io.BytesIO(outcome.content),
+        media_type=outcome.media_type,
+        headers={"X-BioBlock-Preview-Status": outcome.status},
+    )
+
+
 @app.post("//simple_preview") # Catches the bad URL
 @app.post("/simple_preview", include_in_schema=False)
 async def simple_preview(file: UploadFile = File(...)):
     """
-    A simple endpoint that just returns the uploaded image
-    without any anonymization. This is to test the pipeline.
-    
-    Now uses the PreviewFactory to support multiple file types including DICOM.
-    Maintains backward compatibility with existing frontend.
+    Return a sanitized preview of the uploaded file.
+
+    This endpoint previously streamed the uploaded bytes back unmodified - the
+    image preview generator documents that as "bypass behavior" - which let raw
+    uploaded pixels out without ever touching the sanitizer. Previews are now
+    produced only from verified sanitized pixels: rasters go through the
+    verified redaction path, DICOM is metadata-scrubbed and pixel-redacted with
+    final-byte validation before rendering, and modalities with no sanitized
+    preview (NIfTI, WSI) are blocked rather than rendered raw.
     """
-    print("✅ --- simple_preview endpoint was called! --- ✅")
-    print(f"File received: {file.filename}, Content-Type: {file.content_type}")
-
-    try:
-        # Read the file contents
-        file_contents = await file.read()
-
-        # Use factory to get the appropriate generator
-        generator = PreviewFactory.create_generator(
-            filename=file.filename,
-            content_type=file.content_type
-        )
-
-        # Generate preview using the factory-selected generator
-        response, media_type = generator.generate_preview(
-            file_contents=file_contents,
-            filename=file.filename,
-            content_type=file.content_type
-        )
-
-        print(f"Sending response with media_type: {media_type}")
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate preview: {str(e)}"
-        )
+    return await _sanitized_preview_response(file)
 
 # --- END: SIMPLE PREVIEW ENDPOINT ---
 
 @app.post("/preview_dicom", include_in_schema=False)
 async def preview_dicom(file: UploadFile = File(...)):
     """
-    Convert DICOM file to PNG/JPEG image for preview.
-    Works on both Mac and Windows.
-    
-    Now uses the PreviewFactory for consistency.
-    Maintains backward compatibility with existing frontend.
+    Render a DICOM preview from sanitized pixels only.
+
+    Metadata is scrubbed, pixels are OCR-redacted and validated against the
+    re-read bytes, the sanitized pixels are rendered, and the rendered PNG is
+    put through a residual text scan. Any failure blocks; the raw pixel array
+    is never rendered.
     """
-    try:
-        # Read the file contents
-        file_contents = await file.read()
-
-        # Use factory to get the DICOM generator (factory will validate file type)
-        generator = PreviewFactory.create_generator(
-            filename=file.filename,
-            content_type=file.content_type
-        )
-
-        # Generate preview using the factory-selected generator
-        response, media_type = generator.generate_preview(
-            file_contents=file_contents,
-            filename=file.filename,
-            content_type=file.content_type
-        )
-
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to convert DICOM to image: {str(e)}"
-        )
+    return await _sanitized_preview_response(file)
 @app.post("/search_enhanced")
 async def search_data_enhanced(request: Dict[str, Any]):
     """
