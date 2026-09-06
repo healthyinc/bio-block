@@ -11,13 +11,7 @@
       "heldout_v3": "63d4047fc75bae23d7c9f73fcd587712fd44df6cbc2c0869fd18c56c846e3da6",
       "test": "70ebc6dd3201eabd07f19baa32e57c9749dbaa7cfa8fb2c72ded1fd5d2f602ad"
     },
-    "partitions": [
-      "development",
-      "calibration",
-      "test",
-      "heldout_v2",
-      "heldout_v3"
-    ],
+    "partitions": ["development", "calibration", "test", "heldout_v2", "heldout_v3"],
     "random_seed_scheme": "random.Random(f'{partition}:{index}') per document",
     "spent_partitions": {
       "heldout_v2": "reported in phase 10, then the vocabulary changed; diagnostic only",

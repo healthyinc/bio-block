@@ -21,11 +21,7 @@
     "weight_sha256": "13c8d666d62a7bc4ac8f040aab68e942c861f93303156cc28f5c7e885d86d6e3",
     "role": "tokenizer_backbone",
     "required_by": "gliner_multi_pii",
-    "allow_patterns": [
-      "config.json",
-      "spm.model",
-      "tokenizer_config.json"
-    ],
+    "allow_patterns": ["config.json", "spm.model", "tokenizer_config.json"],
     "alias_ref": "main"
   }
 }
