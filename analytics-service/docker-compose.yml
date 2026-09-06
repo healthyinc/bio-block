@@ -1,0 +1,32 @@
+# Bio-Block Analytics Service — Docker Compose
+# ===============================================
+# Spins up the analytics microservice alongside the existing Bio-Block stack.
+#
+# Usage:
+#   cd analytics-service
+#   docker-compose up --build
+#
+# The analytics API will be available at http://localhost:3003
+# Swagger docs at http://localhost:3003/docs
+
+services:
+  analytics:
+    build: .
+    container_name: bio-block-analytics
+    ports:
+      - "3003:3003"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - APP_ENV=production
+      - SEPOLIA_RPC_URL=${SEPOLIA_RPC_URL:-}
+      - DOCUMENT_STORAGE_ADDRESS=0xd58de64aac08d5412b8020c7c61b215fec0c9644
+    volumes:
+      # Mount source code for development hot-reload
+      - ./app:/app/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

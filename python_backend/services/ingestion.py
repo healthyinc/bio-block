@@ -6,11 +6,17 @@ from services.text_anonymization import (
 )
 from services.dicom_anonymization import (
     DicomAnonymizationError,
-    anonymize_dicom_metadata,
+    anonymize_dicom_file_bytes,
 )
 from services.nifti_anonymization import (
     NiftiAnonymizationError,
     anonymize_nifti_metadata,
+)
+from services.ocr_redaction import redact_dicom_pixels, safe_ocr_response
+from services.wsi_tiling import scan_wsi_bytes
+from services.privacy_profiles import (
+    PrivacyProfileError,
+    validate_privacy_profile as validate_config_privacy_profile,
 )
 
 SUPPORTED_PROFILES = {"strict", "research"}
@@ -27,12 +33,10 @@ class IngestionError(ValueError):
 
 
 def validate_privacy_profile(profile: str) -> str:
-    normalized = (profile or "").strip().lower()
-    if normalized not in SUPPORTED_PROFILES:
-        raise IngestionError(
-            "Invalid privacy profile. Supported profiles: strict, research"
-        )
-    return normalized
+    try:
+        return validate_config_privacy_profile(profile)
+    except PrivacyProfileError as exc:
+        raise IngestionError(exc.detail, status_code=exc.status_code) from exc
 
 
 def _safe_filename(filename: str) -> str:
@@ -131,23 +135,30 @@ def anonymize_text(
         "anonymization_status": result["anonymization_status"],
         "message": "Text anonymization completed.",
         "anonymized_text": result["anonymized_text"],
+        "date_strategy": result["date_strategy"],
+        "text_identifier_strategy": result["text_identifier_strategy"],
         "detected_entities": result["detected_entities"],
     }
 
 
 def anonymize_dicom(file_content: bytes, profile: str) -> Dict[str, Any]:
     try:
-        result = anonymize_dicom_metadata(file_content, profile=profile)
+        metadata_result = anonymize_dicom_file_bytes(file_content, profile=profile)
     except DicomAnonymizationError as exc:
         raise IngestionError(exc.detail, status_code=exc.status_code) from exc
+
+    metadata_scrubbed_content = metadata_result["anonymized_dicom_bytes"]
+    pixel_result = safe_ocr_response(
+        redact_dicom_pixels(metadata_scrubbed_content, profile=profile)
+    )
 
     return {
         "handler": "anonymize_dicom",
         "routing_status": "handler_selected",
-        "anonymization_status": result["anonymization_status"],
-        "message": "DICOM metadata anonymization completed.",
-        "metadata_summary": result["metadata_summary"],
-        "pixel_redaction_status": result["pixel_redaction_status"],
+        "anonymization_status": metadata_result["anonymization_status"],
+        "message": "DICOM metadata anonymization and pixel redaction completed.",
+        "metadata_summary": metadata_result["metadata_summary"],
+        **pixel_result,
     }
 
 
@@ -174,8 +185,25 @@ def anonymize_nifti(
     }
 
 
-def anonymize_wsi() -> Dict[str, str]:
-    return _placeholder_result("anonymize_wsi")
+def anonymize_wsi(
+    file_content: bytes,
+    filename: str,
+    profile: str,
+) -> Dict[str, Any]:
+    result = scan_wsi_bytes(file_content, filename=filename)
+    anonymization_status = (
+        "redaction_plan_ready"
+        if result["pixel_redaction_status"] == "redaction_plan_ready"
+        else "pending"
+    )
+
+    return {
+        "handler": "anonymize_wsi",
+        "routing_status": "handler_selected",
+        "anonymization_status": anonymization_status,
+        "message": "WSI priority OCR tiling evaluated.",
+        **result,
+    }
 
 
 HANDLER_REGISTRY: Dict[str, Callable[..., Dict[str, Any]]] = {
@@ -228,6 +256,13 @@ def route_for_ingestion(
                 status_code=500,
             )
         handler_result = handler(file_content, safe_name, privacy_profile)
+    elif modality == "wsi":
+        if file_content is None:
+            raise IngestionError(
+                "WSI content was not provided for OCR scan planning",
+                status_code=500,
+            )
+        handler_result = handler(file_content, safe_name, privacy_profile)
     else:
         handler_result = handler()
 
@@ -249,11 +284,32 @@ def route_for_ingestion(
     }
     if "anonymized_text" in handler_result:
         response["anonymized_text"] = handler_result["anonymized_text"]
+    if "date_strategy" in handler_result:
+        response["date_strategy"] = handler_result["date_strategy"]
+    if "text_identifier_strategy" in handler_result:
+        response["text_identifier_strategy"] = handler_result["text_identifier_strategy"]
     if "detected_entities" in handler_result:
         response["detected_entities"] = handler_result["detected_entities"]
     if "metadata_summary" in handler_result:
         response["metadata_summary"] = handler_result["metadata_summary"]
     if "pixel_redaction_status" in handler_result:
         response["pixel_redaction_status"] = handler_result["pixel_redaction_status"]
+    for safe_key in (
+        "ocr_boxes_detected",
+        "boxes_redacted",
+        "frames_processed",
+        "scanned_regions",
+        "ocr_engine_status",
+        "ocr_confidence_threshold",
+        "tiles_scanned",
+        "priority_regions_scanned",
+        "image_dimensions",
+        "tile_size",
+        "wsi_rewrite_status",
+        "redaction_plan_boxes",
+    ):
+        if safe_key in handler_result:
+            response[safe_key] = handler_result[safe_key]
 
     return response
+

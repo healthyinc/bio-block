@@ -293,8 +293,8 @@ async def root():
             "/anonymize_image_presidio": "Anonymize PHI in images (Presidio only, advanced)",
             "/anonymize_text": "Anonymize PHI in plain text (Presidio + spaCy fallback)",
             "/anonymize_pdf": "Anonymize PHI in PDF documents (per-page extraction and redaction)",
-            "/anonymize_dicom": "Anonymize PHI in DICOM file metadata (strips patient identifiers)",
-            "/api/v1/ingest": "Route uploaded biomedical files to placeholder anonymization handlers"
+            "/anonymize_dicom": "Anonymize DICOM files with strict/research privacy profiles",
+            "/api/v1/ingest": "Route uploaded biomedical files through profile-aware anonymization handlers"
         },
         "status": {
             "presidio_available": presidio_available,
@@ -312,8 +312,8 @@ async def ingest_file(
     """
     Privacy-safe upload entry point.
 
-    Text uploads are anonymized. Other modalities still route to placeholder
-    handlers until their later milestones.
+    Applies the selected privacy profile across supported production handlers.
+    Supported profiles are strict and research.
     """
     try:
         header = await file.read(HEADER_READ_LIMIT)
@@ -339,7 +339,7 @@ async def ingest_file(
                 )
 
         file_content = None
-        if modality in {"dicom", "nifti"}:
+        if modality in {"dicom", "nifti", "wsi"}:
             await file.seek(0)
             file_content = await file.read()
 
@@ -691,7 +691,7 @@ async def anonymize_dicom(
     profile: str = Form("strict"),
 ):
     """
-    Anonymize DICOM metadata and return a downloadable DICOM file.
+    Anonymize DICOM metadata using the selected privacy profile and return a downloadable DICOM file.
 
     The response is a valid .dcm attachment so it can be saved and opened
     in a DICOM viewer. Raw PHI values are never returned in the response.
@@ -1506,3 +1506,6 @@ async def get_audit_entry(entry_id: str):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=3002)
+
+
+

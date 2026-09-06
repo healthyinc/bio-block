@@ -38,3 +38,10 @@ export interface ContractABI {
 
 export type FileBuffer = ArrayBuffer | Uint8Array;
 export type EncryptedData = string | Uint8Array;
+
+export interface AnalyticsRecord {
+  sourceCID: string;
+  resultCID: string;
+  analysisType: string;
+  timestamp: number;
+}
