@@ -1,10 +1,11 @@
+import hashlib
+import os
 from typing import Any, Callable, Dict, Optional, Tuple
 
 from services.text_anonymization import (
     MAX_TEXT_BYTES,
     TextAnonymizationError,
     anonymize_clinical_text,
-    residual_phi_categories,
 )
 from services.document_sanitization import (
     REASON_NO_VALIDATED_WRITER,
@@ -41,6 +42,7 @@ from services.privacy_contracts import (
     manual_review_decision,
 )
 from services.privacy_policy import PrivacyPolicyError, resolve_privacy_policy
+from services.transformation_manifest import build_manifest
 from services.utility_contract import UTILITY_VALIDATION_FAILED, contract_for
 
 SUPPORTED_PROFILES = {"safe_harbor_v1", "strict", "research"}
@@ -146,6 +148,65 @@ def release_decision_for(
     releasing what the other blocks, so there is deliberately only one.
     """
     return _release_decision_for(modality, handler_result, safe_name)
+
+
+def _artifact_id(release_decision, file_content: Optional[bytes]) -> str:
+    """A stable id that is never the uploaded filename.
+
+    Filenames routinely carry a patient's name, and a manifest is a record
+    that travels, so the artifact is identified by the hash of its bytes.
+    """
+    existing = release_decision.to_public_dict().get("artifact_sha256")
+    if existing:
+        return str(existing)
+    if file_content:
+        return hashlib.sha256(file_content).hexdigest()
+    return "unidentified_artifact"
+
+
+def _manifest_for(
+    modality: str,
+    handler_result: Dict[str, Any],
+    release_decision,
+    artifact_id: str,
+    policy: str,
+) -> Dict[str, Any]:
+    """One provenance record per processed artifact, whatever the modality.
+
+    The manifest reports the decision the release logic already made; it does
+    not re-derive it. Anything the pipeline could not clear arrives here as an
+    unsupported reason, so a blocked artifact carries a record explaining
+    itself rather than no record at all.
+    """
+    decision = release_decision.to_public_dict()
+    reasons = list(decision.get("reason_codes") or [])
+    review = list(handler_result.get("review_required_reasons") or [])
+    unsupported = list(handler_result.get("unscannable_reasons") or [])
+    if not decision.get("releasable"):
+        unsupported = sorted(set(unsupported + reasons))
+
+    verdict = handler_result.get("utility_verdict") or {}
+    utility_metrics = handler_result.get("utility_metrics") or {}
+    return build_manifest(
+        artifact_id=artifact_id,
+        modality=modality,
+        policy=policy,
+        detected=handler_result.get("detected_entities") or {},
+        sources=handler_result.get("detection_sources") or {},
+        surrogate_counts=handler_result.get("surrogate_counts") or {},
+        utility=utility_metrics,
+        utility_passed=bool(verdict.get("passed")) if verdict else False,
+        residual_categories=handler_result.get("residual_phi_categories") or {},
+        review_reasons=review,
+        model_mode=os.getenv("PHI_MODEL_MODE", "offline"),
+        pixel_regions_modified=int(
+            handler_result.get("boxes_redacted")
+            or utility_metrics.get("redaction_regions")
+            or 0
+        ),
+        generated_regions=handler_result.get("provenance_counts") or {},
+        unsupported_reasons=unsupported,
+    )
 
 
 def _release_decision_for(
@@ -383,7 +444,7 @@ def anonymize_text(
             profile=profile,
             study_salt=study_salt,
         )
-        residual = residual_phi_categories(result["anonymized_text"])
+        residual = result["residual_phi_categories"]
     except TextAnonymizationError as exc:
         raise IngestionError(exc.detail, status_code=exc.status_code) from exc
 
@@ -628,6 +689,16 @@ def route_for_ingestion(
         "release_decision": release_decision.to_public_dict(),
         "downstream": _blocked_downstream(
             "pending" if release_decision.releasable else "blocked"
+        ),
+        # Every processed artifact gets a provenance record, released or not.
+        # Counts, categories, statuses and versions; never a value and never
+        # the uploaded filename.
+        "transformation_manifest": _manifest_for(
+            modality,
+            handler_result,
+            release_decision,
+            _artifact_id(release_decision, file_content),
+            resolved_policy.policy.value,
         ),
     }
     if "anonymized_text" in handler_result:

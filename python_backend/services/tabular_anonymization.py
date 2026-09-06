@@ -122,6 +122,9 @@ NUMERICAL_SENSITIVE_COLUMN_NAMES = {
 }
 
 
+from services.modality_utility import measure_csv_utility
+
+
 class TabularAnonymizationError(ValueError):
     def __init__(self, detail: str, status_code: int = 400):
         super().__init__(detail)
@@ -346,6 +349,21 @@ def anonymize_tabular_csv(
             total_quasi_identifier_cells,
         ),
         "warnings": warnings,
+        # What the generalised table kept of the table it came from. CSV
+        # remains blocked pending mentor approval; this measures the cost of
+        # the generalisation, it does not authorise the release.
+        "utility_metrics": measure_csv_utility(
+            original_header=header,
+            original_rows=records,
+            output_header=retained_columns,
+            output_rows=anonymized_rows,
+            generalized_columns=quasi_identifier_columns,
+            removed_columns=columns_removed,
+            k_status=(
+                "satisfied" if k_anonymity_satisfied else "not_satisfied"
+            ),
+            l_status=str(l_diversity_satisfied),
+        ),
     }
 
     # Always serialize, so the bytes a caller could download are the bytes that

@@ -28,7 +28,8 @@ from pydicom.uid import (  # noqa: E402
 )
 
 SYNTHETIC_NAME = "Jordan Fictional"
-SYNTHETIC_SSN = "123-45-6789"
+# The 900 range was never issued, so this cannot collide with a real number.
+SYNTHETIC_SSN = "911-45-6789"
 SYNTHETIC_EMAIL = "jordan.fictional@example.invalid"
 SYNTHETIC_MRN = "MRN-000101"
 
@@ -120,12 +121,27 @@ def test_clean_content_passes_through_unchanged():
 
 
 def test_residual_phi_after_redaction_blocks_indexing(monkeypatch):
-    from services import release_gate
+    from services import text_anonymization
 
+    # The second-pass scan now runs inside the anonymizer, which is the only
+    # place holding the transformation-provenance map for the text it just
+    # produced. The gate reads the verdict off the result; patching the scan
+    # at its new home keeps the assertion identical - a residual finding must
+    # still block indexing.
     monkeypatch.setattr(
-        release_gate,
-        "residual_phi_categories",
-        lambda text: {"US_SSN": 1},
+        text_anonymization,
+        "residual_findings",
+        lambda text, provenance=None: [
+            {
+                "detector": "structured_pattern",
+                "category": "US_SSN",
+                "evidence_type": "deterministic",
+                "location_type": "original_text",
+                "overlaps_generated_region": False,
+                "classification": "genuine_surviving_phi",
+                "blocking": True,
+            }
+        ],
     )
 
     result = gate.sanitize_for_index({"summary": "anything"})

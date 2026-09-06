@@ -21,6 +21,9 @@ TEXT_HEADER_FIELDS = ("descrip", "aux_file", "intent_name", "db_name")
 DEFACING_STATUS = "not_implemented"
 
 
+from services.modality_utility import measure_nifti_utility
+
+
 class NiftiAnonymizationError(ValueError):
     def __init__(self, detail: str, status_code: int = 400):
         super().__init__(detail)
@@ -222,6 +225,18 @@ def anonymize_nifti_metadata(
                     "image_data",
                 ],
             },
+            # Geometry and voxel fidelity across the scrub. Nothing here
+            # speaks to facial privacy: no defacing step exists, so the
+            # volume stays blocked whatever these numbers say.
+            "utility_metrics": measure_nifti_utility(
+                image,
+                scrubbed_image,
+                header_fields_removed=scrubbed["fields_scrubbed"],
+                extensions_removed=extensions_removed,
+                output_reload_valid=(
+                    validation["metadata_validation_status"] != "serialization_failed"
+                ),
+            ),
         }
     finally:
         if temp_path and os.path.exists(temp_path):

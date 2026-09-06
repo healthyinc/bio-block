@@ -89,6 +89,30 @@ def _ingest(client, text: str):
     )
 
 
+@pytest.fixture
+def standalone_worker():
+    """One worker, and only one, for tests that drive the client directly.
+
+    Each of these starts its own child holding both models. Run after a test
+    that left the module-level client alive, two children compete for about
+    three gigabytes and the second never reaches its readiness banner - which
+    surfaces as `model_worker_not_ready` and reads like a fail-closed bug
+    rather than the memory contention it is. Production has one client per API
+    process; the fixture restores that invariant.
+    """
+    from services.model_client import ModelWorkerClient, shutdown_client, worker_python
+
+    if worker_python() is None:
+        pytest.skip("model virtualenv is not provisioned")
+
+    shutdown_client()
+    client = ModelWorkerClient()
+    try:
+        yield client
+    finally:
+        client.stop()
+
+
 @REQUIRED
 def test_real_models_participate_in_the_api_route(offline_worker_api):
     """Both pinned models must be in the chain the API actually runs.
@@ -173,13 +197,8 @@ def test_api_route_uses_consistent_surrogates(offline_worker_api):
 
 
 @REQUIRED
-def test_worker_readiness_and_clean_shutdown():
-    from services.model_client import ModelWorkerClient, worker_python
-
-    if worker_python() is None:
-        pytest.skip("model virtualenv is not provisioned")
-
-    client = ModelWorkerClient()
+def test_worker_readiness_and_clean_shutdown(standalone_worker):
+    client = standalone_worker
     client.start()
     try:
         assert client.is_ready()
@@ -193,14 +212,10 @@ def test_worker_readiness_and_clean_shutdown():
 
 
 @REQUIRED
-def test_worker_rejects_an_oversized_request():
+def test_worker_rejects_an_oversized_request(standalone_worker):
     from services.local_model_detectors import LocalModelError
-    from services.model_client import ModelWorkerClient, worker_python
 
-    if worker_python() is None:
-        pytest.skip("model virtualenv is not provisioned")
-
-    client = ModelWorkerClient()
+    client = standalone_worker
     client.start()
     try:
         with pytest.raises(LocalModelError) as exc:

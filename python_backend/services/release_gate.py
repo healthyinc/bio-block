@@ -39,7 +39,6 @@ from services.text_anonymization import (
     MAX_TEXT_BYTES,
     TextAnonymizationError,
     anonymize_clinical_text,
-    residual_phi_categories,
 )
 
 STATUS_SANITIZED = "safe_harbor_technical_checks_passed"
@@ -196,7 +195,7 @@ def sanitize_for_index(
             )
         try:
             result = anonymize_clinical_text(raw, profile=resolved.config_profile)
-            field_residual = residual_phi_categories(result["anonymized_text"])
+            field_residual = result["residual_phi_categories"]
         except TextAnonymizationError as exc:
             raise ReleaseGateError(exc.detail, status_code=exc.status_code) from exc
 

@@ -58,6 +58,14 @@ REASON_INVALID_PROFILE = "raster_invalid_profile"
 _BLACK = (0, 0, 0)
 
 
+from services.modality_utility import measure_raster_utility
+from services.text_anonymization import (
+    EXTRACTED_NON_PHI,
+    EXTRACTED_UNCERTAIN,
+    classify_extracted_text,
+)
+
+
 class RasterRedactionError(ValueError):
     def __init__(self, detail: str, status_code: int = 400):
         super().__init__(detail)
@@ -75,6 +83,12 @@ class RasterRedactionOutcome:
     boxes_detected: int = 0
     boxes_redacted: int = 0
     residual_text_boxes: int = 0
+    #: Boxes deliberately left in place because their text read as clinical.
+    boxes_preserved: int = 0
+    #: Boxes redacted only because the pipeline could not place them. Counted
+    #: so the utility cost of caution is visible rather than silent.
+    uncertain_regions_redacted: int = 0
+    utility_metrics: Dict[str, Any] = field(default_factory=dict)
     ocr_engine_status: str = "not_applicable"
     validation_status: str = "not_attempted"
     input_metadata_present: bool = False
@@ -91,6 +105,9 @@ class RasterRedactionOutcome:
             "boxes_detected": self.boxes_detected,
             "boxes_redacted": self.boxes_redacted,
             "residual_text_boxes": self.residual_text_boxes,
+            "boxes_preserved": self.boxes_preserved,
+            "uncertain_regions_redacted": self.uncertain_regions_redacted,
+            "utility_metrics": dict(self.utility_metrics),
             "ocr_engine_status": self.ocr_engine_status,
             "validation_status": self.validation_status,
             "input_metadata_present": self.input_metadata_present,
@@ -192,17 +209,34 @@ def redact_raster_bytes(
 
     pixels = np.array(image, dtype=np.uint8)
     regions: List[Tuple[int, int, int, int]] = []
+    preserved: List[Tuple[int, int, int, int]] = []
+    uncertain_regions = 0
     for box in boxes:
         if box.confidence < threshold:
             continue
         clipped = clip_box_to_image(box, width, height)
         if clipped is None:
             continue
+
+        # Not every readable box is a name. A laterality marker, a scale bar
+        # or a burned-in measurement is the reason the image was kept, and
+        # blacking out every box the engine reports drives residual text to
+        # zero by destroying the diagnostic content along with the identifier.
+        # Only recognisably clinical text is spared; anything the classifier
+        # cannot place is redacted like PHI and counted, so the utility cost
+        # of that caution is visible rather than silent.
+        reading = classify_extracted_text(box.text)
+        if reading == EXTRACTED_NON_PHI:
+            preserved.append(clipped)
+            continue
+        if reading == EXTRACTED_UNCERTAIN:
+            uncertain_regions += 1
+
         left, top, right, bottom = clipped
         pixels[top:bottom, left:right] = _BLACK
         regions.append(clipped)
 
-    if boxes and not regions:
+    if boxes and not regions and not preserved:
         # Text was found and none of it was cleared. These pixels still carry
         # it, so nothing is released.
         return _blocked(
@@ -218,7 +252,9 @@ def redact_raster_bytes(
     Image.fromarray(pixels, mode="RGB").save(buffer, format=OUTPUT_FORMAT)
     encoded = buffer.getvalue()
 
-    verified, residual = _verify_encoded(encoded, pixels.shape, regions, backend, threshold)
+    verified, residual = _verify_encoded(
+        encoded, pixels.shape, regions, backend, threshold, preserved
+    )
     if not verified:
         return _blocked(
             STATUS_BLOCKED,
@@ -237,6 +273,17 @@ def redact_raster_bytes(
         media_type=OUTPUT_MEDIA_TYPE,
         boxes_detected=len(boxes),
         boxes_redacted=len(regions),
+        boxes_preserved=len(preserved),
+        uncertain_regions_redacted=uncertain_regions,
+        utility_metrics=measure_raster_utility(
+            bytes(content),
+            encoded,
+            redaction_boxes=regions,
+            residual_text_regions=0,
+            preserved_label_regions=len(preserved),
+            review_regions=uncertain_regions,
+            lossless=True,
+        ),
         residual_text_boxes=0,
         ocr_engine_status=engine_status,
         validation_status="verified",
@@ -251,6 +298,7 @@ def _verify_encoded(
     regions: List[Tuple[int, int, int, int]],
     backend: OCRBackend,
     threshold: float,
+    preserved: Optional[List[Tuple[int, int, int, int]]] = None,
 ) -> Tuple[bool, int]:
     """Re-read the encoded output and confirm the redaction survived.
 
@@ -273,12 +321,29 @@ def _verify_encoded(
         if region.size == 0 or not np.all(region == 0):
             return False, -1
 
-    # Semantic check: nothing the engine can still read may remain.
+    # Semantic check: nothing the engine can still read may remain, except
+    # inside a region this pass deliberately kept. A deliberately preserved
+    # marker is re-classified here rather than trusted: if the re-read text
+    # no longer looks clinical, it counts as residual and blocks.
+    kept = list(preserved or [])
+
+    def _inside_preserved(box) -> bool:
+        left, top = int(box.x), int(box.y)
+        right, bottom = left + int(box.width), top + int(box.height)
+        return any(
+            x0 <= left and y0 <= top and right <= x1 and bottom <= y1
+            for x0, y0, x1, y1 in kept
+        )
+
     try:
         residual_boxes = [
             box
             for box in backend.detect_text_boxes(Image.fromarray(pixels, mode="RGB"))
             if box.confidence >= threshold
+            and not (
+                _inside_preserved(box)
+                and classify_extracted_text(box.text) == EXTRACTED_NON_PHI
+            )
         ]
     except Exception:
         return False, -1

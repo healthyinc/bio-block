@@ -27,11 +27,15 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
+from services.modality_utility import (
+    MEASUREMENT_VERSION,
+    UNAVAILABLE,
+    measure_pdf_utility,
+)
 from services.text_anonymization import (
     MAX_TEXT_BYTES,
     TextAnonymizationError,
     anonymize_clinical_text,
-    residual_phi_categories,
 )
 
 MAX_PDF_BYTES = 32 * 1024 * 1024
@@ -130,6 +134,15 @@ def _blocked(
         "entity_count": 0,
         "detection_sources": {},
         "residual_phi_categories": {},
+        # A blocked scan measured nothing, and says so. Reporting zeros here
+        # would be indistinguishable from a document that genuinely preserved
+        # nothing, and both would be read as a number rather than a gap.
+        "utility_metrics": {
+            "measurement_version": MEASUREMENT_VERSION,
+            "output_available": False,
+            "status": UNAVAILABLE,
+            "writer_status": "no_validated_writer",
+        },
         "scannable": False,
         "text_layer_complete": False,
         "pages": [],
@@ -143,6 +156,10 @@ class _SurfaceScanner:
         self.profile = profile
         self.counts: Dict[str, int] = {}
         self.sources: Dict[str, int] = {}
+        #: Second-pass findings on the redacted output of every surface. The
+        #: anonymizer reports these itself because only it holds the
+        #: transformation-provenance map for the text it produced.
+        self.residual: Dict[str, int] = {}
         self.reasons: List[str] = []
         self.complete = True
 
@@ -157,18 +174,25 @@ class _SurfaceScanner:
         result = anonymize_clinical_text(text, profile=self.profile)
         _merge_counts(self.counts, result["detected_entities"])
         _merge_counts(self.sources, result["detection_sources"])
+        _merge_counts(self.residual, result["residual_phi_categories"])
         return result["anonymized_text"]
 
 
-def _page_surfaces(page) -> Tuple[str, List[str], int]:
-    """Return (page text, annotation/widget/link texts, raster image count).
+def _page_surfaces(page) -> Tuple[str, List[str], int, Dict[str, int]]:
+    """Return (page text, annotation/widget/link texts, images, surface counts).
+
+    The counts are kept separate from the texts because the utility report
+    needs to say how many annotations, form fields and links a writer would
+    have to carry across, and the texts themselves must never reach a report.
 
     Any read failure propagates: an unreadable surface must not look empty.
     """
     page_text = page.get_text("text") or ""
     extras: List[str] = []
+    counts = {"annotations": 0, "form_fields": 0, "links": 0}
 
     for annotation in page.annots() or []:
+        counts["annotations"] += 1
         info = annotation.info or {}
         for key in ("content", "title", "subject"):
             value = info.get(key)
@@ -176,17 +200,19 @@ def _page_surfaces(page) -> Tuple[str, List[str], int]:
                 extras.append(str(value))
 
     for widget in page.widgets() or []:
+        counts["form_fields"] += 1
         for value in (widget.field_name, widget.field_value):
             if value:
                 extras.append(str(value))
 
     for link in page.get_links() or []:
+        counts["links"] += 1
         target = link.get("uri") or link.get("file")
         if target:
             extras.append(str(target))
 
     image_count = len(page.get_images(full=True) or [])
-    return page_text, extras, image_count
+    return page_text, extras, image_count, counts
 
 
 def scan_pdf_bytes(content: bytes, profile: str = "strict") -> Dict[str, Any]:
@@ -245,16 +271,27 @@ def scan_pdf_bytes(content: bytes, profile: str = "strict") -> Dict[str, Any]:
         image_only_pages = 0
         raster_pages = 0
         annotation_surfaces = 0
+        image_total = 0
+        surface_totals = {"annotations": 0, "form_fields": 0, "links": 0}
+        # Original page text, kept locally to measure how much of the
+        # non-identifying text survived redaction. It is never returned.
+        original_texts: List[str] = []
 
         for index in range(page_count):
             try:
-                page_text, extras, image_count = _page_surfaces(document[index])
+                page_text, extras, image_count, surface_counts = _page_surfaces(
+                    document[index]
+                )
             except Exception:
                 return _blocked(
                     [REASON_UNPARSEABLE] + unreadable, {"page_count": page_count}
                 )
 
             annotation_surfaces += len(extras)
+            image_total += image_count
+            original_texts.append(page_text)
+            for key, value in surface_counts.items():
+                surface_totals[key] += value
             has_text = bool(page_text.strip())
             if has_text:
                 text_pages += 1
@@ -339,8 +376,10 @@ def scan_pdf_bytes(content: bytes, profile: str = "strict") -> Dict[str, Any]:
 
     residual: Dict[str, int] = {}
     if text_layer_complete:
-        for page in pages:
-            _merge_counts(residual, residual_phi_categories(page["redacted_text"] or ""))
+        # Every surface the scanner touched, not only page bodies: metadata
+        # and annotation text are redacted through the same path and their
+        # residual findings block release just as a page body's would.
+        _merge_counts(residual, scanner.residual)
         if residual:
             # Redaction did not clear the text layer; withhold the output.
             text_layer_complete = False
@@ -369,6 +408,20 @@ def scan_pdf_bytes(content: bytes, profile: str = "strict") -> Dict[str, Any]:
         "entity_count": sum(scanner.counts.values()),
         "detection_sources": scanner.sources,
         "residual_phi_categories": residual,
+        # Text preservation plus an inventory of every surface a PDF writer
+        # would have to handle. The document stays under manual review; this
+        # records what a writer would have to get right, not permission to
+        # skip one.
+        "utility_metrics": measure_pdf_utility(
+            original_texts,
+            [page["redacted_text"] for page in pages],
+            image_count=image_total,
+            annotation_count=surface_totals["annotations"],
+            form_field_count=surface_totals["form_fields"],
+            link_count=surface_totals["links"],
+            attachment_count=embedded_count,
+            metadata_fields=metadata_fields_present,
+        ),
         "scannable": fully_scannable,
         "text_layer_complete": text_layer_complete,
         "pages": [

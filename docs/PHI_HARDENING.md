@@ -203,10 +203,15 @@ GLiNER `0.10`, locked in `config/detection_thresholds.json`.
 
 ### Additions to the known gaps
 
-7. **The residual validator blocks most documents when the real models are
-   enabled.** 9 of 10 held-out documents carried residual findings while zero
-   gold values actually survived. Fail-closed and safe, but it turns automatic
-   text release into manual review for almost everything in `offline` mode.
+7. **The residual validator blocks a large share of documents when the real
+   models are enabled.** Phase 11 rebuilt the validator around a
+   transformation-provenance map, removed the masking that was manufacturing
+   its own findings, and corrected five separate defects it exposed. Manual
+   review on the calibration partition fell from 0.60 (ten documents, Phase
+   10) to 0.53 over two hundred documents with the pinned models. That is
+   still well above the 0.20 engineering target, so **automatic text release
+   under `offline` mode is not yet practical**; the conservative block stays.
+   See [RESIDUAL_VALIDATION.md](RESIDUAL_VALIDATION.md).
 8. **`AGE_OVER_89` has no dedicated detector.** No individual detector finds
    it; the chain recovers it only incidentally. Safe Harbor requires ages above
    89 to be aggregated, so treat any such age as manual review.

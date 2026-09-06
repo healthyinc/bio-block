@@ -41,18 +41,49 @@ from evaluations.metrics import (  # noqa: E402
 # ---------------------------------------------------------------------------
 
 
-def test_four_partitions_exist():
-    # Phase 9's held-out partition has been inspected, so it is diagnostic
-    # data now; heldout_v2 is the untouched one.
-    from evaluations.labelled_corpus import PARTITION_DIAGNOSTIC, PARTITION_HELDOUT
+def test_five_partitions_exist():
+    # Two partitions have been spent. Phase 9's was inspected during Phase 10,
+    # and Phase 10's was reported before the clinical vocabulary was extended,
+    # so neither can be described as untouched evidence again. heldout_v3 is
+    # the one that has never informed a decision.
+    from evaluations.labelled_corpus import (
+        PARTITION_DIAGNOSTIC,
+        PARTITION_DIAGNOSTIC_V2,
+        PARTITION_HELDOUT,
+    )
 
     assert PARTITIONS == (
         PARTITION_DEV,
         PARTITION_CALIB,
         PARTITION_DIAGNOSTIC,
+        PARTITION_DIAGNOSTIC_V2,
         PARTITION_HELDOUT,
     )
+    assert PARTITION_HELDOUT == "heldout_v3"
     assert set(build_corpus()) == set(PARTITIONS)
+
+
+def test_every_partition_is_large_enough_to_measure():
+    """Ten documents cannot express a rate finer than ten per cent."""
+    from evaluations.corpus_generator import DOCUMENTS_PER_PARTITION
+
+    for partition in PARTITIONS:
+        assert len(partition_documents(partition)) >= DOCUMENTS_PER_PARTITION
+        assert DOCUMENTS_PER_PARTITION >= 200
+
+
+def test_corpus_is_deterministic():
+    """A report describes the corpus anybody else rebuilds, or it describes
+    nothing."""
+    from evaluations import corpus_generator, labelled_corpus
+
+    labelled_corpus._partition_documents.cache_clear()
+    first = [d.text for d in partition_documents(PARTITION_CALIB)]
+    labelled_corpus._partition_documents.cache_clear()
+    second = [d.text for d in partition_documents(PARTITION_CALIB)]
+
+    assert first == second
+    assert corpus_generator.DOCUMENTS_PER_PARTITION
 
 
 def test_gold_offsets_are_exact_and_in_range():
@@ -86,13 +117,22 @@ def test_partitions_share_no_gold_value():
 
 
 def test_partitions_share_no_document_text():
+    """No document carrying PHI is reused between partitions.
+
+    Restricted to documents with gold spans on purpose. A note containing no
+    identifiers has nothing to leak, and two partitions independently
+    producing the same PHI-free management plan is a coincidence of prose, not
+    contamination of the held-out set.
+    """
     texts = {
-        partition: {d.text for d in partition_documents(partition)}
+        partition: {d.text for d in partition_documents(partition) if d.spans}
         for partition in PARTITIONS
     }
     from evaluations.labelled_corpus import PARTITION_HELDOUT
 
-    for other in (PARTITION_DEV, PARTITION_CALIB, PARTITION_TEST):
+    for other in PARTITIONS:
+        if other == PARTITION_HELDOUT:
+            continue
         assert texts[other].isdisjoint(texts[PARTITION_HELDOUT])
 
 
@@ -172,12 +212,22 @@ def test_corpus_statistics_report_counts_only():
 
     for partition in PARTITIONS:
         for value in all_values(partition):
+            # Two- and three-character values are aggregated ages, which
+            # collide with the digits of any count. Checking them here would
+            # assert against arithmetic rather than against a leak; the
+            # distinctive values are the ones that would actually identify
+            # somebody if they escaped into a report.
+            if len(value) < 4:
+                continue
             assert value not in serialized
 
 
 def test_corpus_version_is_declared():
     assert CORPUS_VERSION
     assert CORPUS_VERSION.startswith("canary-v")
+    # Phase 11's corpus. A frozen configuration is only meaningful if the
+    # version it names moved when the corpus did.
+    assert CORPUS_VERSION == "canary-v4.0"
 
 
 def test_every_category_has_an_alias_mapping():

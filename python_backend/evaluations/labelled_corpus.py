@@ -4,6 +4,8 @@ Every value in this file is invented. Names are fictional, email domains use
 `.invalid` (reserved and unresolvable by RFC 2606), telephone numbers use the
 555-01xx range reserved for fiction, and identifiers carry synthetic prefixes.
 No real patient information appears here or anywhere in the evaluation path.
+Social-security numbers use the 900 range, which the SSA has never issued, so
+no value here can collide with a real one.
 
 Three partitions, with **disjoint value pools** so a value seen while choosing
 thresholds cannot reappear in the held-out measurement:
@@ -29,22 +31,33 @@ Two recall figures come out of this, and they answer different questions:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Dict, List, Sequence, Tuple
 
-CORPUS_VERSION = "canary-v3.0"
+from evaluations.corpus_generator import DOCUMENTS_PER_PARTITION, generate
+
+#: Phase 11's corpus - the third distinct evaluation corpus, and the fourth
+#: revision of this file. Phase 10's held-out partition was inspected before
+#: the vocabulary was extended, so it is diagnostic data now and `heldout_v3`
+#: is the untouched one.
+CORPUS_VERSION = "canary-v4.0"
 
 PARTITION_DEV = "development"
 PARTITION_CALIB = "calibration"
 #: Phase 9's held-out partition. It has been inspected, so it is diagnostic
 #: data now and must never again be used as evidence of generalisation.
 PARTITION_DIAGNOSTIC = "test"
-#: Phase 10's held-out partition. Untouched until every rule and threshold was
-#: frozen, then run once.
-PARTITION_HELDOUT = "heldout_v2"
+#: Phase 10's held-out partition. It was run once and then reported, but the
+#: clinical vocabulary was extended afterwards, so it too is diagnostic now.
+PARTITION_DIAGNOSTIC_V2 = "heldout_v2"
+#: Phase 11's held-out partition. Untouched while the evidence model, the
+#: residual validator and the thresholds were settled, then run once.
+PARTITION_HELDOUT = "heldout_v3"
 PARTITIONS = (
     PARTITION_DEV,
     PARTITION_CALIB,
     PARTITION_DIAGNOSTIC,
+    PARTITION_DIAGNOSTIC_V2,
     PARTITION_HELDOUT,
 )
 #: Kept for callers written before the Phase 9 partition was retired.
@@ -242,12 +255,12 @@ POOLS: Dict[str, ValuePool] = {
         date_us="03/15/1985",
         date_long="14 March 2021",
         age_over_89="94",
-        phone="555-0142",
+        phone="555-0102",
         phone_intl="+91 98765 43210",
-        fax="555-0177",
+        fax="555-0117",
         email="ananya.k@example.invalid",
         email_unicode="josé.peñaloza@example.invalid",
-        ssn="123-45-6789",
+        ssn="911-45-6789",
         mrn="SYN-4820193",
         mrn_misspelt_label="Medcial Record Numbr",
         patient_id="SYN-PT-0099",
@@ -279,12 +292,12 @@ POOLS: Dict[str, ValuePool] = {
         date_us="07/22/1978",
         date_long="9 September 2018",
         age_over_89="97",
-        phone="555-0163",
+        phone="555-0123",
         phone_intl="+44 20 7946 0958",
-        fax="555-0188",
+        fax="555-0138",
         email="r.balasubramanian@example.invalid",
         email_unicode="zoë.müller@example.invalid",
-        ssn="987-65-4321",
+        ssn="922-65-4321",
         mrn="SYN-6610284",
         mrn_misspelt_label="Medicial Recrd No",
         patient_id="SYN-PT-4417",
@@ -301,7 +314,7 @@ POOLS: Dict[str, ValuePool] = {
         ip_address="198.51.100.77",
         username="r.balasub2020",
     ),
-    PARTITION_HELDOUT: ValuePool(
+    PARTITION_DIAGNOSTIC_V2: ValuePool(
         person=("Padmavathi Venkataraghavan", "Algernon Fitzwilliam-Crewe"),
         person_unicode=("Åsa Lindqvist-Öberg", "Bhāskara Rāmānujan"),
         relative=("Ganesan Venkataraghavan", "Hortensia Fitzwilliam-Crewe"),
@@ -316,12 +329,12 @@ POOLS: Dict[str, ValuePool] = {
         date_us="02/09/1969",
         date_long="5 November 2013",
         age_over_89="102",
-        phone="555-0171",
+        phone="555-0161",
         phone_intl="+81 3 5550 2244",
-        fax="555-0139",
+        fax="555-0179",
         email="p.venkataraghavan@example.invalid",
         email_unicode="åsa.lindqvist@example.invalid",
-        ssn="321-54-9876",
+        ssn="944-54-9876",
         mrn="SYN-2748903",
         mrn_misspelt_label="Medical Recrod Numbr",
         patient_id="SYN-PT-6612",
@@ -353,12 +366,12 @@ POOLS: Dict[str, ValuePool] = {
         date_us="11/03/1992",
         date_long="23 January 2016",
         age_over_89="91",
-        phone="555-0195",
+        phone="555-0145",
         phone_intl="+61 2 5550 0134",
-        fax="555-0109",
+        fax="555-0159",
         email="m.raghunathan@example.invalid",
         email_unicode="françois.lécuyer@example.invalid",
-        ssn="456-78-9012",
+        ssn="933-78-9012",
         mrn="SYN-9037461",
         mrn_misspelt_label="Medical Recod Numbe",
         patient_id="SYN-PT-8823",
@@ -374,6 +387,43 @@ POOLS: Dict[str, ValuePool] = {
         url="https://ehr.example.invalid/record/8823",
         ip_address="192.0.2.155",
         username="m.raghu_1992",
+    ),
+    PARTITION_HELDOUT: ValuePool(
+        person=("Yashodhara Sathyanarayanan", "Montgomery Wintersgill"),
+        person_unicode=("Ómar Björnsdóttir", "Lakṣmī Tirumalāchārya"),
+        relative=("Vaikuntam Sathyanarayanan", "Rosalind Wintersgill"),
+        clinician=("Dr. Devayani Ponnambalam", "Dr. Cuthbert Ravencourt"),
+        employer="Ravencourt Aviation Systems Ltd",
+        hospital="Highbarrow District Hospital",
+        organization="Standerwick Bioinformatics Trust",
+        address="204 Oldencastle Row, Unit 9A",
+        geography="Winterscombe Reach, Highbarrow District",
+        postal_code="85412",
+        date_iso="2012-02-27",
+        date_us="09/18/1974",
+        date_long="17 June 2011",
+        age_over_89="96",
+        phone="555-0183",
+        phone_intl="+49 30 5550 7712",
+        fax="555-0191",
+        email="y.sathyanarayanan@example.invalid",
+        email_unicode="ómar.björnsdóttir@example.invalid",
+        ssn="955-31-8842",
+        mrn="SYN-V-8512740",
+        mrn_misspelt_label="Medcal Recordd Num",
+        patient_id="SYN-V-PT-8531",
+        health_plan="SYN-V-PLAN-854120",
+        account_number="ACCT-85219034",
+        license_number="DL-Z8512740W",
+        certificate_number="CERT-RN-85177",
+        device_id="SYN-V-DEV-853301",
+        vehicle_id="VIN-KM8J3CA46JU887215",
+        accession="SYN-V-ACC-851904",
+        biometric_id="PALM-TEMPLATE-E8544",
+        unusual_id="VV..8531-W9..TT",
+        url="https://ravencourt.example.invalid/chart/8531",
+        ip_address="203.0.113.221",
+        username="y.sathya_1974",
     ),
 }
 
@@ -580,14 +630,32 @@ def _build_partition(partition: str) -> List[LabelledDocument]:
 
 
 def build_corpus() -> Dict[str, List[LabelledDocument]]:
-    """Build all three partitions."""
-    return {partition: _build_partition(partition) for partition in PARTITIONS}
+    """Build every partition, hand-authored documents first."""
+    return {partition: partition_documents(partition) for partition in PARTITIONS}
+
+
+@lru_cache(maxsize=len(PARTITIONS))
+def _partition_documents(partition: str) -> Tuple[LabelledDocument, ...]:
+    """Hand-authored documents, then generated ones up to the target size.
+
+    Ten documents per partition measured nothing: a manual-review rate over
+    ten documents moves in steps of ten per cent. The hand-authored ten stay
+    at the front because they are the ones a reader can check by eye; the
+    generator supplies the volume behind them.
+
+    Cached because every integrity test rebuilds all five partitions, and the
+    documents are immutable once built.
+    """
+    handwritten = _build_partition(partition)
+    remaining = max(0, DOCUMENTS_PER_PARTITION - len(handwritten))
+    generated = generate(partition, _Builder, remaining)
+    return tuple(handwritten) + tuple(generated)
 
 
 def partition_documents(partition: str) -> List[LabelledDocument]:
     if partition not in PARTITIONS:
         raise ValueError(f"unknown partition: {partition}")
-    return _build_partition(partition)
+    return list(_partition_documents(partition))
 
 
 def all_values(partition: str) -> List[str]:

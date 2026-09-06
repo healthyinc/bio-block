@@ -1,0 +1,1287 @@
+{
+  "block_rate": 0.335,
+  "blocked_documents": [
+    {
+      "doc_id": "calibration_unicode_casing",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "POSTAL_CODE",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_contact",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "USERNAME",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_identifiers",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "IDENTIFIER",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        },
+        {
+          "blocking": true,
+          "category": "IDENTIFIER",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0005",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0006",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0011",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0012",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0013",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "stanford_deidentifier",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0016",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0018",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0026",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0027",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0029",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "DRIVER_LICENSE",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0031",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PHONE_NUMBER",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0032",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0033",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0034",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0037",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0043",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0045",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "ner",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0047",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0048",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0049",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "ORGANIZATION",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0053",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0054",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0057",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0058",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        },
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0066",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "ner",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0069",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0074",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0075",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "ner",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        },
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0079",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0087",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "ner",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0089",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0090",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0093",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "ADDRESS",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0094",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PHONE_NUMBER",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0095",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0096",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "ner",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        },
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0100",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0109",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "ORGANIZATION",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0110",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0111",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0115",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PHONE_NUMBER",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0116",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0117",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "ner",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        },
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0121",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0131",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0132",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0134",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "DRIVER_LICENSE",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0136",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PHONE_NUMBER",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0137",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0138",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0142",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        },
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0152",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "HEALTH_PLAN_ID",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0153",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0157",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PHONE_NUMBER",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0158",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0159",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0160",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0163",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0173",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0174",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0179",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0180",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "gliner_multi_pii",
+          "evidence_type": "model",
+          "location_type": "spans_generated_and_original",
+          "overlaps_generated_region": true
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0184",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        },
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0186",
+      "findings": [
+        {
+          "blocking": true,
+          "category": "PERSON",
+          "classification": "additional_plausible_phi",
+          "detector": "strict_proper_noun",
+          "evidence_type": "heuristic",
+          "location_type": "original_text",
+          "overlaps_generated_region": false
+        }
+      ]
+    }
+  ],
+  "corpus_version": "canary-v4.0",
+  "documents": 200,
+  "documents_blocked_by_residual_findings": 67,
+  "documents_held_for_review_only": 39,
+  "documents_released_by_both_gates": 94,
+  "failures": [],
+  "findings_by_category": {
+    "ADDRESS": 17,
+    "DRIVER_LICENSE": 22,
+    "EMAIL_ADDRESS": 19,
+    "HEALTH_PLAN_ID": 43,
+    "IDENTIFIER": 43,
+    "IP_ADDRESS": 1,
+    "ORGANIZATION": 68,
+    "PERSON": 135,
+    "PHONE_NUMBER": 9,
+    "POSTAL_CODE": 25,
+    "USERNAME": 3,
+    "US_SSN": 12
+  },
+  "findings_by_classification": {
+    "additional_plausible_phi": 74,
+    "anonymizer_placeholder": 54,
+    "detector_artefact_modified_context": 34,
+    "exact_generated_surrogate": 235
+  },
+  "findings_by_detector": {
+    "gliner_multi_pii": 283,
+    "ner": 47,
+    "stanford_deidentifier": 35,
+    "strict_proper_noun": 32
+  },
+  "findings_by_evidence_type": {
+    "heuristic": 32,
+    "model": 365
+  },
+  "findings_by_location": {
+    "inside_generated_region": 289,
+    "original_text": 48,
+    "spans_generated_and_original": 60
+  },
+  "manual_review_rate": 0.53,
+  "partition": "calibration",
+  "review_only_documents": [
+    {
+      "doc_id": "calibration_negative_controls",
+      "review_reasons": [
+        "ambiguous_organization_requires_review",
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_chunk_boundary",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0002",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0014",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0015",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0019",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0023",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0035",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0036",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0039",
+      "review_reasons": [
+        "ambiguous_organization_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0040",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0044",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0056",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0060",
+      "review_reasons": [
+        "ambiguous_organization_requires_review",
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0061",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0065",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0077",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0082",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0086",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0098",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0102",
+      "review_reasons": [
+        "ambiguous_organization_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0103",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0107",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0119",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0123",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0124",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0128",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0140",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0145",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0149",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0155",
+      "review_reasons": [
+        "ambiguous_organization_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0161",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0162",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0165",
+      "review_reasons": [
+        "ambiguous_organization_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0166",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0170",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0182",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0183",
+      "review_reasons": [
+        "ambiguous_organization_requires_review"
+      ]
+    },
+    {
+      "doc_id": "calibration_gen_0187",
+      "review_reasons": [
+        "ambiguous_person_requires_review"
+      ]
+    }
+  ]
+}

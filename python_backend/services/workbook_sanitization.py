@@ -66,6 +66,13 @@ _PROPERTY_FIELDS = (
 )
 
 
+from services.modality_utility import (
+    MEASUREMENT_VERSION,
+    UNAVAILABLE,
+    measure_workbook_utility,
+)
+
+
 class WorkbookSanitizationError(ValueError):
     def __init__(self, detail: str, status_code: int = 400):
         super().__init__(detail)
@@ -101,6 +108,12 @@ def _blocked(
         "detected_entities": {},
         "entity_count": 0,
         "detection_sources": {},
+        "utility_metrics": {
+            "measurement_version": MEASUREMENT_VERSION,
+            "output_available": False,
+            "status": UNAVAILABLE,
+            "writer_status": "no_validated_writer",
+        },
         "scannable": False,
     }
 
@@ -217,6 +230,9 @@ def scan_workbook_bytes(content: bytes, profile: str = "strict") -> Dict[str, An
         comment_count = 0
         formula_cells = 0
         populated_cells = 0
+        max_rows = 0
+        max_columns = 0
+        cell_types: Dict[str, int] = {}
         sheets: List[Dict[str, Any]] = []
 
         try:
@@ -229,6 +245,10 @@ def scan_workbook_bytes(content: bytes, profile: str = "strict") -> Dict[str, An
 
                 sheet_cells = 0
                 sheet_comments = 0
+                max_rows = max(max_rows, int(getattr(sheet, "max_row", 0) or 0))
+                max_columns = max(
+                    max_columns, int(getattr(sheet, "max_column", 0) or 0)
+                )
                 for row in sheet.iter_rows():
                     for cell in row:
                         value = cell.value
@@ -237,6 +257,11 @@ def scan_workbook_bytes(content: bytes, profile: str = "strict") -> Dict[str, An
                             populated_cells += 1
                             if isinstance(value, str) and value.startswith("="):
                                 formula_cells += 1
+                            # The type name, never the value. A writer has to
+                            # put a number back as a number, and a date back
+                            # as a date, or the sheet stops computing.
+                            type_name = type(value).__name__
+                            cell_types[type_name] = cell_types.get(type_name, 0) + 1
                             scanner.add(str(value))
                         comment = getattr(cell, "comment", None)
                         if comment is not None and str(comment.text or "").strip():
@@ -316,6 +341,22 @@ def scan_workbook_bytes(content: bytes, profile: str = "strict") -> Dict[str, An
         "detected_entities": scanner.counts,
         "entity_count": sum(scanner.counts.values()),
         "detection_sources": scanner.sources,
+        # Everything a workbook writer would have to preserve, counted. The
+        # workbook stays under manual review; this says what "getting it
+        # right" would mean, not that it has been got right.
+        "utility_metrics": measure_workbook_utility(
+            sheet_count=len(sheet_names),
+            hidden_sheet_count=len(hidden_sheets),
+            row_count=max_rows,
+            column_count=max_columns,
+            formula_count=formula_cells,
+            comment_count=comment_count,
+            defined_name_count=len(defined_names),
+            document_property_count=len(property_names),
+            macro_count=1 if macros_present else 0,
+            external_link_count=1 if external_links_present else 0,
+            cell_types=cell_types,
+        ),
         "scannable": fully_scannable,
     }
 

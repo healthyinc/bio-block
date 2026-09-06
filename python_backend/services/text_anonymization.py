@@ -1,12 +1,14 @@
 import hashlib
 import os
 import re
+import string
 from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Tuple
 
 from services.ner_phi_detector import (
+    proper_noun_offsets,
     NerPhiDetectionError,
     SpacyNerPhiDetector,
     configured_model_name,
@@ -22,21 +24,35 @@ from services.local_model_detectors import (
     resolve_model_mode,
 )
 from services.phi_detection import (
-    SOURCE_STRICT_PROPER_NOUN,
     AgeOverThresholdDetector,
     DetectedEntity,
     PhiDetector,
     StructuredPatternDetector,
     resolve_overlaps,
 )
-from services.clinical_vocabulary import protects_from_person_label
 from services.surrogates import (
     SURROGATE_PATTERN,
     SurrogateAllocator,
     looks_like_provider,
 )
 from services.model_client import RemoteModelDetector, worker_enabled
+from services.detection_evidence import (
+    contains_proper_noun_token,
+    has_clinical_support,
+    is_confirmed_clinical_marker,
+    EVIDENCE_DETERMINISTIC,
+    assess_finding,
+    count_agreeing,
+    evidence_type,
+)
 from services.text_utility import measure_text_utility
+from services.transformation_provenance import (
+    KIND_PLACEHOLDER,
+    KIND_SURROGATE,
+    ProvenanceBuilder,
+    TransformationProvenance,
+    kind_for_replacement,
+)
 
 from services.privacy_profiles import (
     PrivacyProfileError,
@@ -197,8 +213,9 @@ def _detect_entities(
     except Exception as exc:
         raise NerPhiDetectionError("phi_detection_failed", status_code=500) from exc
 
-    detected = _drop_clinical_vocabulary(detected, text)
-    return _merge_adjacent_same_type(resolve_overlaps(detected, len(text)), text)
+    kept, review = _apply_evidence_model(detected, text)
+    resolved = _merge_adjacent_same_type(resolve_overlaps(kept, len(text)), text)
+    return resolved, review
 
 
 #: Labels that a clinical term can be wrongly assigned. A detection of one of
@@ -209,31 +226,62 @@ _NAME_SHAPED_TYPES = frozenset(
 )
 
 
-def _drop_clinical_vocabulary(
+def _apply_evidence_model(
     entities: List[DetectedEntity],
     text: str,
-) -> List[DetectedEntity]:
-    """Remove name-shaped detections that are actually clinical vocabulary.
+) -> Tuple[List[DetectedEntity], List[str]]:
+    """Decide each candidate by evidence strength rather than word membership.
 
-    Applied to every source, not just spaCy. The pinned models label
-    "Parkinson" a PERSON as readily as spaCy does, and filtering only the
-    detectors we happen to control leaves the same clinical term destroyed by
-    a different route.
+    Applied to every source. The pinned models label "Parkinson" a PERSON as
+    readily as spaCy does, so filtering only the detectors we control leaves
+    the same clinical term destroyed by a different route.
+
+    Returns the spans to redact and the review reasons raised by candidates
+    that could not be resolved either way. An ambiguous span is neither
+    deleted on suspicion nor kept on hope: the document goes to a human.
     """
     kept: List[DetectedEntity] = []
+    review: List[str] = []
+    # Parsed once per document, not once per candidate. None means the parse
+    # failed, which the evidence model treats as no information rather than
+    # as "no proper nouns here".
+    proper_nouns = proper_noun_offsets(text, configured_model_name())
     for entity in entities:
-        if entity.entity_type in _NAME_SHAPED_TYPES:
-            span = text[entity.start : entity.end]
-            following = re.findall(r"[^\s]+", text[entity.end : entity.end + 64])[:4]
-            if protects_from_person_label(span, following):
-                continue
-        kept.append(entity)
-    return kept
+        agreeing = count_agreeing(
+            entities,
+            entity.start,
+            entity.end,
+            entity.entity_type,
+            exclude_source=entity.source,
+        )
+        assessment = assess_finding(
+            text,
+            entity.start,
+            entity.end,
+            entity.entity_type,
+            entity.source,
+            agreeing_detectors=agreeing,
+            clinical_support=has_clinical_support(
+                entities, entity.start, entity.end
+            ),
+            contains_proper_noun=contains_proper_noun_token(
+                proper_nouns, entity.start, entity.end
+            ),
+        )
+        if assessment.action == "redact":
+            kept.append(entity)
+        elif assessment.action == "review":
+            review.append(f"ambiguous_{entity.entity_type.lower()}_requires_review")
+        # "preserve" keeps the clinical content and adds no review reason.
+    return kept, sorted(set(review))
 
 
-#: Only whitespace, a hyphen or a possessive may sit between two fragments of
-#: one name. Anything else is two different entities.
-_NAME_GAP = re.compile(r"^[\s\-']*$")
+#: Only horizontal whitespace, a hyphen or a possessive may sit between two
+#: fragments of one name. Anything else is two different entities - and a line
+#: break in particular is not a gap inside a name. Allowing one merged
+#: "Template FP-TEMPLATE-52123" and the "Fax" on the next line into a single
+#: span, and the replacement swallowed a whole field.
+_NAME_GAP = re.compile("^[" + chr(32) + chr(9) + chr(45) + chr(39) + "]*$")
 
 
 def _merge_adjacent_same_type(
@@ -380,43 +428,55 @@ def _replace_entities(
     salt: str,
     settings: Dict[str, Any],
     allocator: "SurrogateAllocator | None" = None,
-) -> str:
-    ordered = sorted(entities, key=lambda item: item.start, reverse=True)
+):
+    """Rewrite the document and record where each replacement landed.
 
-    # Allocate surrogates in reading order so numbering follows first
-    # appearance, then apply replacements from the end so earlier offsets stay
-    # valid. Without this pass the numbering would run backwards through the
-    # document, which is harmless but confusing to a reader.
-    if allocator is not None:
-        for entity in reversed(ordered):
-            surrogate_type = (
-                "PERSON_PROVIDER"
-                if entity.entity_type == "PERSON"
-                and looks_like_provider(text, entity.start)
-                else entity.entity_type
-            )
-            allocator.surrogate_for(surrogate_type, text[entity.start : entity.end])
+    Built left to right so the provenance offsets are correct by
+    construction. Replacing back to front keeps *input* offsets valid but
+    makes every recorded output offset wrong the moment an earlier entity is
+    replaced, because that replacement shifts everything after it. Surrogate
+    numbering also follows reading order this way, which is what a reader
+    expects.
+    """
+    ordered = sorted(entities, key=lambda item: (item.start, item.end))
+    provenance = ProvenanceBuilder()
+    pieces: List[str] = []
+    output_length = 0
+    cursor = 0
 
-    anonymized_text = text
     for entity in ordered:
+        if entity.start < cursor:
+            # Overlap resolution should have removed these, but a stray
+            # overlapping span must never corrupt the output.
+            continue
+        untouched = text[cursor : entity.start]
+        pieces.append(untouched)
+        output_length += len(untouched)
+
         original_value = text[entity.start : entity.end]
+        is_provider = entity.entity_type == "PERSON" and looks_like_provider(
+            text, entity.start
+        )
         replacement = _replacement_for(
             entity.entity_type,
             original_value,
             salt,
             settings,
             allocator=allocator,
-            is_provider=(
-                entity.entity_type == "PERSON"
-                and looks_like_provider(text, entity.start)
-            ),
+            is_provider=is_provider,
         )
-        anonymized_text = (
-            anonymized_text[: entity.start]
-            + replacement
-            + anonymized_text[entity.end :]
+        pieces.append(replacement)
+        provenance.record(
+            output_length,
+            len(replacement),
+            kind_for_replacement(entity.entity_type, replacement),
+            entity.entity_type,
         )
-    return anonymized_text
+        output_length += len(replacement)
+        cursor = entity.end
+
+    pieces.append(text[cursor:])
+    return "".join(pieces), provenance.build()
 
 
 def _entity_summary(entities: Iterable[DetectedEntity]) -> Dict[str, int]:
@@ -477,7 +537,7 @@ def detect_clinical_phi(text: str) -> Dict[str, int]:
         )
 
     try:
-        entities = _detect_entities(text, configured_model_name(), "strict")
+        entities, _review = _detect_entities(text, configured_model_name(), "strict")
     except NerPhiDetectionError as exc:
         raise TextAnonymizationError(
             exc.error_code,
@@ -509,7 +569,9 @@ def anonymize_clinical_text(
 
     try:
         model_name = configured_model_name()
-        entities = _detect_entities(text, model_name, privacy_profile)
+        entities, detection_review = _detect_entities(
+            text, model_name, privacy_profile
+        )
     except NerPhiDetectionError as exc:
         raise TextAnonymizationError(
             exc.error_code,
@@ -524,7 +586,9 @@ def anonymize_clinical_text(
         if settings["text_identifier_strategy"] == "redact"
         else None
     )
-    anonymized_text = _replace_entities(text, entities, salt, settings, allocator)
+    anonymized_text, provenance = _replace_entities(
+        text, entities, salt, settings, allocator
+    )
 
     # An age reference that cannot be resolved to a number cannot be judged
     # against the Safe Harbor threshold, so the document needs a human.
@@ -534,6 +598,7 @@ def anonymize_clinical_text(
             for entity in entities
             if entity.entity_type == "AGE_UNCERTAIN"
         }
+        | set(detection_review)
     )
 
     # Measured here because this is the only place that holds both the
@@ -545,6 +610,10 @@ def anonymize_clinical_text(
         anonymized_text,
         redacted_values=[text[e.start : e.end] for e in entities],
     )
+
+    # Scanned once, here, because this is the only place holding the
+    # provenance map for the text it just produced.
+    second_pass = residual_findings(anonymized_text, provenance)
 
     return {
         "anonymization_status": "completed",
@@ -559,6 +628,21 @@ def anonymize_clinical_text(
         # Counts of distinct entities replaced, per surrogate kind. Never the
         # mapping and never an original value.
         "surrogate_counts": allocator.counts() if allocator else {},
+        # Computed here, not by the caller, because this is the only place
+        # holding the provenance map. Handing the map out instead would put
+        # generated-region offsets into every serialized response, and every
+        # caller that forgot to pass it back would silently re-scan surrogates
+        # as if they were surviving text - the exact defect Phase 11 removes.
+        "residual_phi_categories": _residual_summary(second_pass),
+        # The classified second-pass record for each finding: detector,
+        # category, evidence type, location type, whether it overlaps a
+        # generated region, and the classification. No value, no offsets, no
+        # sentence - a diagnostic report on a privacy pipeline is exactly the
+        # document that ends up pasted into a ticket.
+        "residual_findings": second_pass,
+        # How many regions the sanitizer wrote, by kind. Counts only: the
+        # offsets stay inside this function, where the validator uses them.
+        "provenance_counts": provenance.counts(),
         "review_required_reasons": review_reasons,
         "ner_model": model_name,
         "trained_ner_active": True,
@@ -593,56 +677,329 @@ def mask_release_placeholders(text: str) -> str:
     return masked.replace(AGE_AGGREGATE_REPLACEMENT, " " * len(AGE_AGGREGATE_REPLACEMENT))
 
 
-def residual_phi_categories(anonymized_text: str) -> Dict[str, int]:
-    """Re-scan redacted output. A non-empty result must block the release.
+# -- classification vocabulary for second-pass findings ---------------------
+#
+# Every residual finding lands in exactly one of these. Four are benign and
+# three block release; nothing is dropped silently, because a finding with no
+# recorded classification is a finding nobody reviewed.
 
-    Returns categories and counts only, never the surviving values.
+CLASSIFICATION_GENUINE_PHI = "genuine_surviving_phi"
+CLASSIFICATION_PLAUSIBLE_PHI = "additional_plausible_phi"
+CLASSIFICATION_EXACT_SURROGATE = "exact_generated_surrogate"
+CLASSIFICATION_PLACEHOLDER = "anonymizer_placeholder"
+CLASSIFICATION_DETECTOR_ARTEFACT = "detector_artefact_modified_context"
+CLASSIFICATION_USEFUL_CLINICAL = "useful_clinical_content"
+CLASSIFICATION_MALFORMED = "malformed_output"
 
-    The high-recall proper-noun heuristic is excluded from this second pass.
-    In strict mode the first pass already ran it and redacted everything it
-    flagged, so anything it finds here is an ordinary capitalized word left in
-    the surviving prose - masking the placeholders changes the sentence shape
-    and exposes words like "Portal" or "Contact" to it. Re-applying it would
-    block releases on our own leftovers rather than on surviving PHI. Every
-    evidence-based detector (structured patterns, context rules, and the
-    trained NER models) still counts.
+RESIDUAL_CLASSIFICATIONS = (
+    CLASSIFICATION_GENUINE_PHI,
+    CLASSIFICATION_PLAUSIBLE_PHI,
+    CLASSIFICATION_EXACT_SURROGATE,
+    CLASSIFICATION_PLACEHOLDER,
+    CLASSIFICATION_DETECTOR_ARTEFACT,
+    CLASSIFICATION_USEFUL_CLINICAL,
+    CLASSIFICATION_MALFORMED,
+)
+
+#: A generated token that got truncated, nested or otherwise mangled leaves a
+#: fragment like "<REDACTED_PERSON" or a bare "PATIENT_" behind. A fragment is
+#: not PHI, but it is proof the sanitizer's own writing is unsound, so the
+#: document must not be released on the strength of a scan of it.
+_PLACEHOLDER_FRAGMENT = re.compile(r"<\s*REDACTED_?[A-Z0-9_]*(?![A-Z0-9_]*>)")
+_SURROGATE_STEM = re.compile(
+    r"\b(?:PATIENT|PROVIDER|FACILITY|ORG|PLACE|ADDRESS|RECORD|PATIENTID|PLAN"
+    r"|ACCESSION|DEVICE|IDENTIFIER|USER)_(?![0-9A-Z])"
+)
+
+
+def _region_text_is_well_formed(kind: str, span: str) -> bool:
+    """Whether a recorded region still holds the token we meant to write."""
+    if not span:
+        return False
+    if kind == KIND_PLACEHOLDER:
+        return bool(_PLACEHOLDER_PATTERN.fullmatch(span))
+    if kind == KIND_SURROGATE:
+        return bool(
+            SURROGATE_PATTERN.fullmatch(span) or _SURROGATE_PATTERN.fullmatch(span)
+        )
+    # Generalized ages and shifted dates are ordinary text by design; they are
+    # malformed only if a replacement marker leaked into them.
+    return "<" not in span and ">" not in span
+
+
+def _malformed_output_findings(
+    anonymized_text: str,
+    provenance: "TransformationProvenance",
+) -> List[Dict[str, Any]]:
+    """Structural check on the sanitizer's own output.
+
+    This is not a PHI scan. It asks whether the text we are about to judge is
+    the text we intended to write: a half-written placeholder means the
+    replacement loop produced something we cannot reason about, and reasoning
+    about it anyway is how a partially-redacted value gets released. Findings
+    here block, and they carry a shape, never a value.
+    """
+    findings: List[Dict[str, Any]] = []
+
+    for region in provenance.regions:
+        span = anonymized_text[region.start : region.end]
+        if not _region_text_is_well_formed(region.kind, span):
+            findings.append(
+                {
+                    "detector": "output_structure_validator",
+                    "category": "MALFORMED_REPLACEMENT",
+                    "evidence_type": EVIDENCE_DETERMINISTIC,
+                    "location_type": "inside_generated_region",
+                    "overlaps_generated_region": True,
+                    "classification": CLASSIFICATION_MALFORMED,
+                    "blocking": True,
+                }
+            )
+
+    for pattern in (_PLACEHOLDER_FRAGMENT, _SURROGATE_STEM):
+        for match in pattern.finditer(anonymized_text):
+            if provenance.covering(match.start(), match.end()):
+                continue
+            findings.append(
+                {
+                    "detector": "output_structure_validator",
+                    "category": "MALFORMED_REPLACEMENT",
+                    "evidence_type": EVIDENCE_DETERMINISTIC,
+                    "location_type": provenance.location_type(
+                        match.start(), match.end()
+                    ),
+                    "overlaps_generated_region": bool(
+                        provenance.touching(match.start(), match.end())
+                    ),
+                    "classification": CLASSIFICATION_MALFORMED,
+                    "blocking": True,
+                }
+            )
+
+    return findings
+
+
+#: How an extracted fragment reads. Used by the pixel pipelines, where an OCR
+#: box carries a few words with no sentence around them.
+EXTRACTED_PHI = "phi"
+EXTRACTED_NON_PHI = "non_phi"
+EXTRACTED_UNCERTAIN = "uncertain"
+
+
+def classify_extracted_text(text: str) -> str:
+    """Classify a short extracted string as PHI, useful non-PHI, or unknown.
+
+    Burned-in image text is the case this exists for. Blacking out every box
+    an OCR engine reports makes the residual-text count zero and destroys the
+    laterality marker, the scale bar and the burned-in measurement along with
+    the patient name - a clean privacy number bought with the diagnostic
+    content the image was kept for.
+
+    Three answers, and the middle one is the point: only text that is
+    *recognisably* clinical is preserved. Everything the pipeline cannot place
+    comes back uncertain, and an uncertain fragment is treated as PHI by the
+    caller, not waved through.
+    """
+    if not text or not text.strip():
+        return EXTRACTED_NON_PHI
+
+    try:
+        entities, review = _detect_entities(text, configured_model_name(), "strict")
+    except NerPhiDetectionError as exc:
+        raise TextAnonymizationError(
+            exc.error_code, status_code=exc.status_code
+        ) from exc
+
+    if entities:
+        return EXTRACTED_PHI
+    if review:
+        return EXTRACTED_UNCERTAIN
+    if is_confirmed_clinical_marker(text):
+        return EXTRACTED_NON_PHI
+    return EXTRACTED_UNCERTAIN
+
+
+#: Characters that carry no identity of their own. Stripped from the
+#: uncovered remainder of a straddling prediction before it is assessed,
+#: so a trailing comma is not mistaken for surviving content.
+_BOUNDARY_CHARACTERS = string.whitespace + '.,;:()[]{}<>\'"-/\\'
+
+
+def _remainder_is_accounted_for(
+    text: str,
+    start: int,
+    end: int,
+    provenance: "TransformationProvenance",
+    category: str,
+    source: str,
+    agreeing: int,
+) -> bool:
+    """Whether a straddling prediction claims anything beyond our own token.
+
+    A detector reading the redacted output routinely proposes a span one word
+    wider than the surrogate it is really responding to - "Dr. PROVIDER_001",
+    "PATIENT_001 was". The span is not wholly inside a generated region, so it
+    cannot simply be discounted, and blocking on it would hold clean documents
+    on the strength of a boundary.
+
+    So the remainder is examined rather than ignored. Each part of the span
+    that no generated region covers is put through the same evidence model as
+    any other candidate, in full document context. Only when every remainder
+    is punctuation, whitespace, or text the model reads as *not* an identifier
+    is the finding an artefact of the boundary. A real name sitting beside a
+    surrogate - "PATIENT_001 Balasubramanian" - assesses as an identifier and
+    still blocks, which is the case this must never wave through.
+    """
+    for gap_start, gap_end in provenance.uncovered(start, end):
+        fragment = text[gap_start:gap_end]
+        stripped = fragment.strip(_BOUNDARY_CHARACTERS)
+        if not stripped:
+            continue
+        offset = gap_start + fragment.index(stripped)
+        assessment = assess_finding(
+            text,
+            offset,
+            offset + len(stripped),
+            category,
+            source,
+            agreeing_detectors=agreeing,
+        )
+        if assessment.action != "preserve":
+            return False
+    return True
+
+
+def residual_findings(
+    anonymized_text: str,
+    provenance: "TransformationProvenance | None" = None,
+) -> List[Dict[str, Any]]:
+    """Re-scan the **exact** serialized output and classify what is found.
+
+    The previous implementation blanked every generated token with spaces
+    before re-scanning. That rewrote the sentence it was checking: "Dr.
+    PROVIDER_001 at FACILITY_001" became "Dr.<spaces>at<spaces>", and both
+    models predicted a name belonged in the hole. Sixty per cent of clean
+    documents were blocked by artefacts of the masking itself.
+
+    Nothing is masked now. The scan runs on the real output, and the
+    provenance map says which character ranges the sanitizer wrote. A finding
+    is discounted only when its span lies **wholly** inside a generated
+    region - a prediction that merely touches a surrogate still covers text we
+    did not generate, and that is exactly where a missed identifier would sit.
+
+    Returns one record per finding carrying no value and no sentence.
     """
     if not isinstance(anonymized_text, str):
         raise TextAnonymizationError("Text input must be a string")
-    masked = mask_release_placeholders(anonymized_text)
-    if not masked.strip():
-        return {}
-    if len(masked.encode("utf-8")) > MAX_TEXT_BYTES:
+    if not anonymized_text.strip():
+        return []
+    if len(anonymized_text.encode("utf-8")) > MAX_TEXT_BYTES:
         raise TextAnonymizationError(
             f"Text input exceeds the {MAX_TEXT_BYTES} byte limit",
             status_code=413,
         )
+
+    provenance = provenance or TransformationProvenance()
     try:
-        entities = _detect_entities(masked, configured_model_name(), "strict")
+        entities, _review = _detect_entities(
+            anonymized_text, configured_model_name(), "strict"
+        )
     except NerPhiDetectionError as exc:
         raise TextAnonymizationError(
-            exc.error_code,
-            status_code=exc.status_code,
+            exc.error_code, status_code=exc.status_code
         ) from exc
-    return _entity_summary(
-        entity
-        for entity in entities
-        if entity.source != SOURCE_STRICT_PROPER_NOUN
-        and _is_substantive_residual(masked, entity)
+
+    findings: List[Dict[str, Any]] = _malformed_output_findings(
+        anonymized_text, provenance
     )
+    proper_nouns = proper_noun_offsets(anonymized_text, configured_model_name())
+    for entity in entities:
+        location = provenance.location_type(entity.start, entity.end)
+        covering = provenance.covering(entity.start, entity.end)
+        evidence = evidence_type(entity.source)
+
+        if covering is not None:
+            # Wholly our own token: the detector is reading a surrogate.
+            classification = (
+                CLASSIFICATION_EXACT_SURROGATE
+                if covering.kind == KIND_SURROGATE
+                else CLASSIFICATION_PLACEHOLDER
+            )
+            blocking = False
+        elif evidence == EVIDENCE_DETERMINISTIC:
+            # Layer 1: an exact identifier match in the released text is a
+            # genuine survivor, whatever else is true.
+            classification, blocking = CLASSIFICATION_GENUINE_PHI, True
+        else:
+            agreeing = count_agreeing(
+                entities,
+                entity.start,
+                entity.end,
+                entity.entity_type,
+                exclude_source=entity.source,
+            )
+            assessment = assess_finding(
+                anonymized_text,
+                entity.start,
+                entity.end,
+                entity.entity_type,
+                entity.source,
+                agreeing_detectors=agreeing,
+                clinical_support=has_clinical_support(
+                    entities, entity.start, entity.end
+                ),
+                contains_proper_noun=contains_proper_noun_token(
+                    proper_nouns, entity.start, entity.end
+                ),
+            )
+            if assessment.action == "preserve":
+                classification, blocking = CLASSIFICATION_USEFUL_CLINICAL, False
+            elif location == "spans_generated_and_original" and (
+                _remainder_is_accounted_for(
+                    anonymized_text,
+                    entity.start,
+                    entity.end,
+                    provenance,
+                    entity.entity_type,
+                    entity.source,
+                    agreeing,
+                )
+            ):
+                # The prediction reaches past our token, but everything it
+                # reaches is examined and reads as non-identifying.
+                classification, blocking = CLASSIFICATION_DETECTOR_ARTEFACT, False
+            else:
+                classification, blocking = CLASSIFICATION_PLAUSIBLE_PHI, True
+
+        findings.append(
+            {
+                "detector": entity.source,
+                "category": entity.entity_type,
+                "evidence_type": evidence,
+                "location_type": location,
+                "overlaps_generated_region": bool(
+                    provenance.touching(entity.start, entity.end)
+                ),
+                "classification": classification,
+                "blocking": blocking,
+            }
+        )
+    return findings
 
 
-#: A residual span must be mostly real characters. Masking replaces each
-#: placeholder with spaces of the same length, and the models reliably predict
-#: that a name belongs in the resulting hole - "Dr.<blank>at" comes back as a
-#: PERSON. Such a span contains no surviving text and is not evidence of a
-#: leak.
-_MIN_RESIDUAL_SUBSTANCE = 0.5
+def _residual_summary(findings: List[Dict[str, Any]]) -> Dict[str, int]:
+    """Blocking findings only, counted by category."""
+    summary: Dict[str, int] = {}
+    for finding in findings:
+        if finding["blocking"]:
+            category = finding["category"]
+            summary[category] = summary.get(category, 0) + 1
+    return summary
 
 
-def _is_substantive_residual(masked: str, entity: DetectedEntity) -> bool:
-    span = masked[entity.start : entity.end]
-    if not span:
-        return False
-    non_space = sum(1 for character in span if not character.isspace())
-    return (non_space / len(span)) >= _MIN_RESIDUAL_SUBSTANCE
+def residual_phi_categories(
+    anonymized_text: str,
+    provenance: "TransformationProvenance | None" = None,
+) -> Dict[str, int]:
+    """Categories of genuinely surviving PHI. Non-empty must block release."""
+    return _residual_summary(residual_findings(anonymized_text, provenance))

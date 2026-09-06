@@ -222,7 +222,7 @@ def run_combined(documents: Sequence[Any]) -> RunnerResult:
 
     return _run_over(
         documents,
-        lambda text: _detect_entities(text, model_name, "strict"),
+        lambda text: _detect_entities(text, model_name, "strict")[0],
         load_seconds,
     )
 
