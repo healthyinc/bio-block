@@ -170,9 +170,197 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(body["downstream"]["metadata_indexing"], "pending")
         self.assertEqual(body["downstream"]["blockchain_transaction"], "pending")
 
-    def test_csv_routes_to_csv_handler(self):
-        response = upload_file("sample.csv", b"age,diagnosis\n42,test\n", "text/csv")
-        self.assert_routes_to(response, "csv", "anonymize_csv")
+    def test_csv_upload_returns_completed_safe_tabular_summary(self):
+        csv_content = (
+            b"name,email,phone,mrn,age,gender,diagnosis\n"
+            b"Alice Adams,alice@example.com,555-111-2222,MRN-001,31,F,flu\n"
+            b"Bob Baker,bob@example.com,555-111-3333,MRN-002,32,F,cold\n"
+            b"Carol Chen,carol@example.com,555-111-4444,MRN-003,33,M,flu\n"
+            b"Dan Diaz,dan@example.com,555-111-5555,MRN-004,34,M,cold\n"
+            b"Eve Evans,eve@example.com,555-111-6666,MRN-005,35,F,flu\n"
+        )
+        response = upload_file("sample.csv", csv_content, "text/csv")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        response_text = json.dumps(body)
+        self.assertEqual(body["status"], "success")
+        self.assertEqual(body["detected_modality"], "csv")
+        self.assertEqual(body["handler"], "anonymize_csv")
+        self.assertEqual(body["routing_status"], "handler_selected")
+        self.assertEqual(
+            body["anonymization_status"],
+            "completed_with_warnings",
+        )
+        self.assertNotIn("placeholder", response_text.lower())
+        self.assertIn("tabular_summary", body)
+        summary = body["tabular_summary"]
+        self.assertEqual(summary["rows_in"], 5)
+        self.assertEqual(summary["rows_out"], 5)
+        self.assertEqual(summary["k"], 5)
+        self.assertEqual(summary["l"], 2)
+        self.assertEqual(
+            summary["direct_identifiers_removed"],
+            ["name", "email", "phone", "mrn"],
+        )
+        self.assertEqual(summary["quasi_identifiers_used"], ["age", "gender"])
+        self.assertEqual(summary["sensitive_column"], "diagnosis")
+        self.assertTrue(summary["k_anonymity_satisfied"])
+        self.assertTrue(summary["l_diversity_satisfied"])
+        self.assertEqual(
+            summary["safe_harbor_report"]["safe_harbor_validation_status"],
+            "passed_with_warnings",
+        )
+        self.assertEqual(
+            summary["safe_harbor_report"]["unresolved_identifier_categories"],
+            [],
+        )
+        self.assertEqual(body["downstream"]["ipfs_chunking"], "pending")
+        self.assertEqual(body["downstream"]["cid_encryption"], "pending")
+        self.assertEqual(body["downstream"]["metadata_indexing"], "pending")
+        self.assertEqual(body["downstream"]["blockchain_transaction"], "pending")
+        for raw_value in (
+            "Alice Adams",
+            "alice@example.com",
+            "555-111-2222",
+            "MRN-001",
+            "flu",
+            "cold",
+        ):
+            self.assertNotIn(raw_value, response_text)
+        self.assertNotIn("_internal_anonymized_csv", body)
+        self.assertNotIn("file_bytes", body)
+
+    def test_synthea_csv_ingestion_summary_is_safe_and_complete(self):
+        csv_content = (
+            b"Id,BIRTHDATE,SSN,DRIVERS,PASSPORT,FIRST,LAST,ADDRESS,"
+            b"GENDER,ZIP,LAT,LON,HEALTHCARE_EXPENSES\n"
+            b"uuid-a,1980-01-01,111-22-3333,DL-A,P-A,Alice,Alpha,1 Fake St,"
+            b"F,02139,42.3601,-71.0589,1000\n"
+            b"uuid-b,1981-01-02,222-33-4444,DL-B,P-B,Bob,Beta,2 Fake St,"
+            b"M,02140,42.3611,-71.0599,1100\n"
+            b"uuid-c,1982-01-03,333-44-5555,DL-C,P-C,Carol,Gamma,3 Fake St,"
+            b"F,02141,42.3621,-71.0609,1200\n"
+            b"uuid-d,1983-01-04,444-55-6666,DL-D,P-D,Dan,Delta,4 Fake St,"
+            b"M,02142,42.3631,-71.0619,1300\n"
+            b"uuid-e,1984-01-05,555-66-7777,DL-E,P-E,Eve,Epsilon,5 Fake St,"
+            b"F,02143,42.3641,-71.0629,1400\n"
+        )
+
+        response = upload_file("patients.csv", csv_content, "text/csv")
+        body = response.json()
+        response_text = json.dumps(body)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            body["anonymization_status"],
+            "completed_with_warnings",
+        )
+        self.assertEqual(
+            body["tabular_summary"]["precise_geography_columns_removed"],
+            ["LAT", "LON"],
+        )
+        self.assertNotIn("LAT", body["tabular_summary"]["output_columns"])
+        self.assertNotIn("LON", body["tabular_summary"]["output_columns"])
+        self.assertNotIn("ZIP", body["tabular_summary"]["output_columns"])
+        for raw_value in (
+            "uuid-a",
+            "111-22-3333",
+            "DL-A",
+            "P-A",
+            "Alice",
+            "1 Fake St",
+            "1980-01-01",
+            "42.3601",
+            "-71.0589",
+            "1000",
+        ):
+            self.assertNotIn(raw_value, response_text)
+
+    def test_csv_ingestion_does_not_report_completed_when_k_fails(self):
+        csv_content = b"Id,age,gender\na,30,F\nb,31,M\n"
+
+        response = upload_file("small.csv", csv_content, "text/csv")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            body["anonymization_status"],
+            "failed_privacy_validation",
+        )
+        self.assertFalse(body["tabular_summary"]["k_anonymity_satisfied"])
+        self.assertEqual(body["tabular_summary"]["min_group_size"], 2)
+
+    def test_csv_download_endpoint_returns_anonymized_csv_file(self):
+        csv_content = (
+            b"name,email,phone,mrn,age,gender,diagnosis\n"
+            b"Alice Adams,alice@example.com,555-111-2222,MRN-001,31,F,flu\n"
+            b"Bob Baker,bob@example.com,555-111-3333,MRN-002,32,F,cold\n"
+            b"Carol Chen,carol@example.com,555-111-4444,MRN-003,33,M,flu\n"
+            b"Dan Diaz,dan@example.com,555-111-5555,MRN-004,34,M,cold\n"
+        )
+
+        with patch("main.audit_logger.log_operation", lambda *args, **kwargs: None):
+            response = client.post(
+                "/anonymize_csv",
+                files={"file": ("sample.csv", BytesIO(csv_content), "text/csv")},
+                data={"k": "2", "l": "2"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.headers["content-type"].startswith("text/csv"))
+        self.assertIn("anonymized_dataset.csv", response.headers["content-disposition"])
+        self.assertEqual(
+            response.headers["x-bioblock-anonymization-status"],
+            "completed_with_warnings",
+        )
+        self.assertEqual(response.headers["x-bioblock-k-anonymity-satisfied"], "true")
+        self.assertEqual(response.headers["x-bioblock-l-diversity-satisfied"], "true")
+
+        downloaded = response.content.decode("utf-8")
+        self.assertIn("age,gender,diagnosis", downloaded)
+        self.assertIn("31-32,*,flu", downloaded)
+        self.assertNotIn("name", downloaded.splitlines()[0])
+        self.assertNotIn("email", downloaded.splitlines()[0])
+        for raw_identifier in (
+            "Alice Adams",
+            "alice@example.com",
+            "555-111-2222",
+            "MRN-001",
+        ):
+            self.assertNotIn(raw_identifier, downloaded)
+
+    def test_csv_download_endpoint_ignores_swagger_placeholder_strings(self):
+        csv_content = (
+            b"name,email,phone,mrn,age,gender,diagnosis\n"
+            b"Alice Adams,alice@example.com,555-111-2222,MRN-001,31,F,flu\n"
+            b"Bob Baker,bob@example.com,555-111-3333,MRN-002,32,F,cold\n"
+            b"Carol Chen,carol@example.com,555-111-4444,MRN-003,33,M,flu\n"
+            b"Dan Diaz,dan@example.com,555-111-5555,MRN-004,34,M,cold\n"
+        )
+
+        with patch("main.audit_logger.log_operation", lambda *args, **kwargs: None):
+            response = client.post(
+                "/anonymize_csv",
+                files={"file": ("sample.csv", BytesIO(csv_content), "text/csv")},
+                data={
+                    "k": "2",
+                    "l": "2",
+                    "direct_identifiers": "string",
+                    "quasi_identifiers": "string",
+                    "sensitive_column": "string",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        downloaded = response.content.decode("utf-8")
+        self.assertIn("31-32,*,flu", downloaded)
+        self.assertNotIn("Alice Adams", downloaded)
+
+    def test_openapi_includes_csv_download_endpoint(self):
+        response = client.get("/openapi.json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("/anonymize_csv", response.json()["paths"])
 
     def test_text_routes_to_text_handler(self):
         response = upload_file(
@@ -316,10 +504,16 @@ class TestIngestionRouting(unittest.TestCase):
 
         result = asyncio.run(ingest_file(file=fake_file, profile="strict"))
 
-        self.assertEqual(fake_file.seek_offsets, [0])
+        self.assertEqual(fake_file.seek_offsets, [0, 0])
         self.assertEqual(fake_file.position, 0)
         self.assertEqual(result["detected_modality"], "csv")
         self.assertEqual(result["handler"], "anonymize_csv")
+        self.assertEqual(
+            result["anonymization_status"],
+            "failed_privacy_validation",
+        )
+        self.assertFalse(result["tabular_summary"]["k_anonymity_satisfied"])
+        self.assertIn("tabular_summary", result)
 
 
 if __name__ == "__main__":

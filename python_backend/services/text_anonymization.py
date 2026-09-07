@@ -35,6 +35,19 @@ DIRECT_IDENTIFIER_REDACTIONS = {
     "DEVICE_ID": "<REDACTED_DEVICE_ID>",
 }
 
+CLINICAL_PHI_ENTITY_TYPES = (
+    "PERSON",
+    "MEDICAL_RECORD_NUMBER",
+    "PATIENT_ID",
+    "HEALTH_PLAN_ID",
+    "ACCESSION_NUMBER",
+    "DEVICE_ID",
+    "EMAIL_ADDRESS",
+    "PHONE_NUMBER",
+    "US_SSN",
+    "DATE_TIME",
+)
+
 
 
 class TextAnonymizationError(ValueError):
@@ -511,6 +524,31 @@ def _resolve_study_salt(study_salt: str | None) -> str:
     )
 
 
+def _analyze_clinical_phi(text: str) -> List[Any]:
+    if not isinstance(text, str):
+        raise TextAnonymizationError("Text input must be a string")
+    if not text.strip():
+        return []
+
+    analyzer = _get_analyzer()
+    try:
+        results = analyzer.analyze(
+            text=text,
+            language="en",
+            entities=list(CLINICAL_PHI_ENTITY_TYPES),
+        )
+    except Exception as exc:
+        raise TextAnonymizationError(
+            "Text PHI detection failed", status_code=500
+        ) from exc
+    return _select_non_overlapping(results)
+
+
+def detect_clinical_phi(text: str) -> Dict[str, int]:
+    """Return safe entity counts without returning source text or offsets."""
+    return _entity_summary(_analyze_clinical_phi(text))
+
+
 def anonymize_clinical_text(
     text: str,
     profile: str = "strict",
@@ -524,32 +562,7 @@ def anonymize_clinical_text(
     privacy_profile, settings = _profile_settings(profile)
     salt = _resolve_study_salt(study_salt)
 
-    analyzer = _get_analyzer()
-    try:
-        results = analyzer.analyze(
-            text=text,
-            language="en",
-            entities=[
-                "PERSON",
-                "MEDICAL_RECORD_NUMBER",
-                "PATIENT_ID",
-                "HEALTH_PLAN_ID",
-                "INSURANCE_ID",
-                "ACCESSION_NUMBER",
-                "DEVICE_ID",
-                "EMAIL_ADDRESS",
-                "PHONE_NUMBER",
-                "US_SSN",
-                "SSN",
-                "DATE_TIME",
-            ],
-        )
-    except Exception as exc:
-        raise TextAnonymizationError(
-            "Text anonymization failed", status_code=500
-        ) from exc
-
-    selected_results = _select_non_overlapping(results)
+    selected_results = _analyze_clinical_phi(text)
     return {
         "anonymization_status": "completed",
         "privacy_profile": privacy_profile,
