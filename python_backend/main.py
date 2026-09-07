@@ -1,9 +1,10 @@
 from fastapi import FastAPI, HTTPException, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, Dict, Any, List
 import chromadb
+import logging
 import time
 import uuid
 import os
@@ -68,6 +69,15 @@ from services.text_anonymization import (
     TextAnonymizationError,
     anonymize_clinical_text,
 )
+from services.tabular_anonymization import (
+    TabularAnonymizationError,
+    anonymize_tabular_csv,
+)
+from services.bm25_retrieval import (
+    BM25QueryError,
+    BM25RetrievalService,
+    tokenize as tokenize_bm25,
+)
 
 # PDF extraction imports
 try:
@@ -103,6 +113,7 @@ except ImportError:
     print("Install with: pip install presidio_analyzer presidio_anonymizer presidio_image_redactor")
 
 app = FastAPI()
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -115,6 +126,7 @@ app.add_middleware(
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_or_create_collection(name="new_user_data")
 audit_logger = AuditLogger(chroma_client)
+bm25_retrieval_service = BM25RetrievalService()
 
 # 1. Cross-platform Tesseract detection
 tesseract_cmd = os.getenv('TESSERACT_CMD') or shutil.which('tesseract')
@@ -197,6 +209,14 @@ class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1)
     n_results: Optional[int] = Field(default=5, ge=1, le=100)
 
+class BM25SearchRequest(BaseModel):
+    query: str = Field(..., min_length=1)
+    top_k: int = Field(default=10, ge=1, le=100)
+    modality: Optional[str] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class FilterRequest(BaseModel):
     filters: Dict[str, Any] = Field(..., min_length=1)
     n_results: Optional[int] = Field(default=10, ge=1, le=100)
@@ -271,6 +291,7 @@ async def root():
         "endpoints": {
             "/store": "Store document data",
             "/search": "Search documents", 
+            "/api/v1/search/bm25": "Search anonymized documents with BM25",
             "/filter": "Filter documents by metadata",
             "/search_with_filter": "Combined search and filter",
             "/documents/{doc_id}": "GET: Retrieve document by ID, PUT: Update document metadata, DELETE: Remove document",
@@ -1042,6 +1063,59 @@ async def search_data(request: SearchRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to search data")
+
+@app.post("/api/v1/search/bm25")
+async def search_bm25(request: BM25SearchRequest):
+    """Search only privacy-gated, anonymized documents in the BM25 index."""
+    if not request.query.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Search query must contain at least one token",
+        )
+
+    filters = (
+        {"modality": request.modality}
+        if request.modality is not None
+        else None
+    )
+    try:
+        query_token_count = len(tokenize_bm25(request.query))
+        results = bm25_retrieval_service.search(
+            request.query,
+            top_k=request.top_k,
+            filters=filters,
+        )
+    except BM25QueryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception:
+        logger.exception(
+            "BM25 search failed query_length=%d",
+            len(request.query),
+        )
+        raise HTTPException(status_code=500, detail="BM25 search failed")
+
+    index_document_count = bm25_retrieval_service.document_count
+    if index_document_count == 0:
+        retrieval_status = "empty_index"
+    elif not results:
+        retrieval_status = "no_matches"
+    else:
+        retrieval_status = "completed"
+
+    logger.info(
+        "BM25 search completed query_length=%d token_count=%d results=%d",
+        len(request.query),
+        query_token_count,
+        len(results),
+    )
+    return {
+        "search_type": "bm25",
+        "query_metadata": {"token_count": query_token_count},
+        "result_count": len(results),
+        "results": results,
+        "index_document_count": index_document_count,
+        "retrieval_status": retrieval_status,
+    }
 
 @app.post("/filter")
 async def filter_data(request: FilterRequest):

@@ -22,6 +22,7 @@ from app.services.visualization import VALID_CHART_TYPES, generate_chart
 from app.services.result_serializer import serialize_analytics_result
 from app.services.ipfs_uploader import upload_result_to_ipfs
 from app.services.chain_registry import register_on_chain, get_analytics_for_dataset
+from app.services.audit_logger import AuditLogger
 from app.services.inferential import (
     run_two_group_test,
     run_paired_test,
@@ -31,6 +32,7 @@ from app.services.inferential import (
 from app.utils.csv_parser import parse_csv
 
 APP_VERSION = "0.1.0"
+audit_logger = AuditLogger(log_path="audit_log.json")
 
 app = FastAPI(
     title="Bio-Block Analytics API",
@@ -100,6 +102,13 @@ async def descriptive_analysis(
                 analysis_type="descriptive",
                 analyst_address=auth.wallet_address,
             )
+
+    audit_logger.log_operation(
+        operation="DESCRIBE",
+        wallet_address=auth.wallet_address,
+        dataset_cid=auth.dataset_cid,
+        details=f"cols={analysis['columns_analyzed']}, rows={len(df)}",
+    )
 
     return DescriptiveResponse(
         source_dataset_cid=auth.dataset_cid,
@@ -210,6 +219,13 @@ async def visualize(
                 analysis_type="graphical",
                 analyst_address=auth.wallet_address,
             )
+
+    audit_logger.log_operation(
+        operation="VISUALIZE",
+        wallet_address=auth.wallet_address,
+        dataset_cid=auth.dataset_cid,
+        details=f"chart={chart_type}, rows={len(df)}",
+    )
 
     return VisualizationResponse(
         source_dataset_cid=auth.dataset_cid,
@@ -497,6 +513,13 @@ async def inferential_analysis(
     if tx_hash:
         response["tx_hash"] = tx_hash
 
+    audit_logger.log_operation(
+        operation="INFER",
+        wallet_address=auth.wallet_address,
+        dataset_cid=auth.dataset_cid,
+        details=f"test={cleaned_test_type}/{cleaned_subtype}, rows={len(df)}",
+    )
+
     return response
 
 
@@ -530,6 +553,49 @@ async def get_dataset_results(dataset_cid: str):
     """Query the AnalyticsRegistry contract for all result CIDs linked to a dataset."""
     result_cids = get_analytics_for_dataset(dataset_cid)
     return RegistryDatasetResponse(dataset_cid=dataset_cid, result_cids=result_cids)
+
+
+# -- Audit Logging Phase 2 endpoints --
+
+@app.get("/audit/verify/{entry_id}")
+async def verify_audit_entry(entry_id: str):
+    """SHA-256 hash-chain validation for a single log entry."""
+    result = audit_logger.verify_entry(entry_id)
+    if not result.get("valid") and result.get("reason") == "entry not found":
+        raise HTTPException(404, "Audit entry not found")
+    return result
+
+
+@app.get("/audit/verify")
+async def verify_audit_chain():
+    """Validate the entire hash-chain. Returns first broken link if any."""
+    return audit_logger.verify_chain()
+
+
+@app.get("/audit/logs")
+async def get_audit_logs(
+    wallet_address: Optional[str] = None,
+    operation: Optional[str] = None,
+    dataset_cid: Optional[str] = None,
+    limit: int = 50,
+):
+    logs = audit_logger.query_logs(
+        wallet_address=wallet_address,
+        operation=operation,
+        dataset_cid=dataset_cid,
+        limit=limit,
+    )
+    return {"logs": logs, "total": len(logs)}
+
+
+@app.get("/audit/logs/{entry_id}")
+async def get_audit_entry(entry_id: str):
+    entry = audit_logger.get_entry(entry_id)
+    if not entry:
+        raise HTTPException(404, "Audit entry not found")
+    verification = audit_logger.verify_entry(entry_id)
+    entry["integrity_verified"] = verification["valid"]
+    return entry
 
 
 if __name__ == "__main__":
