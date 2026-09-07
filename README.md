@@ -130,6 +130,7 @@ healthy/
    # Python backend
    cd python_backend
    pip install -r requirements.txt
+   # en_core_web_sm 3.8.0 is pinned in requirements.txt for clinical text NER.
    python -m spacy download en_core_web_lg
 
    # JavaScript backend

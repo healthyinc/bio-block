@@ -27,6 +27,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Verify clinical text NER model
+        working-directory: python_backend
+        run: |
+          python -c "import spacy; assert 'ner' in spacy.load('en_core_web_sm').pipe_names"
+
       - name: Download spaCy model
         working-directory: python_backend
         run: |

@@ -1,6 +1,7 @@
 from typing import Any, Callable, Dict, Optional
 
 from services.text_anonymization import (
+    MAX_TEXT_BYTES,
     TextAnonymizationError,
     anonymize_clinical_text,
 )
@@ -26,7 +27,7 @@ from services.privacy_profiles import (
 SUPPORTED_PROFILES = {"strict", "research"}
 SUPPORTED_MODALITIES = {"csv", "text", "dicom", "nifti", "wsi"}
 HEADER_READ_LIMIT = 4096
-TEXT_READ_LIMIT_BYTES = 256 * 1024
+TEXT_READ_LIMIT_BYTES = MAX_TEXT_BYTES
 TABULAR_SUMMARY_KEYS = (
     "rows_in",
     "rows_out",
@@ -189,6 +190,10 @@ def anonymize_text(
         "date_strategy": result["date_strategy"],
         "text_identifier_strategy": result["text_identifier_strategy"],
         "detected_entities": result["detected_entities"],
+        "entity_count": result["entity_count"],
+        "detection_sources": result["detection_sources"],
+        "ner_model": result["ner_model"],
+        "trained_ner_active": result["trained_ner_active"],
     }
 
 
@@ -389,5 +394,13 @@ def route_for_ingestion(
         if safe_key in handler_result:
             response[safe_key] = handler_result[safe_key]
 
+    if "entity_count" in handler_result:
+        response["entity_count"] = handler_result["entity_count"]
+    if "detection_sources" in handler_result:
+        response["detection_sources"] = handler_result["detection_sources"]
+    if "ner_model" in handler_result:
+        response["ner_model"] = handler_result["ner_model"]
+    if "trained_ner_active" in handler_result:
+        response["trained_ner_active"] = handler_result["trained_ner_active"]
     return response
 
