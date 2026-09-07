@@ -151,10 +151,11 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(body["handler"], handler)
         self.assertEqual(body["routing_status"], "handler_selected")
         self.assertEqual(body["anonymization_status"], "placeholder")
-        self.assertEqual(body["downstream"]["ipfs_chunking"], "pending")
-        self.assertEqual(body["downstream"]["cid_encryption"], "pending")
-        self.assertEqual(body["downstream"]["metadata_indexing"], "pending")
-        self.assertEqual(body["downstream"]["blockchain_transaction"], "pending")
+        self.assertEqual(body["downstream"]["ipfs_chunking"], "blocked")
+        self.assertEqual(body["downstream"]["cid_encryption"], "blocked")
+        self.assertEqual(body["downstream"]["metadata_indexing"], "blocked")
+        self.assertEqual(body["downstream"]["blockchain_transaction"], "blocked")
+        self.assertFalse(body["release_decision"]["releasable"])
 
     def assert_completed_metadata_route(self, response, modality, handler):
         self.assertEqual(response.status_code, 200)
@@ -165,10 +166,11 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(body["routing_status"], "handler_selected")
         self.assertEqual(body["anonymization_status"], "completed")
         self.assertIn("metadata_summary", body)
-        self.assertEqual(body["downstream"]["ipfs_chunking"], "pending")
-        self.assertEqual(body["downstream"]["cid_encryption"], "pending")
-        self.assertEqual(body["downstream"]["metadata_indexing"], "pending")
-        self.assertEqual(body["downstream"]["blockchain_transaction"], "pending")
+        self.assertEqual(body["downstream"]["ipfs_chunking"], "blocked")
+        self.assertEqual(body["downstream"]["cid_encryption"], "blocked")
+        self.assertEqual(body["downstream"]["metadata_indexing"], "blocked")
+        self.assertEqual(body["downstream"]["blockchain_transaction"], "blocked")
+        self.assertFalse(body["release_decision"]["releasable"])
 
     def test_csv_upload_returns_completed_safe_tabular_summary(self):
         csv_content = (
@@ -214,10 +216,11 @@ class TestIngestionRouting(unittest.TestCase):
             summary["safe_harbor_report"]["unresolved_identifier_categories"],
             [],
         )
-        self.assertEqual(body["downstream"]["ipfs_chunking"], "pending")
-        self.assertEqual(body["downstream"]["cid_encryption"], "pending")
-        self.assertEqual(body["downstream"]["metadata_indexing"], "pending")
-        self.assertEqual(body["downstream"]["blockchain_transaction"], "pending")
+        self.assertEqual(body["downstream"]["ipfs_chunking"], "blocked")
+        self.assertEqual(body["downstream"]["cid_encryption"], "blocked")
+        self.assertEqual(body["downstream"]["metadata_indexing"], "blocked")
+        self.assertEqual(body["downstream"]["blockchain_transaction"], "blocked")
+        self.assertFalse(body["release_decision"]["releasable"])
         for raw_value in (
             "Alice Adams",
             "alice@example.com",
@@ -290,7 +293,10 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertFalse(body["tabular_summary"]["k_anonymity_satisfied"])
         self.assertEqual(body["tabular_summary"]["min_group_size"], 2)
 
-    def test_csv_download_endpoint_returns_anonymized_csv_file(self):
+    def test_csv_download_endpoint_reports_analysis_without_releasing_rows(self):
+        # Phase 9: /anonymize_csv no longer streams rows. It shares the single
+        # release-decision function with /api/v1/ingest, which holds CSV at
+        # manual review, so the analysis comes back but the rows do not.
         csv_content = (
             b"name,email,phone,mrn,age,gender,diagnosis\n"
             b"Alice Adams,alice@example.com,555-111-2222,MRN-001,31,F,flu\n"
@@ -306,28 +312,34 @@ class TestIngestionRouting(unittest.TestCase):
                 data={"k": "2", "l": "2"},
             )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.headers["content-type"].startswith("text/csv"))
-        self.assertIn("anonymized_dataset.csv", response.headers["content-disposition"])
-        self.assertEqual(
-            response.headers["x-bioblock-anonymization-status"],
-            "completed_with_warnings",
+        self.assertEqual(response.status_code, 422)
+        self.assertTrue(
+            response.headers["content-type"].startswith("application/json")
         )
-        self.assertEqual(response.headers["x-bioblock-k-anonymity-satisfied"], "true")
-        self.assertEqual(response.headers["x-bioblock-l-diversity-satisfied"], "true")
+        body = response.json()
+        self.assertEqual(body["anonymization_status"], "completed_with_warnings")
+        self.assertFalse(body["release_decision"]["releasable"])
+        self.assertIsNone(body["release_decision"]["artifact_sha256"])
+        self.assertEqual(body["serialized_output_validation"], "passed")
+        self.assertTrue(body["k_anonymity_satisfied"])
+        self.assertTrue(body["l_diversity_satisfied"])
 
-        downloaded = response.content.decode("utf-8")
-        self.assertIn("age,gender,diagnosis", downloaded)
-        self.assertIn("31-32,*,flu", downloaded)
-        self.assertNotIn("name", downloaded.splitlines()[0])
-        self.assertNotIn("email", downloaded.splitlines()[0])
+        # The analysis is still useful: the removal plan is reported.
+        summary = body["tabular_summary"]
+        self.assertEqual(summary["rows_in"], 4)
+        self.assertIn("name", summary["columns_removed"])
+        self.assertIn("email", summary["columns_removed"])
+        self.assertEqual(summary["output_columns"], ["age", "gender", "diagnosis"])
+
+        # No row content, generalized or otherwise, and no raw identifier.
+        self.assertNotIn("31-32", response.text)
         for raw_identifier in (
             "Alice Adams",
             "alice@example.com",
             "555-111-2222",
             "MRN-001",
         ):
-            self.assertNotIn(raw_identifier, downloaded)
+            self.assertNotIn(raw_identifier, response.text)
 
     def test_csv_download_endpoint_ignores_swagger_placeholder_strings(self):
         csv_content = (
@@ -351,10 +363,17 @@ class TestIngestionRouting(unittest.TestCase):
                 },
             )
 
-        self.assertEqual(response.status_code, 200)
-        downloaded = response.content.decode("utf-8")
-        self.assertIn("31-32,*,flu", downloaded)
-        self.assertNotIn("Alice Adams", downloaded)
+        # The placeholder strings are still ignored rather than treated as
+        # column names: the default classification runs and the analysis
+        # succeeds. Only the row release changed.
+        self.assertEqual(response.status_code, 422)
+        body = response.json()
+        self.assertEqual(body["anonymization_status"], "completed_with_warnings")
+        self.assertEqual(
+            body["tabular_summary"]["output_columns"],
+            ["age", "gender", "diagnosis"],
+        )
+        self.assertNotIn("Alice Adams", response.text)
 
     def test_openapi_includes_csv_download_endpoint(self):
         response = client.get("/openapi.json")
@@ -380,11 +399,15 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertNotIn("john.doe@example.com", body["anonymized_text"])
         self.assertEqual(body["date_strategy"], "redact")
         self.assertEqual(body["text_identifier_strategy"], "redact")
-        self.assertIn("<REDACTED_MRN>", body["anonymized_text"])
+        self.assertRegex(body["anonymized_text"], r"RECORD_\d{3,}")
         self.assertIn("<REDACTED_EMAIL>", body["anonymized_text"])
         self.assertIn("diabetes", body["anonymized_text"])
         self.assertEqual(body["detected_entities"]["MEDICAL_RECORD_NUMBER"], 1)
         self.assertEqual(body["detected_entities"]["EMAIL_ADDRESS"], 1)
+        self.assertEqual(body["entity_count"], 2)
+        self.assertEqual(body["detection_sources"], {"structured_pattern": 2})
+        self.assertEqual(body["ner_model"], "en_core_web_sm")
+        self.assertTrue(body["trained_ner_active"])
         self.assertEqual(body["downstream"]["ipfs_chunking"], "pending")
         self.assertEqual(body["downstream"]["cid_encryption"], "pending")
         self.assertEqual(body["downstream"]["metadata_indexing"], "pending")
@@ -402,7 +425,7 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(body["detected_modality"], "text")
         self.assertEqual(body["anonymization_status"], "completed")
         self.assertNotIn("PT-1001", body["anonymized_text"])
-        self.assertIn("<REDACTED_PATIENT_ID>", body["anonymized_text"])
+        self.assertRegex(body["anonymized_text"], r"PATIENTID_\d{3,}")
 
     def test_dicom_extension_routes_to_dicom_handler(self):
         with patch("services.ingestion.redact_dicom_pixels", fake_dicom_pixel_redaction):
@@ -514,6 +537,106 @@ class TestIngestionRouting(unittest.TestCase):
         )
         self.assertFalse(result["tabular_summary"]["k_anonymity_satisfied"])
         self.assertIn("tabular_summary", result)
+
+    def test_text_upload_returns_only_redacted_content_and_safe_counts(self):
+        raw_text = (
+            b"Patient Rahul Sharma has MRN-458921 and was examined by "
+            b"Dr. Amit Verma."
+        )
+
+        response = upload_file("synthetic-note.txt", raw_text, "text/plain")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        serialized = response.text
+        self.assertEqual(body["detected_modality"], "text")
+        self.assertEqual(body["anonymization_status"], "completed")
+        self.assertNotIn("Rahul Sharma", serialized)
+        self.assertNotIn("Amit Verma", serialized)
+        self.assertNotIn("458921", serialized)
+        self.assertRegex(body["anonymized_text"], r"(?:PATIENT|PROVIDER)_\d{3,}")
+        self.assertRegex(body["anonymized_text"], r"RECORD_\d{3,}")
+        self.assertEqual(body["detected_entities"]["PERSON"], 2)
+        self.assertEqual(body["detected_entities"]["MEDICAL_RECORD_NUMBER"], 1)
+        for raw_span_key in (
+            '"start"',
+            '"end"',
+            '"score"',
+            '"original_label"',
+            '"entity_text"',
+        ):
+            self.assertNotIn(raw_span_key, serialized)
+
+    def test_text_upload_model_failure_cannot_return_original_content(self):
+        raw_text = b"Patient Synthetic Person has MRN-458921."
+        previous_model = os.environ.get("PHI_NER_MODEL")
+        os.environ["PHI_NER_MODEL"] = "missing_configured_phi_model"
+        try:
+            response = upload_file("synthetic-note.txt", raw_text, "text/plain")
+        finally:
+            if previous_model is None:
+                os.environ.pop("PHI_NER_MODEL", None)
+            else:
+                os.environ["PHI_NER_MODEL"] = previous_model
+
+        self.assertEqual(response.status_code, 503)
+        serialized = response.text
+        self.assertEqual(response.json()["detail"], "ner_model_unavailable")
+        self.assertNotIn("Synthetic Person", serialized)
+        self.assertNotIn("458921", serialized)
+        self.assertNotIn("anonymized_text", serialized)
+        self.assertNotIn("traceback", serialized.lower())
+
+    def test_strict_text_upload_redacts_arbitrary_proper_noun(self):
+        response = upload_file(
+            "synthetic-note.txt",
+            b"Kartik went home after lunch.",
+            "text/plain",
+            "strict",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertNotIn("Kartik", response.text)
+        self.assertRegex(body["anonymized_text"], r"(?:PATIENT|PROVIDER)_\d{3,}")
+        self.assertEqual(body["anonymization_status"], "completed")
+        self.assertEqual(body["detected_entities"], {"PERSON": 1})
+        self.assertEqual(body["detection_sources"], {"strict_proper_noun": 1})
+
+    def test_research_text_upload_requires_expert_determination_without_content(self):
+        response = upload_file(
+            "synthetic-note.txt",
+            b"Patient Synthetic Person has MRN-458921.",
+            "text/plain",
+            "research",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(
+            body["anonymization_status"],
+            "expert_determination_required",
+        )
+        self.assertFalse(body["release_decision"]["releasable"])
+        self.assertNotIn("anonymized_text", body)
+        self.assertNotIn("Synthetic Person", response.text)
+        self.assertNotIn("458921", response.text)
+        self.assertTrue(all(value == "blocked" for value in body["downstream"].values()))
+
+    def test_safe_harbor_v1_profile_is_accepted_as_canonical_policy(self):
+        response = upload_file(
+            "synthetic-note.txt",
+            b"Patient Synthetic Person was admitted.",
+            "text/plain",
+            "safe_harbor_v1",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["privacy_profile"], "safe_harbor_v1")
+        self.assertEqual(body["privacy_policy"], "safe_harbor_v1")
+        self.assertTrue(body["release_decision"]["releasable"])
+        self.assertNotIn("Synthetic Person", response.text)
 
 
 if __name__ == "__main__":
