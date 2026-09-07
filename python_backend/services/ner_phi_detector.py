@@ -19,7 +19,7 @@ SPACY_PHI_LABEL_MAP = {
     "GPE": "LOCATION",
     "LOC": "LOCATION",
     "FAC": "FACILITY",
-    "DATE": "DATE",
+    "DATE": "DATE_TIME",
     "TIME": "TIME",
 }
 _NON_PHI_CLINICAL_TERMS = {"ct", "mri", "pet", "ecg", "ekg", "x-ray", "xray"}

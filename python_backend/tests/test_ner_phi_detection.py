@@ -41,7 +41,9 @@ from services.text_anonymization import (  # noqa: E402
     ],
 )
 def test_contextual_person_names_are_replaced(text, name):
-    result = anonymize_clinical_text(text, study_salt="study-a")
+    result = anonymize_clinical_text(
+        text, profile="research", study_salt="study-a"
+    )
 
     assert name not in result["anonymized_text"]
     assert "PERSON_" in result["anonymized_text"]
@@ -52,6 +54,7 @@ def test_contextual_person_names_are_replaced(text, name):
 def test_arbitrary_name_failure_case_is_now_safe():
     result = anonymize_clinical_text(
         "Patient Rahul Sharma was admitted for treatment.",
+        profile="research",
         study_salt="study-a",
     )
 
@@ -68,7 +71,9 @@ def test_repeated_person_uses_same_surrogate_and_different_person_does_not():
         "Rahul Sharma was examined by Dr. Amit Verma. "
         "Rahul Sharma was discharged later."
     )
-    result = anonymize_clinical_text(text, study_salt="study-a")
+    result = anonymize_clinical_text(
+        text, profile="research", study_salt="study-a"
+    )
     tokens = re.findall(r"PERSON_[A-F0-9]{8}", result["anonymized_text"])
 
     assert len(tokens) == 3
@@ -80,8 +85,12 @@ def test_repeated_person_uses_same_surrogate_and_different_person_does_not():
 
 def test_person_surrogate_changes_with_study_salt():
     text = "Patient Rahul Sharma was admitted."
-    first = anonymize_clinical_text(text, study_salt="study-a")
-    second = anonymize_clinical_text(text, study_salt="study-b")
+    first = anonymize_clinical_text(
+        text, profile="research", study_salt="study-a"
+    )
+    second = anonymize_clinical_text(
+        text, profile="research", study_salt="study-b"
+    )
 
     assert first["anonymized_text"] != second["anonymized_text"]
 
@@ -101,7 +110,7 @@ def test_spacy_label_mapping_is_centralized_and_privacy_first():
         "GPE": "LOCATION",
         "LOC": "LOCATION",
         "FAC": "FACILITY",
-        "DATE": "DATE",
+        "DATE": "DATE_TIME",
         "TIME": "TIME",
     }
 

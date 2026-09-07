@@ -16,9 +16,6 @@ describe("IPFS Upload Controller", function () {
     axios.post = originalAxiosPost;
   });
 
-  // ------------------------------------------------------------------
-  // 1. Successful upload
-  // ------------------------------------------------------------------
   describe("Successful uploads", function () {
     it("should upload a file and return IPFS hash", async function () {
       axios.post = async () => ({
@@ -109,9 +106,6 @@ describe("IPFS Upload Controller", function () {
     });
   });
 
-  // ------------------------------------------------------------------
-  // 2. Input validation
-  // ------------------------------------------------------------------
   describe("Input validation", function () {
     it("should return 400 when no file is uploaded", async function () {
       const res = await request(app).post("/api/ipfs/upload").field("fileName", "missing.enc");
@@ -122,9 +116,6 @@ describe("IPFS Upload Controller", function () {
     });
   });
 
-  // ------------------------------------------------------------------
-  // 3. Pinata API error handling
-  // ------------------------------------------------------------------
   describe("Pinata API error handling", function () {
     it("should return 401 when Pinata credentials are invalid", async function () {
       axios.post = async () => {
@@ -229,9 +220,6 @@ describe("IPFS Upload Controller", function () {
     });
   });
 
-  // ------------------------------------------------------------------
-  // 4. Response structure
-  // ------------------------------------------------------------------
   describe("Response structure", function () {
     it("should return all expected fields on success", async function () {
       axios.post = async () => ({
@@ -267,9 +255,6 @@ describe("IPFS Upload Controller", function () {
     });
   });
 
-  // ------------------------------------------------------------------
-  // 5. Binary content handling
-  // ------------------------------------------------------------------
   describe("Binary content handling", function () {
     it("should handle binary (encrypted) file content", async function () {
       const binaryContent = Buffer.alloc(256);
@@ -306,9 +291,6 @@ describe("IPFS Upload Controller", function () {
     });
   });
 
-  // ------------------------------------------------------------------
-  // 6. Filename sanitization
-  // ------------------------------------------------------------------
   describe("Filename handling", function () {
     it("should handle filenames with special characters", async function () {
       axios.post = async () => ({
@@ -340,9 +322,6 @@ describe("IPFS Upload Controller", function () {
     });
   });
 
-  // ------------------------------------------------------------------
-  // 7. File-type validation
-  // ------------------------------------------------------------------
   describe("File-type validation", function () {
     it("should reject executable files", async function () {
       const res = await request(app)

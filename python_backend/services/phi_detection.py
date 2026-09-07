@@ -116,7 +116,7 @@ STRUCTURED_PATTERNS: Sequence[_PatternDefinition] = (
     ),
     _PatternDefinition(
         "numeric_date",
-        "DATE",
+        "DATE_TIME",
         _compile(r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4})\b"),
     ),
     _PatternDefinition(
