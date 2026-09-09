@@ -102,7 +102,7 @@ export default function Dashboard({ onBack, isWalletConnected, walletAddress }) 
     try {
       let response;
       if (doc.hash.startsWith("QmMock")) {
-        const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
+        const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || "http://localhost:3001";
         response = await fetch(`${backendUrl}/api/ipfs/mock/${doc.hash}`);
       } else {
         response = await fetch(`https://gateway.pinata.cloud/ipfs/${doc.hash}`);
@@ -115,9 +115,11 @@ export default function Dashboard({ onBack, isWalletConnected, walletAddress }) 
       const encryptedData = await response.text();
 
       // Fetch document key
-      const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-      const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
-      const keyResponse = await fetch(`${backendUrl}/api/ipfs/key/${doc.hash}?buyerAddress=${accounts[0]}`);
+      const accounts = await window.ethereum.request({ method: "eth_accounts" });
+      const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || "http://localhost:3001";
+      const keyResponse = await fetch(
+        `${backendUrl}/api/ipfs/key/${doc.hash}?buyerAddress=${accounts[0]}`
+      );
       if (!keyResponse.ok) throw new Error("Failed to get decryption key");
       const keyData = await keyResponse.json();
 

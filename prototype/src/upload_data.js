@@ -360,7 +360,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       const response = await fetch(`${pyBackendUrl}/anonymize_text`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text })
+        body: JSON.stringify({ text }),
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -368,7 +368,9 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       }
       const result = await response.json();
       const anonymizedBlob = new Blob([result.anonymized_text], { type: "text/plain" });
-      const mainFile = new File([anonymizedBlob], `anonymized_${file.name}`, { type: "text/plain" });
+      const mainFile = new File([anonymizedBlob], `anonymized_${file.name}`, {
+        type: "text/plain",
+      });
       return { mainFile, previewFile: null };
     } else {
       throw new Error(
@@ -419,7 +421,12 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
   };
 
   // New hybrid approach: Upload encrypted file to backend for IPFS upload
-  const uploadToIPFSViaBackend = async (encryptedData, fileName, documentKey, isPreview = false) => {
+  const uploadToIPFSViaBackend = async (
+    encryptedData,
+    fileName,
+    documentKey,
+    isPreview = false
+  ) => {
     const formData = new FormData();
     formData.append(
       "encryptedFile",
@@ -537,9 +544,9 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
 
       // Step 3: Encrypting file (with streaming for large files)
       updateStep(2); // Mark as in progress
-      
+
       const documentKey = generateDocumentKey(); // Generate unique key for this document
-      
+
       try {
         const streamer = new StreamingEncryption(documentKey);
 
@@ -649,7 +656,12 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
               encryptedPreview = encryptFile(new Uint8Array(previewBuffer), previewKey);
             }
 
-            const previewResult = await uploadToIPFSViaBackend(encryptedPreview, previewFile.name, previewKey, true);
+            const previewResult = await uploadToIPFSViaBackend(
+              encryptedPreview,
+              previewFile.name,
+              previewKey,
+              true
+            );
             if (previewResult.success) {
               previewHash = previewResult.ipfsHash;
             }

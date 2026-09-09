@@ -65,10 +65,7 @@ const uploadAnalyticsResult = async (req, res) => {
       fileSize: buffer.length,
     });
   } catch (error) {
-    console.error(
-      "Analytics IPFS upload error:",
-      error.response?.data || error.message
-    );
+    console.error("Analytics IPFS upload error:", error.response?.data || error.message);
 
     if (error.response?.status === 401) {
       return res.status(401).json({
@@ -77,9 +74,7 @@ const uploadAnalyticsResult = async (req, res) => {
     }
 
     res.status(500).json({
-      error:
-        "Analytics IPFS upload failed: " +
-        (error.response?.data?.error || error.message),
+      error: "Analytics IPFS upload failed: " + (error.response?.data?.error || error.message),
     });
   }
 };

@@ -2,8 +2,8 @@ fastapi
 uvicorn[standard]
 chromadb
 opencv-python
-spacy
-numpy<2
+spacy>=3.8.0
+numpy
 Pillow
 python-multipart
 pytesseract

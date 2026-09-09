@@ -8,11 +8,11 @@ router.post("/upload", upload.single("encryptedFile"), uploadToIPFS);
 router.post("/upload-analytics-result", express.json(), uploadAnalyticsResult);
 
 // GET /api/ipfs/key/:ipfsHash - Retrieve decryption key (requires payment verification)
-router.get('/key/:ipfsHash', getDocumentKey);
+router.get("/key/:ipfsHash", getDocumentKey);
 
 const path = require("path");
 const fs = require("fs");
-router.get('/mock/:ipfsHash', (req, res) => {
+router.get("/mock/:ipfsHash", (req, res) => {
   const filePath = path.join(__dirname, "../data/mock_ipfs", req.params.ipfsHash);
   if (fs.existsSync(filePath)) {
     res.sendFile(filePath);

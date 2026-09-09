@@ -65,13 +65,15 @@ export default function SearchData({ onBack }) {
 
   const getDocumentKey = async (ipfsHash) => {
     if (!window.ethereum) throw new Error("MetaMask not connected");
-    const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+    const accounts = await window.ethereum.request({ method: "eth_accounts" });
     if (accounts.length === 0) throw new Error("No connected account found");
     const buyerAddress = accounts[0];
 
-    const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
-    const response = await fetch(`${backendUrl}/api/ipfs/key/${ipfsHash}?buyerAddress=${buyerAddress}`);
-    
+    const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || "http://localhost:3001";
+    const response = await fetch(
+      `${backendUrl}/api/ipfs/key/${ipfsHash}?buyerAddress=${buyerAddress}`
+    );
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       throw new Error(errorData.error || `Failed to get decryption key (${response.status})`);
@@ -80,7 +82,6 @@ export default function SearchData({ onBack }) {
     const data = await response.json();
     return data.documentKey;
   };
-
 
   const handleSearchSubmit = async () => {
     if (!searchQuery.trim() && !useFilters) {
@@ -202,7 +203,7 @@ export default function SearchData({ onBack }) {
 
       let response;
       if (cid.startsWith("QmMock")) {
-        const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
+        const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || "http://localhost:3001";
         response = await fetch(`${backendUrl}/api/ipfs/mock/${cid}`);
       } else {
         response = await fetch(`https://gateway.pinata.cloud/ipfs/${cid}`);
@@ -261,14 +262,14 @@ export default function SearchData({ onBack }) {
     try {
       let response;
       if (previewHash.startsWith("QmMock")) {
-        const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || 'http://localhost:3001';
+        const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || "http://localhost:3001";
         response = await fetch(`${backendUrl}/api/ipfs/mock/${previewHash}`);
       } else {
         response = await fetch(`https://gateway.pinata.cloud/ipfs/${previewHash}`);
       }
-      
+
       if (!response.ok) {
-          throw new Error("Failed to fetch preview file");
+        throw new Error("Failed to fetch preview file");
       }
       const encryptedData = await response.text();
       // Fetch document key for preview

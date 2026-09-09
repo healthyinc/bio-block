@@ -21,24 +21,25 @@ export default function App() {
   const [currentView, setCurrentView] = useState("main");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
+  // eslint-disable-next-line no-unused-vars
   const forceNetworkSwitch = async () => {
     try {
       await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x7a69' }], // 31337 in hex
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: "0x7a69" }], // 31337 in hex
       });
       alert("Successfully switched to Localhost!");
     } catch (switchError) {
       if (switchError.code === 4902) {
         try {
           await window.ethereum.request({
-            method: 'wallet_addEthereumChain',
+            method: "wallet_addEthereumChain",
             params: [
               {
-                chainId: '0x7a69',
-                chainName: 'Localhost 8545',
-                rpcUrls: ['http://127.0.0.1:8545'],
-                nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+                chainId: "0x7a69",
+                chainName: "Localhost 8545",
+                rpcUrls: ["http://127.0.0.1:8545"],
+                nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
               },
             ],
           });

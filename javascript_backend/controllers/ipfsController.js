@@ -23,9 +23,10 @@ if (!fs.existsSync(PREVIEW_KEYS_FILE)) {
 }
 
 // Contract configuration
-const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+const CONTRACT_ADDRESS =
+  process.env.CONTRACT_ADDRESS || "0x5FbDB2315678afecb367f032d93F642f64180aa3";
 const CONTRACT_ABI = [
-  "function checkAccess(string memory ipfsHash, address user) public view returns (bool)"
+  "function checkAccess(string memory ipfsHash, address user) public view returns (bool)",
 ];
 
 // Configure multer for disk storage with file-type validation
