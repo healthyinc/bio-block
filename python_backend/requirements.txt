@@ -37,3 +37,6 @@ httpx<0.28.0
 
 # Neuroimaging support for NIfTI files
 nibabel
+
+# Security patches
+cryptography>=50.0.0
