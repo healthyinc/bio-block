@@ -101,4 +101,8 @@ contract DocumentStorage {
     function getMyDocuments() public view returns (string[] memory) {
         return userDocuments[msg.sender];
     }
+    
+    function checkAccess(string memory ipfsHash, address user) public view returns (bool) {
+        return hasAccess(ipfsHash, user);
+    }
 }

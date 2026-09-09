@@ -5,17 +5,10 @@ class StreamingEncryption {
   private chunkSize: number;
   private secretKey: string;
 
-  constructor(chunkSize: number = 1024 * 1024) {
-    // Default 1MB chunks
+  constructor(secretKey: string, chunkSize: number = 1024 * 1024) {
+    if (!secretKey) throw new Error("StreamingEncryption requires a secretKey");
+    this.secretKey = secretKey;
     this.chunkSize = chunkSize;
-    this.secretKey =
-      process.env.NEXT_PUBLIC_ENCRYPTION_KEY || 'default-secret-key';
-
-    if (!process.env.NEXT_PUBLIC_ENCRYPTION_KEY) {
-      console.warn(
-        'NEXT_PUBLIC_ENCRYPTION_KEY not set, using default key (not secure!)'
-      );
-    }
   }
 
   /**

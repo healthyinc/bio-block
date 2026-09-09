@@ -19,20 +19,16 @@ async function main() {
   // 3. Register some mock analytics
   console.log("📝 Analyst 1 is registering a descriptive analysis...");
   const sourceCID = "QmOriginalDataset123456789";
-  let tx = await registry.connect(analyst1).registerAnalytics(
-    sourceCID,
-    "QmDescriptiveResultABC",
-    "descriptive"
-  );
+  let tx = await registry
+    .connect(analyst1)
+    .registerAnalytics(sourceCID, "QmDescriptiveResultABC", "descriptive");
   await tx.wait();
   console.log("✅ Successfully registered descriptive analysis!\n");
 
   console.log("📝 Analyst 2 is registering a visualization for the SAME dataset...");
-  tx = await registry.connect(analyst2).registerAnalytics(
-    sourceCID,
-    "QmVisualizationResultXYZ",
-    "graphical"
-  );
+  tx = await registry
+    .connect(analyst2)
+    .registerAnalytics(sourceCID, "QmVisualizationResultXYZ", "graphical");
   await tx.wait();
   console.log("✅ Successfully registered visualization!\n");
 
@@ -49,9 +45,11 @@ async function main() {
   const analyst1History = await registry.connect(analyst1).getMyAnalytics(0, 10);
   console.log(`📊 Analyst 1 has ${analyst1History.length} records in their history:`);
   analyst1History.forEach((record, index) => {
-    console.log(`   ${index + 1}. Type: ${record.analysisType} | Source: ${record.sourceCID} -> Result: ${record.resultCID}`);
+    console.log(
+      `   ${index + 1}. Type: ${record.analysisType} | Source: ${record.sourceCID} -> Result: ${record.resultCID}`
+    );
   });
-  
+
   console.log("\n🎉 Demo completed successfully!");
 }
 

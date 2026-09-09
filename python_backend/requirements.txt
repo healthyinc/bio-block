@@ -2,8 +2,8 @@ fastapi
 uvicorn[standard]
 chromadb
 opencv-python
-spacy
-numpy<2
+spacy>=3.8.0
+numpy
 Pillow
 python-multipart
 pytesseract
@@ -37,3 +37,6 @@ httpx<0.28.0
 
 # Neuroimaging support for NIfTI files
 nibabel
+
+# Security patches
+cryptography>=50.0.0
