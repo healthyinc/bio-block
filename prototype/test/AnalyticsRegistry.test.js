@@ -19,7 +19,9 @@ describe("AnalyticsRegistry", function () {
       const resultCID = "QmResult123";
       const analysisType = "descriptive";
 
-      const tx = await analyticsRegistry.connect(analyst1).registerAnalytics(sourceCID, resultCID, analysisType);
+      const tx = await analyticsRegistry
+        .connect(analyst1)
+        .registerAnalytics(sourceCID, resultCID, analysisType);
       const receipt = await tx.wait();
 
       expect(receipt.events[0].event).to.equal("AnalyticsRegistered");
@@ -49,16 +51,24 @@ describe("AnalyticsRegistry", function () {
     });
 
     it("Should reject duplicate result CID", async function () {
-      await analyticsRegistry.connect(analyst1).registerAnalytics("QmSource1", "QmDupeResult", "descriptive");
+      await analyticsRegistry
+        .connect(analyst1)
+        .registerAnalytics("QmSource1", "QmDupeResult", "descriptive");
 
       await expect(
-        analyticsRegistry.connect(analyst1).registerAnalytics("QmSource2", "QmDupeResult", "graphical")
+        analyticsRegistry
+          .connect(analyst1)
+          .registerAnalytics("QmSource2", "QmDupeResult", "graphical")
       ).to.be.revertedWith("Result CID already registered");
     });
 
     it("Should allow same dataset with different result CIDs", async function () {
-      await analyticsRegistry.connect(analyst1).registerAnalytics("QmSameSource", "QmResultX", "descriptive");
-      await analyticsRegistry.connect(analyst1).registerAnalytics("QmSameSource", "QmResultY", "graphical");
+      await analyticsRegistry
+        .connect(analyst1)
+        .registerAnalytics("QmSameSource", "QmResultX", "descriptive");
+      await analyticsRegistry
+        .connect(analyst1)
+        .registerAnalytics("QmSameSource", "QmResultY", "graphical");
 
       const results = await analyticsRegistry.getAnalyticsForDataset("QmSameSource");
       expect(results.length).to.equal(2);
@@ -73,12 +83,16 @@ describe("AnalyticsRegistry", function () {
 
     it("Should return all result CIDs for a source dataset", async function () {
       const sourceCID = "QmSource456";
-      
-      await analyticsRegistry.connect(analyst1).registerAnalytics(sourceCID, "QmResultA", "descriptive");
-      await analyticsRegistry.connect(analyst2).registerAnalytics(sourceCID, "QmResultB", "graphical");
+
+      await analyticsRegistry
+        .connect(analyst1)
+        .registerAnalytics(sourceCID, "QmResultA", "descriptive");
+      await analyticsRegistry
+        .connect(analyst2)
+        .registerAnalytics(sourceCID, "QmResultB", "graphical");
 
       const results = await analyticsRegistry.getAnalyticsForDataset(sourceCID);
-      
+
       expect(results.length).to.equal(2);
       expect(results[0]).to.equal("QmResultA");
       expect(results[1]).to.equal("QmResultB");
@@ -88,14 +102,26 @@ describe("AnalyticsRegistry", function () {
   describe("getMyAnalytics and Pagination", function () {
     beforeEach(async function () {
       // Register 5 records for analyst1
-      await analyticsRegistry.connect(analyst1).registerAnalytics("QmSource1", "QmResult1", "descriptive");
-      await analyticsRegistry.connect(analyst1).registerAnalytics("QmSource2", "QmResult2", "graphical");
-      await analyticsRegistry.connect(analyst1).registerAnalytics("QmSource3", "QmResult3", "inferential");
-      await analyticsRegistry.connect(analyst1).registerAnalytics("QmSource4", "QmResult4", "descriptive");
-      await analyticsRegistry.connect(analyst1).registerAnalytics("QmSource5", "QmResult5", "graphical");
-      
+      await analyticsRegistry
+        .connect(analyst1)
+        .registerAnalytics("QmSource1", "QmResult1", "descriptive");
+      await analyticsRegistry
+        .connect(analyst1)
+        .registerAnalytics("QmSource2", "QmResult2", "graphical");
+      await analyticsRegistry
+        .connect(analyst1)
+        .registerAnalytics("QmSource3", "QmResult3", "inferential");
+      await analyticsRegistry
+        .connect(analyst1)
+        .registerAnalytics("QmSource4", "QmResult4", "descriptive");
+      await analyticsRegistry
+        .connect(analyst1)
+        .registerAnalytics("QmSource5", "QmResult5", "graphical");
+
       // Register 1 record for analyst2
-      await analyticsRegistry.connect(analyst2).registerAnalytics("QmSourceA", "QmResultA", "descriptive");
+      await analyticsRegistry
+        .connect(analyst2)
+        .registerAnalytics("QmSourceA", "QmResultA", "descriptive");
     });
 
     it("Should return correct count", async function () {
@@ -127,7 +153,7 @@ describe("AnalyticsRegistry", function () {
       const results = await analyticsRegistry.connect(analyst1).getMyAnalytics(10, 2);
       expect(results.length).to.equal(0);
     });
-    
+
     it("Should maintain isolation between wallets", async function () {
       const results = await analyticsRegistry.connect(analyst2).getMyAnalytics(0, 10);
       expect(results.length).to.equal(1);

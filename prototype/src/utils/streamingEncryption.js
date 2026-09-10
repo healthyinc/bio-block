@@ -1,10 +1,10 @@
 import CryptoJS from "crypto-js";
 
 class StreamingEncryption {
-  constructor(chunkSize = 1024 * 1024) {
-    // Default 1MB chunks
+  constructor(secretKey, chunkSize = 1024 * 1024) {
+    if (!secretKey) throw new Error("StreamingEncryption requires a secretKey");
+    this.secretKey = secretKey;
     this.chunkSize = chunkSize;
-    this.secretKey = process.env.REACT_APP_ENCRYPTION_KEY || "default-secret-key";
   }
 
   // Optimize chunk size based on file size

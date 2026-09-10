@@ -11,7 +11,7 @@ import {
   Check,
 } from "lucide-react";
 import { storeDocumentHash } from "./contractService";
-import { encryptFile } from "./encryptionUtils.js";
+import { encryptFile, generateDocumentKey } from "./encryptionUtils.js";
 import StreamingEncryption from "./utils/streamingEncryption.js";
 
 function getUploadHeading(isComplete, hasError) {
@@ -171,7 +171,8 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       const isSpreadsheet =
         file.type.includes("spreadsheet") ||
         file.type.includes("csv") ||
-        ["xlsx", "xls", "csv", "ods", "tsv", "xlsm", "xlsb"].includes(fileExtension);
+        file.type.includes("text") ||
+        ["xlsx", "xls", "csv", "ods", "tsv", "xlsm", "xlsb", "txt"].includes(fileExtension);
       const isPdf = file.type === "application/pdf" || fileExtension === "pdf";
       const isDicom = fileExtension === "dcm" || fileExtension === "dicom";
 
@@ -353,9 +354,27 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
     } else if (file.name.match(/\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i)) {
       backendUrl = process.env.REACT_APP_JS_BACKEND_URL || "http://localhost:3001";
       endpoint = "/api/anonymize";
+    } else if (file.name.match(/\.(txt)$/i)) {
+      const text = await file.text();
+      const pyBackendUrl = process.env.REACT_APP_PYTHON_BACKEND_URL || "http://localhost:3002";
+      const response = await fetch(`${pyBackendUrl}/anonymize_text`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || errorData.error || "Text anonymization failed");
+      }
+      const result = await response.json();
+      const anonymizedBlob = new Blob([result.anonymized_text], { type: "text/plain" });
+      const mainFile = new File([anonymizedBlob], `anonymized_${file.name}`, {
+        type: "text/plain",
+      });
+      return { mainFile, previewFile: null };
     } else {
       throw new Error(
-        "File type not supported for anonymization. Only Excel (.xlsx, .xls, .csv, .ods, .tsv, .xlsm, .xlsb) and image files (.jpg, .jpeg, .png) are supported."
+        "File type not supported for anonymization. Only Excel (.xlsx, .xls, .csv, .ods, .tsv, .xlsm, .xlsb), text (.txt) and image files (.jpg, .jpeg, .png) are supported."
       );
     }
 
@@ -378,14 +397,14 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       const jsonResponse = await response.json();
 
       // Convert base64 back to File objects
-      const mainFileBuffer = Uint8Array.from(atob(jsonResponse.files.main.buffer), (c) =>
+      const mainFileBuffer = Uint8Array.from(atob(jsonResponse.files.main.data), (c) =>
         c.charCodeAt(0)
       );
       const mainFile = new File([mainFileBuffer], jsonResponse.files.main.filename, {
         type: jsonResponse.files.main.contentType,
       });
 
-      const previewFileBuffer = Uint8Array.from(atob(jsonResponse.files.preview.buffer), (c) =>
+      const previewFileBuffer = Uint8Array.from(atob(jsonResponse.files.preview.data), (c) =>
         c.charCodeAt(0)
       );
       const previewFile = new File([previewFileBuffer], jsonResponse.files.preview.filename, {
@@ -402,13 +421,24 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
   };
 
   // New hybrid approach: Upload encrypted file to backend for IPFS upload
-  const uploadToIPFSViaBackend = async (encryptedData, fileName) => {
+  const uploadToIPFSViaBackend = async (
+    encryptedData,
+    fileName,
+    documentKey,
+    isPreview = false
+  ) => {
     const formData = new FormData();
     formData.append(
       "encryptedFile",
       new Blob([encryptedData], { type: "application/octet-stream" })
     );
     formData.append("fileName", fileName);
+    if (documentKey) {
+      formData.append("documentKey", documentKey);
+    }
+    if (isPreview) {
+      formData.append("isPreview", "true");
+    }
 
     const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || "http://localhost:3001";
 
@@ -482,7 +512,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
       // Step 2: Anonymizing (if Excel or Image) and extracting preview
       updateStep(1); // Mark as in progress
       const fileExtension = selectedFile.name.split(".").pop()?.toLowerCase();
-      const isSpreadsheet = selectedFile.name.match(/\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb)$/i);
+      const isSpreadsheet = selectedFile.name.match(/\.(xlsx|xls|csv|ods|tsv|xlsm|xlsb|txt)$/i);
       const isImage = selectedFile.type.startsWith("image/");
       const isPdf = selectedFile.type === "application/pdf" || fileExtension === "pdf";
       const isDicom = fileExtension === "dcm" || fileExtension === "dicom";
@@ -514,8 +544,11 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
 
       // Step 3: Encrypting file (with streaming for large files)
       updateStep(2); // Mark as in progress
+
+      const documentKey = generateDocumentKey(); // Generate unique key for this document
+
       try {
-        const streamer = new StreamingEncryption();
+        const streamer = new StreamingEncryption(documentKey);
 
         console.log(`=== ENCRYPTION DECISION ===`);
         console.log(
@@ -565,7 +598,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
             ).toFixed(2)}MB)`
           );
           const fileBuffer = await fileToUpload.arrayBuffer();
-          encryptedFile = encryptFile(new Uint8Array(fileBuffer));
+          encryptedFile = encryptFile(new Uint8Array(fileBuffer), documentKey);
           console.log(`✅ Traditional encryption completed`);
         }
 
@@ -573,7 +606,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
 
         // Step 4: Uploading to IPFS via backend
         updateStep(3); // Mark as in progress
-        const result = await uploadToIPFSViaBackend(encryptedFile, fileToUpload.name);
+        const result = await uploadToIPFSViaBackend(encryptedFile, fileToUpload.name, documentKey);
         if (!result.success) {
           updateStep(3, false, true); // Mark as error
           setError(`IPFS upload failed: ${result.error}`);
@@ -604,7 +637,8 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
         // Upload preview to IPFS via backend if it exists
         if (previewFile) {
           try {
-            const previewStreamer = new StreamingEncryption();
+            const previewKey = generateDocumentKey();
+            const previewStreamer = new StreamingEncryption(previewKey);
             const shouldUseStreamingForPreview = previewStreamer.shouldUseStreaming(
               previewFile.size
             );
@@ -619,10 +653,15 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
             } else {
               // Use traditional encryption for small preview files
               const previewBuffer = await previewFile.arrayBuffer();
-              encryptedPreview = encryptFile(new Uint8Array(previewBuffer));
+              encryptedPreview = encryptFile(new Uint8Array(previewBuffer), previewKey);
             }
 
-            const previewResult = await uploadToIPFSViaBackend(encryptedPreview, previewFile.name);
+            const previewResult = await uploadToIPFSViaBackend(
+              encryptedPreview,
+              previewFile.name,
+              previewKey,
+              true
+            );
             if (previewResult.success) {
               previewHash = previewResult.ipfsHash;
             }
@@ -768,7 +807,7 @@ export default function UploadData({ onBack, isWalletConnected, walletAddress, o
                     onChange={handleFileChange}
                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     id="file-upload"
-                    accept=".xlsx,.xls,.csv,.ods,.tsv,.xlsm,.xlsb,.jpg,.jpeg,.png,.pdf,.dcm,.dicom"
+                    accept=".xlsx,.xls,.csv,.ods,.tsv,.xlsm,.xlsb,.jpg,.jpeg,.png,.pdf,.dcm,.dicom,.txt"
                     disabled={!isWalletConnected}
                   />
 

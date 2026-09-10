@@ -10,7 +10,9 @@ async function main() {
   console.log(`Deployer balance: ${hre.ethers.utils.formatEther(balance)} ETH\n`);
 
   if (balance.eq(0)) {
-    console.error("Error: Deployer has 0 ETH. Fund with Sepolia ETH from https://sepoliafaucet.com");
+    console.error(
+      "Error: Deployer has 0 ETH. Fund with Sepolia ETH from https://sepoliafaucet.com"
+    );
     process.exit(1);
   }
 
@@ -31,4 +33,3 @@ main()
     console.error("Deployment failed:", error);
     process.exit(1);
   });
-

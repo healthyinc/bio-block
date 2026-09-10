@@ -1,36 +1,38 @@
 import CryptoJS from 'crypto-js';
 import type { FileBuffer, EncryptedData } from './types';
 
-const ENCRYPTION_KEY = process.env.NEXT_PUBLIC_ENCRYPTION_KEY;
 
-if (!ENCRYPTION_KEY) {
-  console.warn('NEXT_PUBLIC_ENCRYPTION_KEY is not set. Encryption will not work properly.');
-}
+
+export const generateDocumentKey = (): string => {
+  return CryptoJS.lib.WordArray.random(32).toString();
+};
 
 /**
  * Encrypts a file buffer using AES encryption
  * @param fileBuffer - The file buffer to encrypt (ArrayBuffer or Uint8Array)
+ * @param encryptionKey - The secret key to encrypt with
  * @returns Encrypted blob
  */
-export const encryptFile = (fileBuffer: FileBuffer): Blob => {
-  if (!ENCRYPTION_KEY) {
+export const encryptFile = (fileBuffer: FileBuffer, encryptionKey: string): Blob => {
+  if (!encryptionKey) {
     throw new Error('Encryption key is not configured');
   }
 
   const wordArray = CryptoJS.lib.WordArray.create(
     fileBuffer instanceof ArrayBuffer ? new Uint8Array(fileBuffer) : fileBuffer
   );
-  const encrypted = CryptoJS.AES.encrypt(wordArray, ENCRYPTION_KEY).toString();
+  const encrypted = CryptoJS.AES.encrypt(wordArray, encryptionKey).toString();
   return new Blob([encrypted], { type: 'application/octet-stream' });
 };
 
 /**
  * Decrypts encrypted data using AES decryption
  * @param encryptedData - The encrypted data (string or Uint8Array)
+ * @param encryptionKey - The secret key to decrypt with
  * @returns Decrypted data as Base64 string
  */
-export const decryptFile = (encryptedData: EncryptedData): string => {
-  if (!ENCRYPTION_KEY) {
+export const decryptFile = (encryptedData: EncryptedData, encryptionKey: string): string => {
+  if (!encryptionKey) {
     throw new Error('Encryption key is not configured');
   }
 
@@ -39,14 +41,8 @@ export const decryptFile = (encryptedData: EncryptedData): string => {
       ? encryptedData
       : new TextDecoder().decode(encryptedData);
 
-  const decrypted = CryptoJS.AES.decrypt(dataString, ENCRYPTION_KEY);
+  const decrypted = CryptoJS.AES.decrypt(dataString, encryptionKey);
   return decrypted.toString(CryptoJS.enc.Base64);
 };
 
-/**
- * Validates if the encryption key is properly configured
- * @returns true if encryption key is set, false otherwise
- */
-export const isEncryptionConfigured = (): boolean => {
-  return !!ENCRYPTION_KEY && ENCRYPTION_KEY.length > 0;
-};
+
