@@ -118,18 +118,26 @@ healthy/
 
 2. **Backend setup**
    ```bash
-   # Python backend
+   # Python backend (always use a virtual environment — never system Python)
    cd python_backend
-   pip install -r requirements.txt
-   python -m spacy download en_core_web_lg
-   
+   chmod +x setup_venv.sh && ./setup_venv.sh
+   source .venv/bin/activate
+   # Or: make python-setup  (from repo root)
+
    # JavaScript backend
    cd ../javascript_backend
    npm install
-   
+
    # Frontend
    cd ../prototype
    npm install
+   ```
+
+   Windows (PowerShell) for the Python backend:
+   ```powershell
+   cd python_backend
+   .\setup_venv.ps1
+   .\.venv\Scripts\Activate.ps1
    ```
 
 3. **Environment configuration**
@@ -144,12 +152,15 @@ healthy/
 
 4. **Run the application**
    ```bash
-   # Terminal 1: Python backend
-   cd python_backend && uvicorn main:app --reload --port 3002
-   
-   # Terminal 2: JavaScript backend  
+   # Terminal 1: Python backend (activate the venv first)
+   cd python_backend
+   source .venv/bin/activate   # Windows: .\.venv\Scripts\Activate.ps1
+   uvicorn main:app --reload --port 3002
+   # Or from repo root: make python-run
+
+   # Terminal 2: JavaScript backend
    cd javascript_backend && node server.js
-   
+
    # Terminal 3: Frontend
    cd prototype && npm start
    ```

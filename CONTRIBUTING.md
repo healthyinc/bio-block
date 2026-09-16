@@ -16,7 +16,7 @@ If your local layout differs, adapt the commands below. These paths reflect the 
 Prerequisites
 - Node.js (LTS) and npm
 - Python 3.8+ and pip
-- (Optional) virtualenv / venv for Python
+- A project virtual environment for Python (**required** — do not use system Python)
 
 Frontend (prototype)
 1. cd into the frontend: `cd prototype`
@@ -30,16 +30,33 @@ JavaScript backend
 
 Python backend
 1. cd into the Python backend: `cd python_backend`
-2. Create & activate a venv:
+2. Create & activate a venv (pick one):
+   - macOS / Linux (recommended script; uses `uv` when installed):
+     ```bash
+     chmod +x setup_venv.sh && ./setup_venv.sh
+     source .venv/bin/activate
+     ```
    - Windows PowerShell:
      ```powershell
-     python -m venv .venv; .\.venv\Scripts\Activate.ps1
+     .\setup_venv.ps1
+     .\.venv\Scripts\Activate.ps1
      ```
-3. Install dependencies: `pip install -r requirements.txt`
-4. Start the backend: `python main.py` (or other entrypoint defined in the directory)
+   - Manual stdlib venv:
+     ```bash
+     python3 -m venv .venv
+     source .venv/bin/activate   # Windows: .\.venv\Scripts\Activate.ps1
+     pip install -r requirements.txt
+     ```
+   - From repo root: `make python-setup`
+3. Start the backend:
+   ```bash
+   uvicorn main:app --reload --port 3002
+   ```
+   Or from repo root: `make python-run`
 
 Notes / assumptions
-- The repo provides `prototype/`, `javascript_backend/`, and `python_backend/`. If an entrypoint differs (e.g., `uvicorn` or a different script), use that command. If dependencies are missing from `requirements.txt` or `package.json`, open an issue so we can update the docs.
+- The repo provides `prototype/`, `javascript_backend/`, and `python_backend/`. If an entrypoint differs, use that command. If dependencies are missing from `requirements.txt` or `package.json`, open an issue so we can update the docs.
+- `.venv/` is gitignored. Never commit the virtual environment.
 
 ## 2) Branch naming and commit conventions
 
