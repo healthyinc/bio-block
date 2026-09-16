@@ -7,6 +7,8 @@ import chromadb
 import time
 import uuid
 import cv2
+import os
+import shutil
 import pytesseract
 import spacy
 from pytesseract import Output
@@ -39,8 +41,27 @@ app.add_middleware(
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_or_create_collection(name="new_user_data")
 
-# Tesseract path for macOS (installed via Homebrew)
-pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+# Resolve tesseract across macOS Homebrew and common Linux paths.
+_tesseract = (
+    os.environ.get("TESSERACT_CMD")
+    or shutil.which("tesseract")
+    or next(
+        (
+            candidate
+            for candidate in (
+                "/opt/homebrew/bin/tesseract",
+                "/usr/local/bin/tesseract",
+                "/usr/bin/tesseract",
+            )
+            if os.path.isfile(candidate)
+        ),
+        None,
+    )
+)
+if _tesseract:
+    pytesseract.pytesseract.tesseract_cmd = _tesseract
+else:
+    print("Warning: tesseract binary not found on PATH; set TESSERACT_CMD if needed.")
 
 try:
     nlp = spacy.load("en_core_web_lg")  # Updated to use large model for better accuracy
