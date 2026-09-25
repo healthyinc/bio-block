@@ -376,6 +376,37 @@ def _build_response(test_result, reason, assumptions, group_stats,
     }
 
 
+def _calc_group_stats(data: np.ndarray) -> Dict[str, Any]:
+    """Summary stats for a single group."""
+    clean = np.asarray(data, dtype=float)
+    clean = clean[~np.isnan(clean)]
+    n = int(len(clean))
+    if n == 0:
+        return {
+            "n": 0, "mean": 0.0, "std": 0.0, "median": 0.0,
+            "se": 0.0, "q1": 0.0, "q3": 0.0, "min": 0.0, "max": 0.0,
+        }
+    mean = round(float(np.mean(clean)), 4)
+    std = round(float(np.std(clean, ddof=1)), 4) if n > 1 else 0.0
+    median = round(float(np.median(clean)), 4)
+    se = round(float(std / np.sqrt(n)), 4) if n > 0 else 0.0
+    q1 = round(float(np.percentile(clean, 25)), 4)
+    q3 = round(float(np.percentile(clean, 75)), 4)
+    min_v = round(float(np.min(clean)), 4)
+    max_v = round(float(np.max(clean)), 4)
+    return {
+        "n": n,
+        "mean": mean,
+        "std": std,
+        "median": median,
+        "se": se,
+        "q1": q1,
+        "q3": q3,
+        "min": min_v,
+        "max": max_v,
+    }
+
+
 # -- Orchestrators --
 
 def _validate_numeric_col(df, col):
@@ -385,11 +416,8 @@ def _validate_numeric_col(df, col):
         raise ValueError(f"Column '{col}' is not numeric (dtype: {df[col].dtype}).")
 
 
-def run_two_group_test(df, numeric_col, group_col, alpha=0.05, alternative="two-sided"):
-    """Independent 2-group comparison with automatic test selection.
-
-    Shapiro-Wilk/KS → Levene's → Student's t / Welch's t / Mann-Whitney U.
-    """
+def run_two_group_test(df, numeric_col, group_col, alpha=0.05, alternative="two-sided", force_test=None):
+    """Independent 2-group comparison with test selection or explicit force_test."""
     _validate_numeric_col(df, numeric_col)
     if group_col not in df.columns:
         raise ValueError(f"Column '{group_col}' not found in dataset.")
@@ -440,17 +468,19 @@ def run_two_group_test(df, numeric_col, group_col, alpha=0.05, alternative="two-
     if note:
         assumptions["normality"]["note"] = note
 
-    if not both_normal:
+    if force_test == "mann_whitney_u" or (force_test is None and not both_normal):
         test_result = run_mann_whitney(group1, group2, alpha, alternative)
         reason = (
-            f"Data is NOT normally distributed "
+            f"Non-parametric Mann-Whitney U test selected. "
             f"({norm1['test']}: group '{groups[0]}' p={norm1['p_value']}, "
-            f"group '{groups[1]}' p={norm2['p_value']}). "
-            f"Using non-parametric Mann-Whitney U test instead of t-test."
+            f"group '{groups[1]}' p={norm2['p_value']})."
         )
     else:
         variance_check = check_equal_variance(group1, group2, alpha)
         assumptions["equal_variance"] = variance_check
+
+        if not both_normal:
+            warnings.append("Normality assumption violated (group distributions non-normal); consider Mann-Whitney U test.")
 
         if variance_check["equal_variance"]:
             test_result = run_students_ttest(group1, group2, alpha, alternative)
@@ -471,19 +501,10 @@ def run_two_group_test(df, numeric_col, group_col, alpha=0.05, alternative="two-
                 f"Using Welch's t-test."
             )
 
+
     group_stats = {
-        str(groups[0]): {
-            "n": int(len(group1)),
-            "mean": round(float(np.mean(group1)), 4),
-            "std": round(float(np.std(group1, ddof=1)), 4),
-            "median": round(float(np.median(group1)), 4),
-        },
-        str(groups[1]): {
-            "n": int(len(group2)),
-            "mean": round(float(np.mean(group2)), 4),
-            "std": round(float(np.std(group2, ddof=1)), 4),
-            "median": round(float(np.median(group2)), 4),
-        },
+        str(groups[0]): _calc_group_stats(group1),
+        str(groups[1]): _calc_group_stats(group2),
     }
 
     return _build_response(test_result, reason, assumptions, group_stats,
@@ -541,16 +562,9 @@ def run_paired_test(df, col1, col2, alpha=0.05, alternative="two-sided"):
         )
 
     group_stats = {
-        col1: {
-            "n": int(len(data1)),
-            "mean": round(float(np.mean(data1)), 4),
-            "std": round(float(np.std(data1, ddof=1)), 4),
-        },
-        col2: {
-            "n": int(len(data2)),
-            "mean": round(float(np.mean(data2)), 4),
-            "std": round(float(np.std(data2, ddof=1)), 4),
-        },
+        col1: _calc_group_stats(data1),
+        col2: _calc_group_stats(data2),
+        "_differences": _calc_group_stats(diffs),
     }
 
     return _build_response(test_result, reason, assumptions, group_stats,
@@ -604,13 +618,8 @@ def run_one_sample_test(df, numeric_col, population_mean, alpha=0.05,
         )
 
     group_stats = {
-        "sample": {
-            "n": int(n),
-            "mean": round(float(np.mean(sample)), 4),
-            "std": round(float(np.std(sample, ddof=1)), 4),
-            "median": round(float(np.median(sample)), 4),
-        },
-        "_reference": {"value": population_mean},
+        "sample": _calc_group_stats(sample),
+        "_reference": {"value": population_mean, "n": len(sample)},
     }
 
     return _build_response(test_result, reason, assumptions, group_stats,
@@ -823,6 +832,13 @@ def _build_anova_response(
         column_name=column_name,
         alpha=alpha,
     )
+
+    if post_hoc and "bonferroni" in str(post_hoc.get("method", "")).lower():
+        n_comp = post_hoc.get("n_comparisons", 1)
+        adj_a = post_hoc.get("adjusted_alpha", alpha / max(n_comp, 1))
+        bonf_warning = f"Bonferroni correction applied across {n_comp} pairwise comparison(s) to control Family-Wise Error Rate (adjusted α = {adj_a:.4f})."
+        if bonf_warning not in warnings:
+            warnings.append(bonf_warning)
 
     if post_hoc and test_result["significant"]:
         sig_pairs = [
@@ -1056,12 +1072,7 @@ def run_one_way_anova(
 
     group_stats = {}
     for name, gd in zip(group_names, group_data):
-        group_stats[name] = {
-            "n": int(len(gd)),
-            "mean": round(float(np.mean(gd)), 4),
-            "std": round(float(np.std(gd, ddof=1)), 4),
-            "median": round(float(np.median(gd)), 4),
-        }
+        group_stats[name] = _calc_group_stats(gd)
 
     return _build_anova_response(
         test_result, reason, assumptions, group_stats,
@@ -1198,11 +1209,128 @@ def run_two_way_anova(
             "std": round(float(np.std(vals, ddof=1)), 4) if len(vals) > 1 else 0.0,
         }
     group_stats["_effects"] = effects
-
     return _build_anova_response(
         test_result, reason, assumptions, group_stats,
         numeric_col, alpha, warnings, None,
     )
+
+
+
+def run_ancova(
+    df: pd.DataFrame,
+    numeric_col: str,
+    group_col: str,
+    covariate_col: str,
+    alpha: float = 0.05,
+) -> Dict[str, Any]:
+    """Analysis of Covariance (ANCOVA) combining group comparison with a covariate."""
+    _validate_numeric_col(df, numeric_col)
+    for col in (group_col, covariate_col):
+        if col not in df.columns:
+            raise ValueError(f"Column '{col}' not found in dataset.")
+
+    clean = df[[numeric_col, group_col, covariate_col]].dropna()
+    n = len(clean)
+    warnings: List[str] = []
+    sdc = check_sdc(n)
+    if sdc["status"] == "suppress":
+        return _suppressed_response(sdc, alpha, "two-sided", {"total_n": n})
+    if sdc["status"] == "warn":
+        warnings.append(sdc["message"])
+
+    # Sanitize formula column names
+    _safe = {
+        numeric_col: numeric_col.replace(" ", "_").replace("-", "_").replace(".", "_"),
+        group_col: group_col.replace(" ", "_").replace("-", "_").replace(".", "_"),
+        covariate_col: covariate_col.replace(" ", "_").replace("-", "_").replace(".", "_"),
+    }
+    safe_df = clean.rename(columns=_safe)
+
+    # Check if covariate is numeric vs categorical
+    is_covariate_numeric = pd.api.types.is_numeric_dtype(clean[covariate_col])
+
+    if is_covariate_numeric:
+        formula = f"Q('{_safe[numeric_col]}') ~ C(Q('{_safe[group_col]}')) + Q('{_safe[covariate_col]}')"
+    else:
+        formula = f"Q('{_safe[numeric_col]}') ~ C(Q('{_safe[group_col]}')) + C(Q('{_safe[covariate_col]}'))"
+
+    try:
+        model = sm_ols(formula, data=safe_df).fit()
+        anova_table = anova_lm(model, typ=2)
+    except Exception as exc:
+        raise ValueError(f"ANCOVA model fit failed: {exc}")
+
+    residuals = model.resid.values
+    norm_residuals = check_normality(residuals, alpha)
+
+    # Find rows matching group and covariate
+    group_row = [k for k in anova_table.index if _safe[group_col] in k][0]
+    cov_row = [k for k in anova_table.index if _safe[covariate_col] in k][0]
+
+    group_f = float(anova_table.loc[group_row, "F"])
+    group_p = float(anova_table.loc[group_row, "PR(>F)"])
+    cov_f = float(anova_table.loc[cov_row, "F"])
+    cov_p = float(anova_table.loc[cov_row, "PR(>F)"])
+
+    ss_group = float(anova_table.loc[group_row, "sum_sq"])
+    ss_total = float(anova_table["sum_sq"].sum())
+    eta_sq = ss_group / ss_total if ss_total > 0 else 0.0
+
+    is_sig = group_p < alpha
+    cov_sig = cov_p < alpha
+
+    interp = (
+        f"ANCOVA analyzing '{numeric_col}' across groups of '{group_col}' "
+        f"controlling for covariate '{covariate_col}'.\n"
+        f"• Group Effect ({group_col}): F={group_f:.4f}, p={group_p:.6f} "
+        f"({'Significant' if is_sig else 'Not Significant'}).\n"
+        f"• Covariate Effect ({covariate_col}): F={cov_f:.4f}, p={cov_p:.6f} "
+        f"({'Significant' if cov_sig else 'Not Significant'}).\n"
+        f"• Partial Eta Squared (Group): η²={eta_sq:.4f} ({classify_effect_size(eta_sq, 'eta_squared')} effect)."
+    )
+
+    return {
+        "test_used": f"ANCOVA ({group_col} + covariate: {covariate_col})",
+        "result": {
+            "statistic": round(group_f, 4),
+            "p_value": round(group_p, 6),
+            "covariate_p_value": round(cov_p, 6),
+            "covariate_f_statistic": round(cov_f, 4),
+            "significant": is_sig,
+        },
+        "effect_size": {
+            "metric": "eta_squared",
+            "value": round(eta_sq, 4),
+            "magnitude": classify_effect_size(eta_sq, "eta_squared"),
+        },
+        "assumptions": {
+            "residual_normality": norm_residuals,
+        },
+        "interpretation": interp,
+        "warnings": warnings,
+        "applied_followups": [f"Added covariate: {covariate_col}"],
+    }
+
+
+def run_subgroup_analysis(
+    df: pd.DataFrame,
+    numeric_col: str,
+    group_col: str,
+    subgroup_col: str,
+    alpha: float = 0.05,
+) -> Dict[str, Any]:
+    """Subgroup / Interaction analysis using 2-way ANOVA."""
+    res = run_two_way_anova(
+        df=df,
+        numeric_col=numeric_col,
+        factor_col_1=group_col,
+        factor_col_2=subgroup_col,
+        alpha=alpha,
+    )
+    res["test_used"] = f"Subgroup Analysis ({group_col} × {subgroup_col})"
+    res["applied_followups"] = [f"Tested subgroup: {subgroup_col}"]
+    return res
+
 
 
 # -- Repeated-Measures ANOVA / Friedman --
@@ -1444,3 +1572,558 @@ def run_multi_group_test(
     ANOVA / Welch's ANOVA / Kruskal-Wallis.
     """
     return run_one_way_anova(df, numeric_col, group_col, alpha)
+
+
+# =====================================================================
+# Chi-Square Tests (Week 7)
+# =====================================================================
+
+CRAMERS_V_THRESHOLDS = {"small": 0.1, "medium": 0.3, "large": 0.5}
+
+
+def compute_cramers_v(chi2: float, n: int, k: int, r: int) -> float:
+    """Cramér's V effect size for chi-square test of independence.
+
+    V = sqrt(chi2 / (n * min(k-1, r-1)))
+    """
+    min_dim = min(k - 1, r - 1)
+    if min_dim == 0 or n == 0:
+        return 0.0
+    return float(math.sqrt(chi2 / (n * min_dim)))
+
+
+def _classify_cramers_v(v: float) -> str:
+    """Classify Cramér's V magnitude."""
+    abs_v = abs(v)
+    if abs_v >= CRAMERS_V_THRESHOLDS["large"]:
+        return "large"
+    if abs_v >= CRAMERS_V_THRESHOLDS["medium"]:
+        return "medium"
+    if abs_v >= CRAMERS_V_THRESHOLDS["small"]:
+        return "small"
+    return "negligible"
+
+
+def run_chi_square_independence(
+    df: pd.DataFrame,
+    col1: str,
+    col2: str,
+    alpha: float = 0.05,
+) -> Dict[str, Any]:
+    """Chi-square test of independence between two categorical columns.
+
+    Automatically falls back to Fisher's exact test for 2×2 tables
+    when any expected frequency is below 5.
+    """
+    if col1 not in df.columns:
+        raise ValueError(f"Column '{col1}' not found in dataset.")
+    if col2 not in df.columns:
+        raise ValueError(f"Column '{col2}' not found in dataset.")
+
+    clean = df[[col1, col2]].dropna()
+    n = len(clean)
+
+    # SDC check on overall sample size
+    sdc = check_sdc(n)
+    if sdc["status"] == "suppress":
+        return {
+            "test_used": "suppressed",
+            "reason": sdc["message"],
+            "assumptions": {},
+            "result": {
+                "statistic": None, "p_value": None,
+                "significant": None, "alpha": alpha,
+            },
+            "effect_size": {"metric": None, "value": None, "magnitude": None},
+            "contingency_table": {},
+            "interpretation": sdc["message"],
+            "warnings": [sdc["message"]],
+        }
+
+    warnings_list: List[str] = []
+    if sdc["status"] == "warn":
+        warnings_list.append(sdc["message"])
+
+    # Build contingency table
+    contingency = pd.crosstab(clean[col1], clean[col2])
+    observed = contingency.values
+    r, k = observed.shape
+
+    # Check expected frequencies
+    chi2_stat, p_value, dof, expected = stats.chi2_contingency(observed)
+    min_expected = expected.min()
+    use_fisher = False
+
+    if r == 2 and k == 2 and min_expected < 5:
+        # Fisher's exact test for 2×2 tables with small expected counts
+        use_fisher = True
+        odds_ratio, p_value = stats.fisher_exact(observed)
+        test_used = "fisher_exact"
+        stat_value = odds_ratio
+        reason = (
+            f"2×2 contingency table has expected frequency {min_expected:.1f} < 5. "
+            f"Using Fisher's exact test instead of chi-square."
+        )
+    else:
+        test_used = "chi_square_independence"
+        stat_value = chi2_stat
+        reason = (
+            f"Chi-square test of independence (χ²={chi2_stat:.4f}, df={dof}, "
+            f"min expected={min_expected:.1f})."
+        )
+        if min_expected < 5:
+            warnings_list.append(
+                f"Some expected frequencies are below 5 (min={min_expected:.1f}). "
+                "Chi-square approximation may be unreliable."
+            )
+
+    # Effect size
+    v = compute_cramers_v(chi2_stat, n, k, r)
+    effect_size = {
+        "metric": "cramers_v",
+        "value": round(v, 4),
+        "magnitude": _classify_cramers_v(v),
+    }
+
+    # Contingency table for response
+    ct_dict = {
+        "rows": list(contingency.index.astype(str)),
+        "columns": list(contingency.columns.astype(str)),
+        "observed": contingency.values.tolist(),
+        "expected": expected.round(2).tolist(),
+    }
+
+    significant = bool(p_value <= alpha)
+    verdict = (
+        f"There IS a statistically significant association between "
+        f"'{col1}' and '{col2}'"
+        if significant
+        else f"There is NO statistically significant association between "
+        f"'{col1}' and '{col2}'"
+    )
+    test_label = "Fisher's exact test" if use_fisher else "chi-square test"
+    stat_label = "OR" if use_fisher else "χ²"
+    p_str = _format_p(p_value)
+    interpretation = (
+        f"{verdict} ({test_label}, {stat_label}={stat_value:.4f}, {p_str}, "
+        f"Cramér's V={v:.4f} [{effect_size['magnitude']} effect])."
+    )
+
+    return {
+        "test_used": test_used,
+        "reason": reason,
+        "assumptions": {
+            "min_expected_frequency": round(float(min_expected), 2),
+            "fisher_fallback": use_fisher,
+        },
+        "result": {
+            "statistic": round(float(stat_value), 6),
+            "p_value": round(float(p_value), 6),
+            "significant": significant,
+            "alpha": alpha,
+            "degrees_of_freedom": int(dof) if not use_fisher else None,
+        },
+        "effect_size": effect_size,
+        "contingency_table": ct_dict,
+        "interpretation": interpretation,
+        "warnings": warnings_list,
+    }
+
+
+def run_chi_square_goodness_of_fit(
+    df: pd.DataFrame,
+    column: str,
+    expected_proportions: Optional[Dict[str, float]] = None,
+    alpha: float = 0.05,
+) -> Dict[str, Any]:
+    """Chi-square goodness-of-fit test for a single categorical column.
+
+    Tests whether observed frequencies match expected proportions.
+    If expected_proportions is None, tests against uniform distribution.
+    """
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found in dataset.")
+
+    clean = df[column].dropna()
+    n = len(clean)
+
+    sdc = check_sdc(n)
+    if sdc["status"] == "suppress":
+        return {
+            "test_used": "suppressed",
+            "reason": sdc["message"],
+            "assumptions": {},
+            "result": {
+                "statistic": None, "p_value": None,
+                "significant": None, "alpha": alpha,
+            },
+            "effect_size": {"metric": None, "value": None, "magnitude": None},
+            "frequency_table": {},
+            "interpretation": sdc["message"],
+            "warnings": [sdc["message"]],
+        }
+
+    warnings_list: List[str] = []
+    if sdc["status"] == "warn":
+        warnings_list.append(sdc["message"])
+
+    observed_counts = clean.value_counts()
+    categories = list(observed_counts.index.astype(str))
+    observed = observed_counts.values.astype(float)
+    k = len(categories)
+
+    if expected_proportions:
+        # Map user-supplied proportions to observed category order
+        expected_freq = np.array([
+            expected_proportions.get(cat, 1.0 / k) * n
+            for cat in categories
+        ])
+    else:
+        # Uniform distribution
+        expected_freq = np.full(k, n / k)
+
+    chi2_stat, p_value = stats.chisquare(observed, f_exp=expected_freq)
+    dof = k - 1
+
+    # Effect size: w = sqrt(chi2 / n)
+    w = math.sqrt(chi2_stat / n) if n > 0 else 0.0
+    w_mag = "large" if w >= 0.5 else ("medium" if w >= 0.3 else ("small" if w >= 0.1 else "negligible"))
+
+    significant = bool(p_value <= alpha)
+    dist_type = "uniform" if not expected_proportions else "specified"
+    verdict = (
+        f"The observed distribution of '{column}' significantly differs "
+        f"from the {dist_type} distribution"
+        if significant
+        else f"The observed distribution of '{column}' does NOT significantly "
+        f"differ from the {dist_type} distribution"
+    )
+    p_str = _format_p(p_value)
+    interpretation = (
+        f"{verdict} (χ²={chi2_stat:.4f}, df={dof}, {p_str}, "
+        f"w={w:.4f} [{w_mag} effect])."
+    )
+
+    freq_table = {
+        "categories": categories,
+        "observed": observed.tolist(),
+        "expected": expected_freq.round(2).tolist(),
+    }
+
+    min_expected = expected_freq.min()
+    if min_expected < 5:
+        warnings_list.append(
+            f"Some expected frequencies are below 5 (min={min_expected:.1f}). "
+            "Chi-square approximation may be unreliable."
+        )
+
+    return {
+        "test_used": "chi_square_goodness_of_fit",
+        "reason": f"Goodness-of-fit test against {dist_type} distribution.",
+        "assumptions": {
+            "min_expected_frequency": round(float(min_expected), 2),
+        },
+        "result": {
+            "statistic": round(float(chi2_stat), 6),
+            "p_value": round(float(p_value), 6),
+            "significant": significant,
+            "alpha": alpha,
+            "degrees_of_freedom": dof,
+        },
+        "effect_size": {
+            "metric": "cohens_w",
+            "value": round(w, 4),
+            "magnitude": w_mag,
+        },
+        "frequency_table": freq_table,
+        "interpretation": interpretation,
+        "warnings": warnings_list,
+    }
+
+
+# =====================================================================
+# Correlation Analysis (Week 7)
+# =====================================================================
+
+CORRELATION_THRESHOLDS = {"small": 0.1, "medium": 0.3, "large": 0.5}
+
+
+def _classify_correlation(r: float) -> str:
+    """Classify correlation magnitude."""
+    abs_r = abs(r)
+    if abs_r >= CORRELATION_THRESHOLDS["large"]:
+        return "large"
+    if abs_r >= CORRELATION_THRESHOLDS["medium"]:
+        return "medium"
+    if abs_r >= CORRELATION_THRESHOLDS["small"]:
+        return "small"
+    return "negligible"
+
+
+def _correlation_ci(r: float, n: int, confidence: float = 0.95) -> Dict[str, float]:
+    """Fisher z-transformation confidence interval for correlation."""
+    if n < 4:
+        return {"lower": None, "upper": None, "confidence": confidence}
+    z = np.arctanh(r)
+    se = 1.0 / math.sqrt(n - 3)
+    z_crit = stats.norm.ppf((1 + confidence) / 2)
+    lower = math.tanh(z - z_crit * se)
+    upper = math.tanh(z + z_crit * se)
+    return {
+        "lower": round(float(lower), 4),
+        "upper": round(float(upper), 4),
+        "confidence": confidence,
+    }
+
+
+def run_pearson_correlation(
+    df: pd.DataFrame,
+    col1: str,
+    col2: str,
+    alpha: float = 0.05,
+) -> Dict[str, Any]:
+    """Pearson product-moment correlation with CI and effect size."""
+    _validate_numeric_col(df, col1)
+    _validate_numeric_col(df, col2)
+
+    clean = df[[col1, col2]].dropna()
+    n = len(clean)
+
+    sdc = check_sdc(n)
+    warnings_list: List[str] = []
+    if sdc["status"] == "suppress":
+        return {
+            "test_used": "suppressed",
+            "reason": sdc["message"],
+            "result": {"statistic": None, "p_value": None, "significant": None, "alpha": alpha},
+            "effect_size": {"metric": None, "value": None, "magnitude": None},
+            "confidence_interval": {},
+            "interpretation": sdc["message"],
+            "warnings": [sdc["message"]],
+        }
+    if sdc["status"] == "warn":
+        warnings_list.append(sdc["message"])
+
+    r, p = stats.pearsonr(clean[col1], clean[col2])
+    ci = _correlation_ci(r, n)
+
+    significant = bool(p <= alpha)
+    p_str = _format_p(p)
+    direction = "positive" if r > 0 else "negative"
+    magnitude = _classify_correlation(r)
+    verdict = (
+        f"There IS a statistically significant {direction} correlation"
+        if significant
+        else f"There is NO statistically significant correlation"
+    )
+    interpretation = (
+        f"{verdict} between '{col1}' and '{col2}' "
+        f"(Pearson r={r:.4f}, {p_str}, [{magnitude} effect], "
+        f"95% CI [{ci['lower']}, {ci['upper']}])."
+    )
+
+    return {
+        "test_used": "pearson",
+        "reason": "Pearson product-moment correlation.",
+        "result": {
+            "statistic": round(float(r), 6),
+            "p_value": round(float(p), 6),
+            "significant": significant,
+            "alpha": alpha,
+        },
+        "effect_size": {
+            "metric": "pearson_r",
+            "value": round(float(r), 4),
+            "magnitude": magnitude,
+        },
+        "confidence_interval": ci,
+        "sample_size": n,
+        "interpretation": interpretation,
+        "warnings": warnings_list,
+    }
+
+
+def run_spearman_correlation(
+    df: pd.DataFrame,
+    col1: str,
+    col2: str,
+    alpha: float = 0.05,
+) -> Dict[str, Any]:
+    """Spearman rank correlation with effect size."""
+    _validate_numeric_col(df, col1)
+    _validate_numeric_col(df, col2)
+
+    clean = df[[col1, col2]].dropna()
+    n = len(clean)
+
+    sdc = check_sdc(n)
+    warnings_list: List[str] = []
+    if sdc["status"] == "suppress":
+        return {
+            "test_used": "suppressed",
+            "reason": sdc["message"],
+            "result": {"statistic": None, "p_value": None, "significant": None, "alpha": alpha},
+            "effect_size": {"metric": None, "value": None, "magnitude": None},
+            "interpretation": sdc["message"],
+            "warnings": [sdc["message"]],
+        }
+    if sdc["status"] == "warn":
+        warnings_list.append(sdc["message"])
+
+    rho, p = stats.spearmanr(clean[col1], clean[col2])
+    ci = _correlation_ci(rho, n)
+
+    significant = bool(p <= alpha)
+    p_str = _format_p(p)
+    direction = "positive" if rho > 0 else "negative"
+    magnitude = _classify_correlation(rho)
+    verdict = (
+        f"There IS a statistically significant {direction} monotonic relationship"
+        if significant
+        else f"There is NO statistically significant monotonic relationship"
+    )
+    interpretation = (
+        f"{verdict} between '{col1}' and '{col2}' "
+        f"(Spearman ρ={rho:.4f}, {p_str}, [{magnitude} effect], "
+        f"95% CI [{ci['lower']}, {ci['upper']}])."
+    )
+
+    return {
+        "test_used": "spearman",
+        "reason": "Spearman rank correlation (non-parametric).",
+        "result": {
+            "statistic": round(float(rho), 6),
+            "p_value": round(float(p), 6),
+            "significant": significant,
+            "alpha": alpha,
+        },
+        "effect_size": {
+            "metric": "spearman_rho",
+            "value": round(float(rho), 4),
+            "magnitude": magnitude,
+        },
+        "confidence_interval": ci,
+        "sample_size": n,
+        "interpretation": interpretation,
+        "warnings": warnings_list,
+    }
+
+
+def run_correlation_analysis(
+    df: pd.DataFrame,
+    col1: str,
+    col2: str,
+    alpha: float = 0.05,
+) -> Dict[str, Any]:
+    """Auto-select Pearson or Spearman based on normality testing.
+
+    Uses Pearson if both columns are normally distributed,
+    otherwise falls back to Spearman.
+    """
+    _validate_numeric_col(df, col1)
+    _validate_numeric_col(df, col2)
+
+    clean = df[[col1, col2]].dropna()
+    norm1 = check_normality(clean[col1].values, alpha)
+    norm2 = check_normality(clean[col2].values, alpha)
+    both_normal = norm1["normal"] and norm2["normal"]
+
+    if both_normal:
+        result = run_pearson_correlation(df, col1, col2, alpha)
+        result["reason"] = (
+            f"Both columns are normally distributed "
+            f"({norm1['test']}: '{col1}' p={norm1['p_value']}, "
+            f"'{col2}' p={norm2['p_value']}). Using Pearson correlation."
+        )
+    else:
+        result = run_spearman_correlation(df, col1, col2, alpha)
+        result["reason"] = (
+            f"Data is NOT normally distributed "
+            f"({norm1['test']}: '{col1}' p={norm1['p_value']}, "
+            f"'{col2}' p={norm2['p_value']}). Using Spearman correlation."
+        )
+
+    result["assumptions"] = {
+        "normality": {
+            "test": norm1["test"],
+            col1: {"p_value": norm1["p_value"], "normal": norm1["normal"]},
+            col2: {"p_value": norm2["p_value"], "normal": norm2["normal"]},
+        },
+        "method_selected": "pearson" if both_normal else "spearman",
+    }
+    return result
+
+
+def run_correlation_matrix(
+    df: pd.DataFrame,
+    columns: Optional[List[str]] = None,
+    method: str = "auto",
+    alpha: float = 0.05,
+) -> Dict[str, Any]:
+    """Pairwise correlation matrix across multiple numeric columns.
+
+    method: 'pearson', 'spearman', or 'auto' (auto-selects per pair).
+    """
+    if columns:
+        for col in columns:
+            _validate_numeric_col(df, col)
+        target_cols = columns
+    else:
+        target_cols = [c for c in df.columns if np.issubdtype(df[c].dtype, np.number)]
+
+    if len(target_cols) < 2:
+        raise ValueError(
+            f"Correlation matrix requires at least 2 numeric columns, "
+            f"found {len(target_cols)}."
+        )
+
+    matrix: Dict[str, Dict[str, Any]] = {}
+    warnings_list: List[str] = []
+
+    for i, c1 in enumerate(target_cols):
+        matrix[c1] = {}
+        for j, c2 in enumerate(target_cols):
+            if i == j:
+                matrix[c1][c2] = {
+                    "r": 1.0, "p_value": 0.0, "method": "identity",
+                    "significant": True, "magnitude": "large",
+                }
+                continue
+
+            if j < i:
+                # Symmetric — copy from the other direction
+                matrix[c1][c2] = matrix[c2][c1].copy()
+                continue
+
+            if method == "pearson":
+                result = run_pearson_correlation(df, c1, c2, alpha)
+            elif method == "spearman":
+                result = run_spearman_correlation(df, c1, c2, alpha)
+            else:
+                result = run_correlation_analysis(df, c1, c2, alpha)
+
+            matrix[c1][c2] = {
+                "r": result["result"]["statistic"],
+                "p_value": result["result"]["p_value"],
+                "method": result["test_used"],
+                "significant": result["result"]["significant"],
+                "magnitude": result["effect_size"]["magnitude"],
+            }
+            if result.get("warnings"):
+                warnings_list.extend(result["warnings"])
+
+    return {
+        "test_used": "correlation_matrix",
+        "reason": f"Pairwise correlation matrix ({method} method) "
+                  f"across {len(target_cols)} columns.",
+        "columns": target_cols,
+        "matrix": matrix,
+        "method": method,
+        "alpha": alpha,
+        "interpretation": (
+            f"Correlation matrix computed for {len(target_cols)} columns "
+            f"with {len(target_cols) * (len(target_cols) - 1) // 2} "
+            f"unique pairs."
+        ),
+        "warnings": list(set(warnings_list)),
+    }
