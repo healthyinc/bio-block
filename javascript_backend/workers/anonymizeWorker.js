@@ -175,6 +175,10 @@ parentPort.on("message", (workerData) => {
             if (pidCol !== undefined && row && row[pidCol]) {
               id = idMap[String(row[pidCol]).toLowerCase().trim()];
             }
+            // Rows with no Patient ID still need masking, so give them their own WID
+            if (!id && row && row.some((c) => c !== undefined && c !== null && c !== "")) {
+              id = generateAnonymizedId(uuidv4(), i);
+            }
             if (id) {
               maskCols.forEach((c) => {
                 if (row[c] !== undefined) row[c] = id;

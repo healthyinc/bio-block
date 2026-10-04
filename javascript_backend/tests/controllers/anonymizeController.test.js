@@ -237,6 +237,37 @@ describe("PHI Detection in Anonymization", function () {
         );
       }
     });
+
+    it("should mask PHI columns on rows with a blank Patient ID", async function () {
+      const data = [
+        ["Patient ID", "Name", "Address", "Diagnosis"],
+        ["P001", "Alice Smith", "12 Oak St", "Flu"],
+        ["", "Bob Jones", "9 Elm Rd", "HIV"],
+      ];
+      const buffer = createXlsxBuffer(data);
+      const output = await anonymizeAndParse(buffer);
+
+      expect(String(output[1][1])).to.match(WID_PATTERN);
+      expect(String(output[2][1])).to.match(WID_PATTERN);
+      expect(String(output[2][2])).to.match(WID_PATTERN);
+      expect(output[2]).to.not.include("Bob Jones");
+      expect(output[2]).to.not.include("9 Elm Rd");
+      expect(output[2][3]).to.equal("HIV");
+    });
+
+    it("should give blank-ID rows distinct WIDs so they are not linked together", async function () {
+      const data = [
+        ["Patient ID", "Name", "Score"],
+        [null, "Bob Jones", 70],
+        [null, "Carol White", 80],
+      ];
+      const buffer = createXlsxBuffer(data);
+      const output = await anonymizeAndParse(buffer);
+
+      expect(String(output[1][1])).to.match(WID_PATTERN);
+      expect(String(output[2][1])).to.match(WID_PATTERN);
+      expect(output[1][1]).to.not.equal(output[2][1]);
+    });
   });
 
   // ------------------------------------------------------------------
