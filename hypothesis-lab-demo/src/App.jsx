@@ -19,6 +19,7 @@ import {
 } from './api/client';
 
 import { connectWallet, truncateAddress } from './web3/wallet';
+import { loadDatasetForCid } from './utils/datasetTransfer';
 
 function getInitialTheme() {
   if (typeof window === 'undefined') return 'dark';
@@ -37,6 +38,8 @@ export default function App() {
   const [analysisResult, setAnalysisResult] = useState(null);
   const [answering, setAnswering] = useState(false);
   const [error, setError] = useState(null);
+  const [loadingDataset, setLoadingDataset] = useState(false);
+  const [urlCid, setUrlCid] = useState(null);
   const [theme, setTheme] = useState(getInitialTheme);
 
   const [showExportModal, setShowExportModal] = useState(false);
@@ -121,6 +124,29 @@ export default function App() {
     setAnalysisResult(null);
     setError(null);
   }, []);
+
+  // auto-load dataset if opened from bio-block with ?cid=...
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const cid = new URLSearchParams(window.location.search).get('cid');
+    if (!cid || sessionId) return;
+
+    setUrlCid(cid);
+    setLoadingDataset(true);
+
+    loadDatasetForCid(cid)
+      .then(async (file) => {
+        if (file) {
+          await handleUpload(file);
+        }
+      })
+      .catch((err) => {
+        setError(err.message || 'Failed to auto-load dataset');
+      })
+      .finally(() => {
+        setLoadingDataset(false);
+      });
+  }, [handleUpload, sessionId]);
 
   const handleAnswer = useCallback(async ({ optionId, customAnswer }) => {
     if (!sessionId || !tree) return;
@@ -290,7 +316,18 @@ export default function App() {
         </div>
       )}
 
-      {!sessionId ? (
+      {loadingDataset ? (
+        <div className="upload-screen">
+          <div className="upload-card">
+            <div className="upload-loading">
+              <div className="spinner"></div>
+              <p style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                LOADING DATASET FROM BIO-BLOCK ({urlCid ? `${urlCid.slice(0, 10)}…` : ''})…
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : !sessionId ? (
         <UploadScreen onUpload={handleUpload} />
       ) : (
         <div className="workspace">
