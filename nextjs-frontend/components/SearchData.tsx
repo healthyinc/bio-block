@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { storeForTransfer } from '../lib/datasetTransfer';
 import {
   Search,
   Filter,
@@ -85,6 +86,33 @@ export default function SearchData({ onBack }: SearchDataProps) {
   // Analytics states — in-memory decrypted dataset cache
   const [decryptedDatasets, setDecryptedDatasets] = useState<Record<string, { blob: Blob; fileName: string }>>({});
   const [purchaseCompleted, setPurchaseCompleted] = useState<Record<number, boolean>>({});
+
+  const decryptedDatasetsRef = useRef(decryptedDatasets);
+  useEffect(() => {
+    decryptedDatasetsRef.current = decryptedDatasets;
+  }, [decryptedDatasets]);
+
+  // reply to lab tab requesting dataset via postMessage
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === 'BIOBLOCK_REQUEST_DATASET' && e.data.cid) {
+        const item = decryptedDatasetsRef.current[e.data.cid];
+        if (item && e.source) {
+          (e.source as Window).postMessage(
+            {
+              type: 'BIOBLOCK_DELIVER_DATASET',
+              cid: e.data.cid,
+              blob: item.blob,
+              fileName: item.fileName,
+            },
+            '*'
+          );
+        }
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
 
   // Filter states
   const [showFilters, setShowFilters] = useState<boolean>(false);
@@ -260,6 +288,8 @@ export default function SearchData({ onBack }: SearchDataProps) {
           fileName: result.metadata?.fileName || `document_${index + 1}`,
         },
       }));
+      const docFileName = result.metadata?.fileName || `document_${index + 1}.csv`;
+      storeForTransfer(cid, csvBlob, docFileName).catch(() => {});
       setPurchaseCompleted(prev => ({ ...prev, [index]: true }));
       
     } catch (error) {
@@ -744,7 +774,11 @@ export default function SearchData({ onBack }: SearchDataProps) {
                                 <button
                                   onClick={() => {
                                     const labUrl = process.env.NEXT_PUBLIC_HYPOTHESIS_LAB_URL || 'http://localhost:5174';
-                                    window.open(`${labUrl}?cid=${encodeURIComponent(cid)}`, '_blank', 'noopener');
+                                    const entry = decryptedDatasets[cid];
+                                    if (entry) {
+                                      storeForTransfer(cid, entry.blob, entry.fileName).catch(() => {});
+                                    }
+                                    window.open(`${labUrl}?cid=${encodeURIComponent(cid)}`, '_blank');
                                   }}
                                   className="flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-2xl hover:from-violet-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105 font-semibold"
                                 >
