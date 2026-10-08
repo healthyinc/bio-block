@@ -1,8 +1,10 @@
 import { ethers, BrowserProvider, Contract } from 'ethers';
 import type { ContractABI, AnalyticsRecord } from './types';
 
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
-const ANALYTICS_REGISTRY_ADDRESS = process.env.NEXT_PUBLIC_ANALYTICS_REGISTRY_ADDRESS!;
+const CONTRACT_ADDRESS =
+  process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '0xd58de64aac08d5412b8020c7c61b215fec0c9644';
+const ANALYTICS_REGISTRY_ADDRESS =
+  process.env.NEXT_PUBLIC_ANALYTICS_REGISTRY_ADDRESS || '0x8D7eE1371509CA824ad85f146dFBE0875Dd60610';
 
 const CONTRACT_ABI: ContractABI[] = [
   {
@@ -226,10 +228,11 @@ const ANALYTICS_REGISTRY_ABI = [
   },
   {
     inputs: [
+      { internalType: 'address', name: 'analyst', type: 'address' },
       { internalType: 'uint256', name: 'offset', type: 'uint256' },
       { internalType: 'uint256', name: 'limit', type: 'uint256' },
     ],
-    name: 'getMyAnalytics',
+    name: 'getAnalyticsForAddress',
     outputs: [
       {
         components: [
@@ -247,10 +250,21 @@ const ANALYTICS_REGISTRY_ABI = [
     type: 'function',
   },
   {
-    inputs: [],
-    name: 'getMyAnalyticsCount',
+    inputs: [
+      { internalType: 'address', name: 'analyst', type: 'address' },
+    ],
+    name: 'getAnalyticsCount',
     outputs: [
       { internalType: 'uint256', name: '', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'relayer',
+    outputs: [
+      { internalType: 'address', name: '', type: 'address' },
     ],
     stateMutability: 'view',
     type: 'function',
@@ -260,6 +274,7 @@ const ANALYTICS_REGISTRY_ABI = [
       { internalType: 'string', name: 'sourceCID', type: 'string' },
       { internalType: 'string', name: 'resultCID', type: 'string' },
       { internalType: 'string', name: 'analysisType', type: 'string' },
+      { internalType: 'address', name: 'analyst', type: 'address' },
     ],
     name: 'registerAnalytics',
     outputs: [],
@@ -458,26 +473,36 @@ export const getAnalyticsRegistryAddress = (): string => {
 };
 
 /**
- * Register analytics result on blockchain
+ * Register analytics result on blockchain.
+ *
+ * NOTE: The deployed AnalyticsRegistry.sol uses an `onlyRelayer` modifier —
+ * only the server's relayer wallet can call registerAnalytics().
+ * For frontend use, call the analytics-service API with
+ * `store_on_ipfs=true` and `register_on_chain=true` flags instead.
+ * This function is kept for completeness but will revert if called
+ * from a non-relayer wallet.
+ *
  * @param sourceCID - IPFS hash of the source document
  * @param resultCID - IPFS hash of the analytics result
  * @param analysisType - Type of analysis (descriptive, graphical, inferential)
+ * @param analystAddress - Ethereum address of the analyst
  * @returns Transaction hash
  */
 export const registerAnalytics = async (
   sourceCID: string,
   resultCID: string,
-  analysisType: string
+  analysisType: string,
+  analystAddress: string
 ): Promise<string> => {
   const contract = await getAnalyticsContract(true);
 
-  const tx = await contract.registerAnalytics(sourceCID, resultCID, analysisType);
+  const tx = await contract.registerAnalytics(sourceCID, resultCID, analysisType, analystAddress);
   await tx.wait();
   return tx.hash;
 };
 
 /**
- * Get all analytics results for a specific dataset
+ * Get all analytics results for a specific dataset (read-only, callable from browser)
  * @param sourceCID - IPFS hash of the source document
  * @returns Array of result CIDs
  */
@@ -487,15 +512,19 @@ export const getAnalyticsForDataset = async (sourceCID: string): Promise<string[
 };
 
 /**
- * Get analytics results for current user (paginated)
+ * Get analytics results for a specific analyst address (paginated, read-only)
+ * @param analystAddress - Ethereum address of the analyst
  * @param offset - Pagination offset
  * @param limit - Max number of results to return
  * @returns Array of analytics records
  */
-export const getMyAnalytics = async (offset: number, limit: number): Promise<AnalyticsRecord[]> => {
-  // msg.sender-dependent — needs signer, not provider
-  const contract = await getAnalyticsContract(true);
-  const results = await contract.getMyAnalytics(offset, limit);
+export const getAnalyticsForAddress = async (
+  analystAddress: string,
+  offset: number,
+  limit: number
+): Promise<AnalyticsRecord[]> => {
+  const contract = await getAnalyticsContract(false);
+  const results = await contract.getAnalyticsForAddress(analystAddress, offset, limit);
 
   return results.map((record: any) => ({
     sourceCID: record.sourceCID,
@@ -506,12 +535,21 @@ export const getMyAnalytics = async (offset: number, limit: number): Promise<Ana
 };
 
 /**
- * Get total count of analytics results for current user
+ * Get total count of analytics results for a specific analyst
+ * @param analystAddress - Ethereum address of the analyst
  * @returns Number of analytics records
  */
-export const getMyAnalyticsCount = async (): Promise<number> => {
-  // msg.sender-dependent — needs signer, not provider
-  const contract = await getAnalyticsContract(true);
-  const count = await contract.getMyAnalyticsCount();
+export const getAnalyticsCount = async (analystAddress: string): Promise<number> => {
+  const contract = await getAnalyticsContract(false);
+  const count = await contract.getAnalyticsCount(analystAddress);
   return Number(count);
+};
+
+/**
+ * Get the relayer address from the AnalyticsRegistry contract
+ * @returns Relayer Ethereum address
+ */
+export const getRelayerAddress = async (): Promise<string> => {
+  const contract = await getAnalyticsContract(false);
+  return contract.relayer();
 };
