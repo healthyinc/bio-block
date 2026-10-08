@@ -15,15 +15,18 @@ function getFromIdb(cid) {
         db.close();
         return resolve(null);
       }
-      const tx = db.transaction(STORE_NAME, 'readonly');
+      const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
       const getReq = store.get(cid);
       getReq.onsuccess = () => {
         const item = getReq.result;
-        db.close();
         if (item && item.blob) {
+          // consumed — remove so it doesn't pile up
+          store.delete(cid);
+          tx.oncomplete = () => db.close();
           resolve(new File([item.blob], item.fileName || `${cid}.csv`, { type: 'text/csv' }));
         } else {
+          db.close();
           resolve(null);
         }
       };

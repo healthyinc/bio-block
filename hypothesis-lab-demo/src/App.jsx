@@ -138,6 +138,8 @@ export default function App() {
       .then(async (file) => {
         if (file) {
           await handleUpload(file);
+        } else {
+          setError('Could not retrieve dataset from Bio-Block tab — please upload manually');
         }
       })
       .catch((err) => {
