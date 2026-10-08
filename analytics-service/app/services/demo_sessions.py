@@ -36,6 +36,7 @@ class DemoSession:
         "tree",
         "hypotheses",
         "analyses",
+        "attestations",
         "created_at",
         "last_accessed",
         "idle_timeout",
@@ -55,6 +56,7 @@ class DemoSession:
         self.tree = tree
         self.hypotheses: Dict[str, CandidateHypothesis] = {}
         self.analyses: Dict[str, CandidateAnalysis] = {}
+        self.attestations: List[Dict] = []
         self.created_at = time.time()
         self.last_accessed = time.time()
         self.idle_timeout = idle_timeout

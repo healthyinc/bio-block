@@ -253,3 +253,43 @@ class TestExistingEndpointsUnchanged:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "healthy"
+
+
+class TestExecuteAnalysisRouting:
+    def test_kruskal_wallis_with_two_groups_routes_to_mann_whitney(self):
+        from app.routers.demo_router import _execute_analysis
+
+        np.random.seed(42)
+        df = pd.DataFrame({
+            "outcome": np.concatenate([np.random.normal(10, 2, 20), np.random.normal(15, 2, 20)]),
+            "group": ["A"] * 20 + ["B"] * 20,
+        })
+        result = _execute_analysis(
+            df=df,
+            test_name="kruskal_wallis",
+            outcome_col="outcome",
+            group_col="group",
+            paired_col=None,
+            predictor_col=None,
+            answers=None,
+        )
+        assert result["test_used"] == "mann_whitney_u"
+
+    def test_one_way_anova_with_two_groups_routes_to_ttest(self):
+        from app.routers.demo_router import _execute_analysis
+
+        np.random.seed(42)
+        df = pd.DataFrame({
+            "outcome": np.concatenate([np.random.normal(10, 2, 20), np.random.normal(15, 2, 20)]),
+            "group": ["A"] * 20 + ["B"] * 20,
+        })
+        result = _execute_analysis(
+            df=df,
+            test_name="one_way_anova",
+            outcome_col="outcome",
+            group_col="group",
+            paired_col=None,
+            predictor_col=None,
+            answers=None,
+        )
+        assert result["test_used"] in ("students_ttest", "welchs_ttest")
