@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { Wallet, Search, Upload, User, ChevronDown, Shield, Database, Globe, Zap } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Wallet, Search, Upload, User, ChevronDown, Shield, Database, Globe, Zap, BarChart3 } from "lucide-react";
 import SearchData from "../components/SearchData";
 import UploadData from "../components/UploadData";
 import Dashboard from "../components/Dashboard";
 
 type ViewType = "main" | "search" | "upload" | "dashboard";
+
+const SEPOLIA_CHAIN_ID_HEX = "0xaa36a7";
 
 export default function Home() {
   const [isWalletConnected, setIsWalletConnected] = useState<boolean>(false);
@@ -15,40 +17,153 @@ export default function Home() {
   const [currentView, setCurrentView] = useState<ViewType>("main");
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
 
-  const handleWalletConnect = async () => {
-    try {
-      if (typeof window.ethereum !== "undefined") {
-        await window.ethereum.request({
-          method: "wallet_requestPermissions",
-          params: [{ eth_accounts: {} }],
-        });
+  const setAccountData = useCallback((address: string) => {
+    const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
+    setWalletAddress(shortAddress);
+    setFullWalletAddress(address);
+    setIsWalletConnected(true);
+  }, []);
 
-        const accounts = await window.ethereum.request({
-          method: "eth_requestAccounts",
-        });
-
-        const address = accounts[0];
-        const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
-        setWalletAddress(shortAddress);
-        setFullWalletAddress(address);
-        setIsWalletConnected(true);
-      } else {
-        alert("Please install MetaMask or another Web3 wallet");
-      }
-    } catch (error: unknown) {
-      console.error("Wallet connection failed:", error);
-      if (error && typeof error === 'object' && 'code' in error && (error as { code: number }).code === 4001) {
-        alert("Connection rejected by user");
-      }
-    }
-  };
-
-  const handleDisconnect = () => {
+  const handleDisconnect = useCallback(() => {
     setIsWalletConnected(false);
     setWalletAddress("");
     setFullWalletAddress("");
     setIsDropdownOpen(false);
     setCurrentView("main");
+  }, []);
+
+  // Check if wallet is already connected on mount & setup event listeners
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkConnection = async () => {
+      try {
+        if (typeof window === "undefined") return;
+
+        const anyWindow = window as any;
+        const ethereum =
+          anyWindow.ethereum?.providers?.find((p: any) => p.isMetaMask) ||
+          anyWindow.ethereum;
+
+        if (!ethereum || typeof ethereum.request !== "function") return;
+
+        try {
+          const accounts = (await ethereum.request({
+            method: "eth_accounts",
+          })) as string[];
+
+          if (isMounted && accounts && accounts.length > 0) {
+            setAccountData(accounts[0]);
+          }
+        } catch {
+          // Ignore dormant extension errors on initial load
+        }
+
+        const handleAccountsChanged = (accounts: string[]) => {
+          if (!isMounted) return;
+          if (!accounts || accounts.length === 0) {
+            handleDisconnect();
+          } else {
+            setAccountData(accounts[0]);
+          }
+        };
+
+        const handleChainChanged = () => {
+          if (isMounted) window.location.reload();
+        };
+
+        try {
+          ethereum.on?.("accountsChanged", handleAccountsChanged);
+          ethereum.on?.("chainChanged", handleChainChanged);
+        } catch {
+          // Ignore listener attach errors
+        }
+
+        return () => {
+          try {
+            ethereum.removeListener?.("accountsChanged", handleAccountsChanged);
+            ethereum.removeListener?.("chainChanged", handleChainChanged);
+          } catch {
+            // Ignore cleanup errors
+          }
+        };
+      } catch {
+        // Safe catch-all for extension communication issues
+      }
+    };
+
+    checkConnection();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [setAccountData, handleDisconnect]);
+
+  const handleWalletConnect = async () => {
+    try {
+      if (typeof window === "undefined") return;
+
+      const anyWindow = window as any;
+      const ethereum =
+        anyWindow.ethereum?.providers?.find((p: any) => p.isMetaMask) ||
+        anyWindow.ethereum;
+
+      if (!ethereum) {
+        alert("MetaMask not detected! Please install the MetaMask browser extension to connect.");
+        return;
+      }
+
+      // Step 1: Open MetaMask accounts popup FIRST
+      const accounts = (await ethereum.request({
+        method: "eth_requestAccounts",
+      })) as string[];
+
+      if (!accounts || accounts.length === 0) {
+        alert("No accounts selected in MetaMask.");
+        return;
+      }
+
+      const address = accounts[0];
+      setAccountData(address);
+
+      // Step 2: Attempt Sepolia network switch (non-blocking)
+      try {
+        await ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }],
+        });
+      } catch (switchError: any) {
+        if (switchError?.code === 4902) {
+          try {
+            await ethereum.request({
+              method: "wallet_addEthereumChain",
+              params: [
+                {
+                  chainId: SEPOLIA_CHAIN_ID_HEX,
+                  chainName: "Sepolia Testnet",
+                  nativeCurrency: { name: "Sepolia ETH", symbol: "ETH", decimals: 18 },
+                  rpcUrls: ["https://rpc.sepolia.org"],
+                  blockExplorerUrls: ["https://sepolia.etherscan.io"],
+                },
+              ],
+            });
+          } catch {
+            // User rejected chain addition - still keep wallet connected
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error("Wallet connection failed:", error);
+      if (error?.code === 4001) {
+        // User clicked cancel in MetaMask
+        return;
+      }
+      if (error?.code === -32002) {
+        alert("MetaMask request is already pending. Please click your MetaMask extension icon to approve it.");
+        return;
+      }
+      alert(`MetaMask connection error: ${error?.message || error}`);
+    }
   };
 
   const handleSearch = () => {
@@ -62,6 +177,11 @@ export default function Home() {
   const handleDashboard = () => {
     setCurrentView("dashboard");
     setIsDropdownOpen(false);
+  };
+
+  const handleAnalytics = () => {
+    const labUrl = process.env.NEXT_PUBLIC_HYPOTHESIS_LAB_URL || 'http://localhost:5174';
+    window.open(labUrl, '_blank', 'noopener');
   };
 
   const handleBackToMain = () => {
@@ -92,6 +212,8 @@ export default function Home() {
       />
     );
   }
+
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
@@ -216,6 +338,25 @@ export default function Home() {
                   <div className="text-left">
                     <div className="text-lg font-semibold">Upload Document</div>
                     <div className="text-sm text-green-100">Secure blockchain storage</div>
+                  </div>
+                </div>
+                <div className="absolute inset-0 bg-white/10 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
+              </button>
+            </div>
+
+            {/* Analytics Lab Button */}
+            <div className="mt-6">
+              <button
+                onClick={handleAnalytics}
+                className="group relative w-full flex items-center justify-center gap-4 px-8 py-6 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-2xl hover:from-violet-700 hover:to-indigo-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-105"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                    <BarChart3 size={24} />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-lg font-semibold">Analytics Lab</div>
+                    <div className="text-sm text-violet-100">Analyze datasets with statistical tools</div>
                   </div>
                 </div>
                 <div className="absolute inset-0 bg-white/10 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>

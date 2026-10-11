@@ -40,20 +40,17 @@ export default function UploadPage() {
   const handleWalletConnect = async () => {
     try {
       if (typeof window.ethereum !== 'undefined') {
-        await window.ethereum.request({
-          method: 'wallet_requestPermissions',
-          params: [{ eth_accounts: {} }],
-        });
-
-        const accounts = await window.ethereum.request({
+        const accounts = (await window.ethereum.request({
           method: 'eth_requestAccounts',
-        }) as string[];
+        })) as string[];
 
-        const address = accounts[0];
-        const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
-        setWalletAddress(shortAddress);
-        setFullWalletAddress(address);
-        setIsWalletConnected(true);
+        if (accounts && accounts.length > 0) {
+          const address = accounts[0];
+          const shortAddress = `${address.slice(0, 6)}...${address.slice(-4)}`;
+          setWalletAddress(shortAddress);
+          setFullWalletAddress(address);
+          setIsWalletConnected(true);
+        }
       } else {
         alert('Please install MetaMask or another Web3 wallet');
       }
