@@ -5,6 +5,8 @@ const path = require("path");
 const fs = require("fs");
 const app = require("../server");
 
+process.env.BIOBLOCK_STUDY_SALT = process.env.BIOBLOCK_STUDY_SALT || "anonymize-test-salt";
+
 const testFilePath = path.join(__dirname, "test.xlsx");
 
 before(function () {

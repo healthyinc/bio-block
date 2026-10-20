@@ -1,7 +1,10 @@
 const request = require("supertest");
 const { expect } = require("chai");
 const XLSX = require("xlsx");
+const crypto = require("crypto");
 const app = require("../../server");
+
+process.env.BIOBLOCK_STUDY_SALT = process.env.BIOBLOCK_STUDY_SALT || "anonymize-test-salt";
 
 /**
  * Helper: create an in-memory XLSX buffer from an array-of-arrays.
@@ -267,6 +270,58 @@ describe("PHI Detection in Anonymization", function () {
       expect(String(output[1][1])).to.match(WID_PATTERN);
       expect(String(output[2][1])).to.match(WID_PATTERN);
       expect(output[1][1]).to.not.equal(output[2][1]);
+    });
+
+    it("should not produce the unsalted SHA-256 of the Patient ID", async function () {
+      const data = [
+        ["Patient ID", "Score"],
+        ["P0042", 85],
+      ];
+      const buffer = createXlsxBuffer(data);
+      const output = await anonymizeAndParse(buffer);
+
+      const unsalted =
+        "WID_" + crypto.createHash("sha256").update("p0042").digest("hex").substring(0, 8);
+      expect(String(output[1][0])).to.match(WID_PATTERN);
+      expect(output[1][0]).to.not.equal(unsalted);
+    });
+
+    it("should give the same Patient ID different WIDs under different salts", async function () {
+      const data = [
+        ["Patient ID", "Score"],
+        ["P0042", 85],
+      ];
+      const originalSalt = process.env.BIOBLOCK_STUDY_SALT;
+      try {
+        const first = await anonymizeAndParse(createXlsxBuffer(data));
+        const again = await anonymizeAndParse(createXlsxBuffer(data));
+        process.env.BIOBLOCK_STUDY_SALT = "another-study-salt";
+        const otherStudy = await anonymizeAndParse(createXlsxBuffer(data));
+
+        expect(first[1][0]).to.equal(again[1][0]);
+        expect(first[1][0]).to.not.equal(otherStudy[1][0]);
+      } finally {
+        process.env.BIOBLOCK_STUDY_SALT = originalSalt;
+      }
+    });
+
+    it("should refuse to anonymize when no salt is configured", async function () {
+      const data = [
+        ["Patient ID", "Name"],
+        ["P0042", "John Doe"],
+      ];
+      const originalSalt = process.env.BIOBLOCK_STUDY_SALT;
+      try {
+        delete process.env.BIOBLOCK_STUDY_SALT;
+        const res = await request(app)
+          .post("/api/anonymize")
+          .attach("file", createXlsxBuffer(data), "test.xlsx");
+
+        expect(res.status).to.not.equal(200);
+        expect(res.body.error).to.include("BIOBLOCK_STUDY_SALT");
+      } finally {
+        process.env.BIOBLOCK_STUDY_SALT = originalSalt;
+      }
     });
   });
 
