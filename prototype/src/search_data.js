@@ -40,7 +40,7 @@ export default function SearchData({ onBack }) {
   const [useFilters, setUseFilters] = useState(false);
 
   // Helper function for smart decryption (streaming or traditional)
-  const smartDecrypt = async (encryptedData, progressCallback) => {
+  const smartDecrypt = async (encryptedData, documentKey, progressCallback) => {
     try {
       // Try to detect if it's streaming encryption format
       let dataString = encryptedData;
@@ -51,16 +51,36 @@ export default function SearchData({ onBack }) {
       // Check if it has streaming encryption markers
       if (dataString.includes("|METADATA_SEPARATOR|") && dataString.includes("|CHUNK_SEPARATOR|")) {
         console.log("Detected streaming encryption format, using streaming decryption");
-        const streamer = new StreamingEncryption();
+        const streamer = new StreamingEncryption(documentKey);
         return await streamer.decryptFileStream(dataString, progressCallback);
       } else {
         console.log("Using traditional decryption");
-        return decryptFile(encryptedData);
+        return decryptFile(encryptedData, documentKey);
       }
     } catch (error) {
       console.warn("Streaming decryption failed, falling back to traditional:", error);
-      return decryptFile(encryptedData);
+      return decryptFile(encryptedData, documentKey);
     }
+  };
+
+  const getDocumentKey = async (ipfsHash) => {
+    if (!window.ethereum) throw new Error("MetaMask not connected");
+    const accounts = await window.ethereum.request({ method: "eth_accounts" });
+    if (accounts.length === 0) throw new Error("No connected account found");
+    const buyerAddress = accounts[0];
+
+    const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || "http://localhost:3001";
+    const response = await fetch(
+      `${backendUrl}/api/ipfs/key/${ipfsHash}?buyerAddress=${buyerAddress}`
+    );
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Failed to get decryption key (${response.status})`);
+    }
+
+    const data = await response.json();
+    return data.documentKey;
   };
 
   const handleSearchSubmit = async () => {
@@ -181,11 +201,21 @@ export default function SearchData({ onBack }) {
 
       setDownloading((prev) => ({ ...prev, [index]: true }));
 
-      const response = await fetch(`https://gateway.pinata.cloud/ipfs/${cid}`);
+      let response;
+      if (cid.startsWith("QmMock")) {
+        const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || "http://localhost:3001";
+        response = await fetch(`${backendUrl}/api/ipfs/mock/${cid}`);
+      } else {
+        response = await fetch(`https://gateway.pinata.cloud/ipfs/${cid}`);
+      }
+
       const encryptedData = await response.text();
 
+      // Fetch document key
+      const documentKey = await getDocumentKey(cid);
+
       // Use smart decryption (handles both streaming and traditional)
-      const decryptedData = await smartDecrypt(encryptedData, (progress) =>
+      const decryptedData = await smartDecrypt(encryptedData, documentKey, (progress) =>
         console.log(`Decryption progress: ${progress.toFixed(1)}%`)
       );
 
@@ -230,11 +260,23 @@ export default function SearchData({ onBack }) {
     setShowPreviewModal(true);
 
     try {
-      const response = await fetch(`https://gateway.pinata.cloud/ipfs/${previewHash}`);
+      let response;
+      if (previewHash.startsWith("QmMock")) {
+        const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || "http://localhost:3001";
+        response = await fetch(`${backendUrl}/api/ipfs/mock/${previewHash}`);
+      } else {
+        response = await fetch(`https://gateway.pinata.cloud/ipfs/${previewHash}`);
+      }
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch preview file");
+      }
       const encryptedData = await response.text();
+      // Fetch document key for preview
+      const previewKey = await getDocumentKey(previewHash);
 
       // Use smart decryption for preview
-      const decryptedData = await smartDecrypt(encryptedData, (progress) =>
+      const decryptedData = await smartDecrypt(encryptedData, previewKey, (progress) =>
         console.log(`Preview decryption progress: ${progress.toFixed(1)}%`)
       );
 

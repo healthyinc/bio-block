@@ -100,13 +100,30 @@ export default function Dashboard({ onBack, isWalletConnected, walletAddress }) 
     setDownloadingDocs((prev) => ({ ...prev, [index]: true }));
 
     try {
-      const response = await fetch(`https://gateway.pinata.cloud/ipfs/${doc.hash}`);
+      let response;
+      if (doc.hash.startsWith("QmMock")) {
+        const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || "http://localhost:3001";
+        response = await fetch(`${backendUrl}/api/ipfs/mock/${doc.hash}`);
+      } else {
+        response = await fetch(`https://gateway.pinata.cloud/ipfs/${doc.hash}`);
+      }
+
       if (!response.ok) {
         throw new Error(`Failed to fetch document: ${response.statusText}`);
       }
 
       const encryptedData = await response.text();
-      const decryptedData = decryptFile(encryptedData);
+
+      // Fetch document key
+      const accounts = await window.ethereum.request({ method: "eth_accounts" });
+      const backendUrl = process.env.REACT_APP_JS_BACKEND_URL || "http://localhost:3001";
+      const keyResponse = await fetch(
+        `${backendUrl}/api/ipfs/key/${doc.hash}?buyerAddress=${accounts[0]}`
+      );
+      if (!keyResponse.ok) throw new Error("Failed to get decryption key");
+      const keyData = await keyResponse.json();
+
+      const decryptedData = decryptFile(encryptedData, keyData.documentKey);
       const bytes = new Uint8Array(
         atob(decryptedData)
           .split("")
@@ -114,7 +131,7 @@ export default function Dashboard({ onBack, isWalletConnected, walletAddress }) 
       );
 
       const blob = new Blob([bytes], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        type: doc.fileType || "application/octet-stream",
       });
       const url = URL.createObjectURL(blob);
 

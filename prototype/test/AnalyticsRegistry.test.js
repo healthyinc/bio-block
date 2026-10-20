@@ -111,7 +111,7 @@ describe("AnalyticsRegistry", function () {
 
     it("Should return all result CIDs for a source dataset", async function () {
       const sourceCID = "QmSource456";
-      
+
       await analyticsRegistry.connect(owner).registerAnalytics(
         sourceCID, "QmResultA", "descriptive", analyst1.address
       );
@@ -120,7 +120,7 @@ describe("AnalyticsRegistry", function () {
       );
 
       const results = await analyticsRegistry.getAnalyticsForDataset(sourceCID);
-      
+
       expect(results.length).to.equal(2);
       expect(results[0]).to.equal("QmResultA");
       expect(results[1]).to.equal("QmResultB");
@@ -135,7 +135,7 @@ describe("AnalyticsRegistry", function () {
       await analyticsRegistry.connect(owner).registerAnalytics("QmSource3", "QmResult3", "inferential", analyst1.address);
       await analyticsRegistry.connect(owner).registerAnalytics("QmSource4", "QmResult4", "descriptive", analyst1.address);
       await analyticsRegistry.connect(owner).registerAnalytics("QmSource5", "QmResult5", "graphical", analyst1.address);
-      
+
       // Register 1 record for analyst2
       await analyticsRegistry.connect(owner).registerAnalytics("QmSourceA", "QmResultA", "descriptive", analyst2.address);
     });
@@ -169,7 +169,7 @@ describe("AnalyticsRegistry", function () {
       const results = await analyticsRegistry.getAnalyticsForAddress(analyst1.address, 10, 2);
       expect(results.length).to.equal(0);
     });
-    
+
     it("Should maintain isolation between wallets", async function () {
       const results = await analyticsRegistry.getAnalyticsForAddress(analyst2.address, 0, 10);
       expect(results.length).to.equal(1);

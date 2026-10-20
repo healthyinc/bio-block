@@ -34,14 +34,14 @@ API docs: [http://localhost:3003/docs](http://localhost:3003/docs)
 
 ## Endpoints
 
-| Method | Endpoint               | Status       | Description            |
-| ------ | ---------------------- | ------------ | ---------------------- |
-| `GET`  | `/health`              | ✅ Done      | Service health check   |
-| `POST` | `/analytics/describe`  | ✅ Done      | Descriptive statistics |
-| `POST` | `/analytics/visualize` | ✅ Done      | Chart generation (7 types) |
-| `POST` | `/analytics/infer`     | 🔜 Week 6-7 | Hypothesis testing     |
-| `GET`  | `/analytics/results/{result_cid}` | ✅ Stub | Registry result lookup |
-| `GET`  | `/analytics/dataset/{dataset_cid}` | ✅ Stub | Dataset results lookup |
+| Method | Endpoint                           | Status      | Description                |
+| ------ | ---------------------------------- | ----------- | -------------------------- |
+| `GET`  | `/health`                          | ✅ Done     | Service health check       |
+| `POST` | `/analytics/describe`              | ✅ Done     | Descriptive statistics     |
+| `POST` | `/analytics/visualize`             | ✅ Done     | Chart generation (7 types) |
+| `POST` | `/analytics/infer`                 | 🔜 Week 6-7 | Hypothesis testing         |
+| `GET`  | `/analytics/results/{result_cid}`  | ✅ Stub     | Registry result lookup     |
+| `GET`  | `/analytics/dataset/{dataset_cid}` | ✅ Stub     | Dataset results lookup     |
 
 ## Testing
 
