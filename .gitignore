@@ -186,3 +186,8 @@ python_backend/openslide_binaries/
 python_backend/.model-cache/
 python_backend/.venv-models/
 python_backend/evaluations/reports/*.local.json
+
+# Worker environments and synthetic runtime measurements
+python_backend/.venv-models-cuda/
+python_backend/benchmarks/results/
+python_backend/evaluations/diagnostics/

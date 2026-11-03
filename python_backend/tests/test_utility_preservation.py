@@ -383,7 +383,7 @@ def test_an_unmeasured_utility_metric_is_a_failure_not_a_pass():
     assert "content_token_preservation" in verdict.missing_metrics
 
 
-def test_clean_note_passes_both_gates_and_releases():
+def test_clean_note_passes_both_gates_and_releases(simulated_production_detectors):
     from services.ingestion import anonymize_text, release_decision_for
 
     result = anonymize_text(CLINICAL_NOTE.encode("utf-8"), "strict", "study-a")

@@ -5,7 +5,7 @@ import string
 from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from services.detection_evidence import (
     EVIDENCE_DETERMINISTIC,
@@ -49,6 +49,19 @@ from services.surrogates import (
     SURROGATE_PATTERN,
     SurrogateAllocator,
     looks_like_provider,
+)
+from services.latency_metrics import stage as _timed_stage
+from services.request_deadline import (
+    RequestDeadlineExceeded,
+    check as _deadline_check,
+)
+from services.residual_profile import (
+    PASS_FIRST,
+    PASS_RESIDUAL,
+    ResidualProfileError,
+    build_evidence,
+    configured_profile as _configured_validator_profile,
+    required_sources as _required_detector_sources,
 )
 from services.text_utility import measure_text_utility
 from services.transformation_provenance import (
@@ -142,13 +155,49 @@ def _normalize_profile(profile: str) -> str:
     return _profile_settings(profile)[0]
 
 
-def _detectors(model_name: str, profile: str) -> Tuple[PhiDetector, ...]:
+def _detectors(
+    model_name: str,
+    profile: str,
+    pass_kind: str = PASS_FIRST,
+    validator_profile: Optional[str] = None,
+) -> Tuple[PhiDetector, ...]:
     """Build the detector chain for the currently configured model mode.
 
     An unrecognized mode raises ``LocalModelError`` rather than silently
     dropping the model adapters.
+
+    ``pass_kind`` selects which of the two production passes this is. Only the
+    residual pass consults the validator profile; the first pass always runs
+    the complete chain, so no configuration can remove GLiNER from detection.
     """
-    return _build_detectors(model_name, profile, resolve_model_mode())
+    chain = _build_detectors(model_name, profile, resolve_model_mode())
+    if pass_kind == PASS_FIRST:
+        return chain
+
+    wanted = set(
+        _required_detector_sources(
+            pass_kind, validator_profile or _configured_validator_profile()
+        )
+    )
+    filtered = tuple(
+        detector for detector in chain
+        if _detector_source(detector) in wanted
+    )
+    if not filtered:
+        # Every profile names at least one model; an empty chain here means
+        # the configuration and the built chain disagree, which must not
+        # silently become "nothing found".
+        raise NerPhiDetectionError("residual_validator_empty", status_code=500)
+    return filtered
+
+
+def _detector_source(detector: PhiDetector) -> str:
+    """The source name a detector reports, or its class as a fallback."""
+    return getattr(detector, "source", None) or {
+        "StructuredPatternDetector": "structured_pattern",
+        "AgeOverThresholdDetector": "age_rule",
+        "SpacyNerPhiDetector": "ner",
+    }.get(type(detector).__name__, type(detector).__name__)
 
 
 @lru_cache(maxsize=8)
@@ -193,26 +242,98 @@ def _build_detectors(
     )
 
 
+#: Evidence from the most recent pass of each kind, for the caller to attach
+#: to its result. Request-scoped in practice because a request runs both
+#: passes before the next one starts on this thread.
+_LAST_VALIDATION_EVIDENCE: Dict[str, Any] = {}
+
+
+def validation_evidence(pass_kind: str):
+    """Evidence recorded by the most recent pass of this kind, if any."""
+    return _LAST_VALIDATION_EVIDENCE.get(pass_kind)
+
+
 def _detect_entities(
     text: str,
     model_name: str,
     profile: str,
+    pass_kind: str = PASS_FIRST,
+    validator_profile: Optional[str] = None,
 ) -> List[DetectedEntity]:
     detected: List[DetectedEntity] = []
     try:
-        for detector in _detectors(model_name, profile):
-            detected.extend(detector.detect(text))
+        validator_profile = validator_profile or _configured_validator_profile()
+    except ResidualProfileError as exc:
+        # A misconfigured profile blocks rather than selecting a default.
+        raise NerPhiDetectionError(exc.error_code, status_code=500) from exc
+
+    completed: List[str] = []
+    try:
+        # Built inside the guard: an unknown model mode raises LocalModelError
+        # here, and that must convert to the fail-closed detection error
+        # rather than escaping as a different exception type.
+        chain = _detectors(model_name, profile, pass_kind, validator_profile)
+        # What this chain is expected to report. Derived from the chain
+        # actually built, because the mocked test mode legitimately has no
+        # pinned models; the profile's own requirement is checked below.
+        expected = tuple(_detector_source(detector) for detector in chain)
+        for detector in chain:
+            # One stage per detector, named after the source it reports, so a
+            # slow model is attributable rather than hidden inside a chain
+            # total. These are children of the surrounding pass.
+            # Named by the detector's own source where it declares one, and
+            # by its class otherwise, so every stage is attributable.
+            _detector_name = getattr(detector, "source", None) or type(
+                detector
+            ).__name__
+            # Between detectors is the one place a stuck chain can be
+            # stopped cheaply. It cannot interrupt a detector already inside
+            # a model call; the worker client's read timeout does that.
+            _deadline_check(f"detect.{_detector_name}")
+            with _timed_stage(f"detect.{_detector_name}"):
+                detected.extend(detector.detect(text))
+            # Recorded only after the detector returns, so a detector that
+            # raised cannot be counted as having covered the text.
+            completed.append(_detector_source(detector))
     except LocalModelError as exc:
         # Model load, checksum, inference, and timeout failures block the
         # artifact; they never degrade to returning unredacted content.
         raise NerPhiDetectionError(exc.error_code, exc.status_code) from exc
     except NerPhiDetectionError:
         raise
+    except RequestDeadlineExceeded as exc:
+        # Out of time blocks exactly as a model failure does. Keeping its own
+        # code makes an over-long request distinguishable from a broken model
+        # in metrics; both produce no artifact.
+        raise NerPhiDetectionError(exc.error_code, status_code=exc.status_code) from exc
     except Exception as exc:
         raise NerPhiDetectionError("phi_detection_failed", status_code=500) from exc
 
-    kept, review = _apply_evidence_model(detected, text)
-    resolved = _merge_adjacent_same_type(resolve_overlaps(kept, len(text)), text)
+    # Two separate checks. First: every detector in the built chain reported.
+    # A detector that silently produced nothing is indistinguishable from a
+    # clean document, so partial coverage must never be reported as one.
+    if set(expected) - set(completed):
+        raise NerPhiDetectionError("incomplete_detector_coverage", status_code=500)
+
+    # Second: when the pinned models are in play, the chain must actually
+    # contain what the profile requires. This is what stops a configuration
+    # or wiring mistake from quietly running a thinner validator.
+    if resolve_model_mode() == MODE_OFFLINE:
+        required = set(_required_detector_sources(pass_kind, validator_profile))
+        if required - set(completed):
+            raise NerPhiDetectionError(
+                "incomplete_detector_coverage", status_code=500
+            )
+    _LAST_VALIDATION_EVIDENCE[pass_kind] = build_evidence(
+        pass_kind, validator_profile, tuple(completed)
+    )
+
+    with _timed_stage("detect.evidence_model"):
+        kept, review = _apply_evidence_model(detected, text)
+    with _timed_stage("detect.normalize_merge"):
+        resolved = _merge_adjacent_same_type(
+            resolve_overlaps(kept, len(text)), text
+        )
     return resolved, review
 
 
@@ -564,7 +685,10 @@ def anonymize_clinical_text(
 
     try:
         model_name = configured_model_name()
-        entities, detection_review = _detect_entities(text, model_name, privacy_profile)
+        with _timed_stage("anonymize.detect_pass1"):
+            entities, detection_review = _detect_entities(
+                text, model_name, privacy_profile
+            )
     except NerPhiDetectionError as exc:
         raise TextAnonymizationError(
             exc.error_code,
@@ -579,9 +703,10 @@ def anonymize_clinical_text(
         if settings["text_identifier_strategy"] == "redact"
         else None
     )
-    anonymized_text, provenance = _replace_entities(
-        text, entities, salt, settings, allocator
-    )
+    with _timed_stage("anonymize.transform"):
+        anonymized_text, provenance = _replace_entities(
+            text, entities, salt, settings, allocator
+        )
 
     # An age reference that cannot be resolved to a number cannot be judged
     # against the Safe Harbor threshold, so the document needs a human.
@@ -598,15 +723,20 @@ def anonymize_clinical_text(
     # original spans and the output. The removed values are needed to score
     # utility honestly - deleting PHI is the goal, not a utility loss - and
     # they never leave this function: only ratios and counts are returned.
-    utility_metrics = measure_text_utility(
-        text,
-        anonymized_text,
-        redacted_values=[text[e.start : e.end] for e in entities],
-    )
+    with _timed_stage("anonymize.utility_measure"):
+        utility_metrics = measure_text_utility(
+            text,
+            anonymized_text,
+            redacted_values=[text[e.start : e.end] for e in entities],
+        )
 
     # Scanned once, here, because this is the only place holding the
     # provenance map for the text it just produced.
-    second_pass = residual_findings(anonymized_text, provenance)
+    # A full detector pass of its own, so its per-detector stages nest
+    # beneath this one. Its cost must not be added to anonymize.detect_pass1:
+    # the two passes run over different text.
+    with _timed_stage("anonymize.residual_validation"):
+        second_pass = residual_findings(anonymized_text, provenance)
 
     return {
         "anonymization_status": "completed",
@@ -894,8 +1024,13 @@ def residual_findings(
 
     provenance = provenance or TransformationProvenance()
     try:
+        # The second production pass. This is the only place the validator
+        # profile applies; the first pass above always runs the full chain.
         entities, _review = _detect_entities(
-            anonymized_text, configured_model_name(), "strict"
+            anonymized_text,
+            configured_model_name(),
+            "strict",
+            pass_kind=PASS_RESIDUAL,
         )
     except NerPhiDetectionError as exc:
         raise TextAnonymizationError(

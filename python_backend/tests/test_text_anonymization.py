@@ -265,7 +265,7 @@ def test_structured_identifier_redaction_does_not_depend_on_ner(
     monkeypatch.setattr(
         text_anonymization,
         "_detectors",
-        lambda model_name, profile: (
+        lambda model_name, profile, *_context: (
             StructuredPatternDetector(),
             _NoopNerDetector(),
         ),
@@ -351,7 +351,7 @@ def test_model_failure_blocks_instead_of_returning_text(
     monkeypatch.setattr(
         text_anonymization,
         "_detectors",
-        lambda model_name, profile: (BlowingUpDetector(),),
+        lambda model_name, profile, *_context: (BlowingUpDetector(),),
     )
 
     with pytest.raises(TextAnonymizationError) as exc:
@@ -373,7 +373,7 @@ def test_model_failure_blocks_detection_only_endpoint(monkeypatch):
     monkeypatch.setattr(
         text_anonymization,
         "_detectors",
-        lambda model_name, profile: (BlowingUpDetector(),),
+        lambda model_name, profile, *_context: (BlowingUpDetector(),),
     )
 
     with pytest.raises(TextAnonymizationError) as exc:
@@ -404,7 +404,7 @@ def test_model_candidates_are_redacted_not_released(monkeypatch):
     monkeypatch.setattr(
         text_anonymization,
         "_detectors",
-        lambda model_name, profile: (FakeModelDetector(),),
+        lambda model_name, profile, *_context: (FakeModelDetector(),),
     )
 
     result = anonymize_clinical_text(text, study_salt="study-a")

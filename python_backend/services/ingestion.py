@@ -2,6 +2,8 @@ import hashlib
 import os
 from typing import Any, Callable, Dict, Optional, Tuple
 
+from services.latency_metrics import annotate as _timed_annotate
+from services.latency_metrics import stage as _timed_stage
 from services.text_anonymization import (
     MAX_TEXT_BYTES,
     TextAnonymizationError,
@@ -147,7 +149,14 @@ def release_decision_for(
     second endpoint through its own copy of the policy is how one route ends up
     releasing what the other blocks, so there is deliberately only one.
     """
-    return _release_decision_for(modality, handler_result, safe_name)
+    with _timed_stage("release.decision"):
+        decision = _release_decision_for(modality, handler_result, safe_name)
+    _timed_annotate(
+        release_category=decision.disposition.value
+        if hasattr(decision.disposition, "value")
+        else str(decision.disposition)
+    )
+    return decision
 
 
 def _artifact_id(release_decision, file_content: Optional[bytes]) -> str:
@@ -209,7 +218,22 @@ def _manifest_for(
     )
 
 
-def _release_decision_for(
+def _release_decision_for(modality, handler_result, safe_name):
+    from services.detector_capability import release_blocker
+    from services.privacy_contracts import ReleaseDisposition
+
+    decision = _decision_from_checks(modality, handler_result, safe_name)
+    blocker = release_blocker()
+    if blocker is None or decision.disposition not in {
+        ReleaseDisposition.RELEASABLE,
+        ReleaseDisposition.MANUAL_REVIEW_REQUIRED,
+    }:
+        return decision
+    reasons = set(decision.reason_codes) if not decision.releasable else set()
+    return manual_review_decision(*sorted(reasons | {blocker}))
+
+
+def _decision_from_checks(
     modality: str,
     handler_result: Dict[str, Any],
     safe_name: str,
@@ -430,7 +454,8 @@ def anonymize_text(
     study_salt: Optional[str] = None,
 ) -> Dict[str, Any]:
     try:
-        text = text_content.decode("utf-8")
+        with _timed_stage("text.decode"):
+            text = text_content.decode("utf-8")
     except UnicodeDecodeError as exc:
         raise IngestionError("Text uploads must be UTF-8 encoded") from exc
     if "\x00" in text:
@@ -453,8 +478,9 @@ def anonymize_text(
     # inside the anonymizer, which is the only place holding both the original
     # spans and the output.
     utility = result.get("utility_metrics", {})
-    contract = contract_for("text")
-    verdict = contract.evaluate(utility) if contract else None
+    with _timed_stage("text.utility_contract"):
+        contract = contract_for("text")
+        verdict = contract.evaluate(utility) if contract else None
 
     return {
         "residual_phi_categories": residual,
@@ -600,10 +626,12 @@ def route_for_ingestion(
     csv_sensitive_column: Optional[str] = None,
     csv_safe_harbor_mappings: Optional[dict[str, list[str]]] = None,
 ) -> Dict[str, Any]:
-    safe_name = _safe_filename(filename)
-    privacy_profile = validate_privacy_profile(profile)
-    resolved_policy = resolve_privacy_policy(privacy_profile)
-    modality = detect_modality(safe_name, content_type, header)
+    with _timed_stage("route.validation"):
+        safe_name = _safe_filename(filename)
+        privacy_profile = validate_privacy_profile(profile)
+        resolved_policy = resolve_privacy_policy(privacy_profile)
+        modality = detect_modality(safe_name, content_type, header)
+    _timed_annotate(modality=modality)
 
     if not resolved_policy.automatic_release_allowed:
         return _expert_determination_response(safe_name, modality)
