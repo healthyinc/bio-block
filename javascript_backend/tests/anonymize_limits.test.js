@@ -2,6 +2,8 @@ const request = require("supertest");
 const expect = require("chai").expect;
 const app = require("../server");
 
+process.env.BIOBLOCK_STUDY_SALT = process.env.BIOBLOCK_STUDY_SALT || "anonymize-test-salt";
+
 describe("Anonymize Upload Limits", function () {
   it("accepts a small valid CSV upload", async function () {
     const smallCsv = Buffer.from("patient_id,name\n1,Alice\n2,Bob\n", "utf8");
