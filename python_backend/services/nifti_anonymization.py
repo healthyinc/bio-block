@@ -18,6 +18,10 @@ except ImportError:
 
 SUPPORTED_EXTENSIONS = {".nii", ".nii.gz"}
 TEXT_HEADER_FIELDS = ("descrip", "aux_file", "intent_name", "db_name")
+DEFACING_STATUS = "not_implemented"
+
+
+from services.modality_utility import measure_nifti_utility
 
 
 class NiftiAnonymizationError(ValueError):
@@ -69,6 +73,45 @@ def _scrub_header_fields(header: Any) -> Dict[str, Any]:
     return {
         "fields_scrubbed": sum(field_counts.values()),
         "scrubbed_field_counts": field_counts,
+    }
+
+
+def _validate_scrubbed_nifti(scrubbed_image: Any, original_shape: tuple) -> Dict[str, Any]:
+    """Serialize the scrubbed volume, re-read it, and confirm the scrub held.
+
+    Asserting that header fields are clear without re-reading the bytes we
+    would hand on is how a scrub that did not survive serialization gets
+    reported as complete.
+    """
+    failures = []
+    image_data_preserved = False
+    try:
+        serialized = scrubbed_image.to_bytes()
+        reread = nib.Nifti1Image.from_bytes(serialized)
+    except Exception:
+        return {
+            "metadata_validation_status": "serialization_failed",
+            "validation_failures": ["serialization_failed"],
+            "image_data_preserved": False,
+        }
+
+    for field_name in TEXT_HEADER_FIELDS:
+        if field_name not in reread.header:
+            continue
+        if _header_value_has_text(reread.header[field_name]):
+            failures.append(f"{field_name}_not_cleared")
+
+    if len(reread.header.extensions):
+        failures.append("extensions_present_after_scrub")
+    if tuple(reread.shape) != tuple(original_shape):
+        failures.append("shape_changed")
+    else:
+        image_data_preserved = True
+
+    return {
+        "metadata_validation_status": "verified" if not failures else "verification_failed",
+        "validation_failures": sorted(set(failures)),
+        "image_data_preserved": image_data_preserved,
     }
 
 
@@ -133,8 +176,24 @@ def anonymize_nifti_metadata(
             header=scrubbed_header,
         )
 
+        extensions_preserved = original_extensions - extensions_removed
+        validation = _validate_scrubbed_nifti(scrubbed_image, original_shape)
+        if extensions_preserved:
+            # An extension can embed a whole DICOM header. A surviving one is
+            # unscanned metadata, not a clean result.
+            validation["metadata_validation_status"] = "verification_failed"
+            validation["validation_failures"] = sorted(
+                set(validation.get("validation_failures", []) + ["extensions_preserved"])
+            )
+
+        status = (
+            "completed"
+            if validation["metadata_validation_status"] == "verified"
+            else "privacy_requirements_not_met"
+        )
+
         return {
-            "anonymization_status": "completed",
+            "anonymization_status": status,
             "metadata_summary": {
                 "profile": privacy_profile,
                 "remove_nifti_extensions": settings["remove_nifti_extensions"],
@@ -142,7 +201,7 @@ def anonymize_nifti_metadata(
                 "scrubbed_field_counts": scrubbed["scrubbed_field_counts"],
                 "extensions_present_before": original_extensions,
                 "extensions_removed": extensions_removed,
-                "extensions_preserved": original_extensions - extensions_removed,
+                "extensions_preserved": extensions_preserved,
                 "image_shape": list(original_shape),
                 "shape_preserved": tuple(scrubbed_image.shape) == original_shape,
                 "affine_preserved": np.array_equal(
@@ -152,7 +211,13 @@ def anonymize_nifti_metadata(
                 "datatype_preserved": (
                     str(scrubbed_image.get_data_dtype()) == original_dtype
                 ),
-                "image_data_preserved": True,
+                "image_data_preserved": validation["image_data_preserved"],
+                "metadata_validation_status": validation["metadata_validation_status"],
+                "validation_failures": validation.get("validation_failures", []),
+                # Cross-sectional head imaging permits facial reconstruction,
+                # which Safe Harbor treats as a comparable image. No defacing
+                # step exists, so this stays a standing blocker.
+                "defacing_status": DEFACING_STATUS,
                 "safe_technical_metadata_preserved": [
                     "shape",
                     "affine",
@@ -160,6 +225,18 @@ def anonymize_nifti_metadata(
                     "image_data",
                 ],
             },
+            # Geometry and voxel fidelity across the scrub. Nothing here
+            # speaks to facial privacy: no defacing step exists, so the
+            # volume stays blocked whatever these numbers say.
+            "utility_metrics": measure_nifti_utility(
+                image,
+                scrubbed_image,
+                header_fields_removed=scrubbed["fields_scrubbed"],
+                extensions_removed=extensions_removed,
+                output_reload_valid=(
+                    validation["metadata_validation_status"] != "serialization_failed"
+                ),
+            ),
         }
     finally:
         if temp_path and os.path.exists(temp_path):

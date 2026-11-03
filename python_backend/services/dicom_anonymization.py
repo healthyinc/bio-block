@@ -73,6 +73,9 @@ TECHNICAL_METADATA_KEYWORDS = {
 }
 
 
+from services.modality_utility import measure_dicom_utility
+
+
 class DicomAnonymizationError(ValueError):
     def __init__(self, detail: str, status_code: int = 400):
         super().__init__(detail)
@@ -302,6 +305,9 @@ def anonymize_dicom_metadata(
         "anonymization_status": "completed",
         "metadata_summary": _metadata_summary(anonymized),
         "pixel_redaction_status": PIXEL_REDACTION_STATUS,
+        # Metadata-only path: there is no rewritten file to compare against,
+        # so the report is input-side and says so.
+        "utility_metrics": measure_dicom_utility(file_bytes, None),
     }
 
 
@@ -319,12 +325,17 @@ def anonymize_dicom_file_bytes(
 
     dataset = _read_dataset(file_bytes)
     anonymized = _anonymize_dataset(dataset, profile)
+    output_bytes = _dataset_to_bytes(dataset)
 
     return {
         "anonymization_status": "completed",
-        "anonymized_dicom_bytes": _dataset_to_bytes(dataset),
+        "anonymized_dicom_bytes": output_bytes,
         "metadata_summary": _metadata_summary(anonymized),
         "pixel_redaction_status": PIXEL_REDACTION_STATUS,
+        # Geometry, encoding and pixel fidelity across the rewrite. It records
+        # what the file kept; it does not make the file releasable, which
+        # still waits on defacing.
+        "utility_metrics": measure_dicom_utility(file_bytes, output_bytes),
     }
 
 

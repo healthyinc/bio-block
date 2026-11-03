@@ -19,6 +19,13 @@ DEFAULT_TILE_SIZE = 1024
 DEFAULT_BORDER_FRACTION = 0.15
 
 
+from services.modality_utility import (
+    MEASUREMENT_VERSION,
+    UNAVAILABLE,
+    measure_wsi_utility,
+)
+
+
 @dataclass(frozen=True)
 class TileCoordinate:
     x: int
@@ -121,6 +128,39 @@ def map_tile_boxes_to_slide(
     ]
 
 
+def _slide_utility(slide: Any, tile_size: int, tiles_scanned: int, tiles_total: int):
+    """Measure the slide's own contract. Counts and dimensions only.
+
+    Associated images are the label, macro and thumbnail surfaces, which are
+    where a slide carries a printed patient label. They are counted by kind;
+    none of them is opened into the report.
+    """
+    width, height = _slide_dimensions(slide)
+    properties = {}
+    try:
+        properties = dict(getattr(slide, "properties", {}) or {})
+    except Exception:
+        properties = {}
+    try:
+        associated = list(getattr(slide, "associated_images", {}) or {})
+    except Exception:
+        associated = []
+
+    magnification = properties.get("openslide.objective-power")
+    return measure_wsi_utility(
+        width=width,
+        height=height,
+        level_count=int(getattr(slide, "level_count", 1) or 1),
+        tile_size=tile_size,
+        tiles_scanned=tiles_scanned,
+        diagnostic_tiles_available=tiles_total,
+        associated_images=associated,
+        metadata_keys=sorted(properties),
+        magnification=magnification,
+        colour_channels=3,
+    )
+
+
 def scan_wsi_slide(
     slide: Any,
     ocr_backend: Optional[OCRBackend] = None,
@@ -143,6 +183,7 @@ def scan_wsi_slide(
             ocr_engine_status=engine_status,
             image_dimensions={"width": width, "height": height},
             tile_size=tile_size,
+            utility_metrics=_slide_utility(slide, tile_size, 0, len(tiles)),
         )
 
     boxes_detected = 0
@@ -172,6 +213,9 @@ def scan_wsi_slide(
             tile_size=tile_size,
             tiles_scanned=tiles_scanned,
             priority_regions_scanned=priority_regions,
+            utility_metrics=_slide_utility(
+                slide, tile_size, tiles_scanned, len(tiles)
+            ),
         )
     except Exception:
         return _wsi_result(
@@ -181,6 +225,9 @@ def scan_wsi_slide(
             tile_size=tile_size,
             tiles_scanned=tiles_scanned,
             priority_regions_scanned=priority_regions,
+            utility_metrics=_slide_utility(
+                slide, tile_size, tiles_scanned, len(tiles)
+            ),
         )
 
     return _wsi_result(
@@ -193,6 +240,7 @@ def scan_wsi_slide(
         tile_size=tile_size,
         tiles_scanned=tiles_scanned,
         priority_regions_scanned=priority_regions,
+        utility_metrics=_slide_utility(slide, tile_size, tiles_scanned, len(tiles)),
     )
 
 
@@ -335,6 +383,7 @@ def _wsi_result(
     image_dimensions: Optional[Dict[str, int]] = None,
     tile_size: int = DEFAULT_TILE_SIZE,
     ocr_engine_status: str = "not_applicable",
+    utility_metrics: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     return {
         "pixel_redaction_status": pixel_redaction_status,
@@ -347,4 +396,13 @@ def _wsi_result(
         "tile_size": tile_size,
         "ocr_engine_status": ocr_engine_status,
         "wsi_rewrite_status": "not_supported_yet",
+        # Input-side only, always. There is no validated slide writer, so
+        # there is no output to compare against and no preservation to claim.
+        "utility_metrics": utility_metrics
+        or {
+            "measurement_version": MEASUREMENT_VERSION,
+            "output_available": False,
+            "status": UNAVAILABLE,
+            "rewritten_output_preservation": "no_validated_writer",
+        },
     }

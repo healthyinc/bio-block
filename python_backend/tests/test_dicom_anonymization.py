@@ -15,13 +15,10 @@ os.environ.setdefault("BIOBLOCK_STUDY_SALT", "week3-test-salt")
 
 from main import app  # noqa: E402
 from services.dicom_anonymization import (  # noqa: E402
-    anonymize_dicom_file_bytes,
     DicomAnonymizationError,
     anonymize_dicom_file_bytes,
     anonymize_dicom_metadata,
-    anonymize_dicom_file_bytes,
 )
-
 
 client = TestClient(app)
 
@@ -127,24 +124,23 @@ def test_dicom_pixel_data_is_not_modified():
 def test_dicom_file_bytes_are_metadata_scrubbed_and_readable():
     result = anonymize_dicom_file_bytes(build_dicom_bytes())
     safe_result = {
-        key: value
-        for key, value in result.items()
-        if key != "anonymized_dicom_bytes"
+        key: value for key, value in result.items() if key != "anonymized_dicom_bytes"
     }
     dataset = pydicom.dcmread(BytesIO(result["anonymized_dicom_bytes"]))
 
-    assert dataset.PatientName == "ANONYMIZED"
-    assert dataset.PatientID == "REDACTED"
+    assert str(dataset.PatientName) == "ANONYMIZED"
+    assert str(dataset.PatientID) == "REDACTED"
     assert dataset.PixelData == PIXEL_BYTES
     assert TOP_LEVEL_NAME not in json.dumps(safe_result)
     assert PATIENT_ID not in json.dumps(safe_result)
     assert result["metadata_summary"]["pixel_data_preserved"] is True
 
+
 def test_dicom_api_returns_completed_without_raw_phi(monkeypatch):
     def fake_pixel_redaction(file_content, profile="strict"):
         dataset = pydicom.dcmread(BytesIO(file_content))
-        assert dataset.PatientName == "ANONYMIZED"
-        assert dataset.PatientID == "REDACTED"
+        assert str(dataset.PatientName) == "ANONYMIZED"
+        assert str(dataset.PatientID) == "REDACTED"
         assert dataset.PixelData == PIXEL_BYTES
         return {
             "pixel_redaction_status": "completed",
@@ -188,34 +184,8 @@ def test_dicom_api_returns_completed_without_raw_phi(monkeypatch):
     assert "sanitized_dicom_bytes" not in body
     assert "file_bytes" not in body
 
-def test_dicom_file_bytes_returns_readable_placeholders():
-    result = anonymize_dicom_file_bytes(build_dicom_bytes(), profile="strict")
 
-    assert result["anonymization_status"] == "completed"
-    assert result["metadata_summary"]["fields_scrubbed"] >= 6
-    assert result["metadata_summary"]["private_tags_removed"] == 2
-
-    import pydicom
-
-    downloaded = pydicom.dcmread(BytesIO(result["anonymized_dicom_bytes"]), force=False)
-    assert str(downloaded.PatientName) == "ANONYMIZED"
-    assert str(downloaded.PatientID) == "REDACTED"
-    assert str(downloaded.PatientBirthDate) == "19000101"
-    assert str(downloaded.ReferencedPatientSequence[0].PatientName) == "ANONYMIZED"
-    assert str(downloaded.ReferencedPatientSequence[0].PatientID) == "REDACTED"
-    assert str(downloaded.PatientIdentityRemoved) == "YES"
-    assert (0x0043, 0x1010) not in downloaded
-    assert bytes(downloaded.PixelData) == PIXEL_BYTES
-    assert TOP_LEVEL_NAME.encode("utf-8") not in result["anonymized_dicom_bytes"]
-    assert PATIENT_ID.encode("utf-8") not in result["anonymized_dicom_bytes"]
-
-
-def test_dicom_download_endpoint_returns_readable_anonymized_file(monkeypatch):
-    monkeypatch.setattr(
-        "main.audit_logger.log_operation",
-        lambda *args, **kwargs: None,
-    )
-
+def test_dicom_download_endpoint_blocks_until_pixel_validation_is_complete():
     response = client.post(
         "/anonymize_dicom",
         files={
@@ -228,27 +198,33 @@ def test_dicom_download_endpoint_returns_readable_anonymized_file(monkeypatch):
         data={"profile": "strict"},
     )
 
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("application/dicom")
-    assert "anonymized_scan.dcm" in response.headers["content-disposition"]
-    assert response.headers["x-bioblock-anonymization-status"] == "completed"
-    assert int(response.headers["x-bioblock-fields-scrubbed"]) >= 6
-    assert int(response.headers["x-bioblock-private-tags-removed"]) == 2
+    assert response.status_code == 409
+    decision = response.json()["detail"]
+    assert decision["disposition"] == "manual_review_required"
+    assert decision["releasable"] is False
+    assert decision["artifact_sha256"] is None
+    assert TOP_LEVEL_NAME not in response.text
+    assert PATIENT_ID not in response.text
 
-    import pydicom
 
-    downloaded = pydicom.dcmread(BytesIO(response.content), force=False)
-    assert str(downloaded.PatientName) == "ANONYMIZED"
-    assert str(downloaded.PatientID) == "REDACTED"
-    assert str(downloaded.PatientBirthDate) == "19000101"
-    assert str(downloaded.ReferencedPatientSequence[0].PatientName) == "ANONYMIZED"
-    assert str(downloaded.ReferencedPatientSequence[0].PatientID) == "REDACTED"
-    assert str(downloaded.PatientIdentityRemoved) == "YES"
-    assert (0x0043, 0x1010) not in downloaded
-    assert bytes(downloaded.PixelData) == PIXEL_BYTES
-    assert TOP_LEVEL_NAME.encode("utf-8") not in response.content
-    assert PATIENT_ID.encode("utf-8") not in response.content
+def test_dicom_research_endpoint_never_returns_downloadable_bytes():
+    response = client.post(
+        "/anonymize_dicom",
+        files={
+            "file": (
+                "scan.dcm",
+                BytesIO(build_dicom_bytes()),
+                "application/dicom",
+            )
+        },
+        data={"profile": "research"},
+    )
 
+    assert response.status_code == 409
+    decision = response.json()["detail"]
+    assert decision["disposition"] == "expert_determination_required"
+    assert decision["releasable"] is False
+    assert TOP_LEVEL_NAME not in response.text
 
 
 def test_dicom_research_shifts_dates_generalizes_demographics_and_removes_private_tags():
@@ -276,5 +252,23 @@ def test_dicom_research_shifts_dates_generalizes_demographics_and_removes_privat
     assert (0x0043, 0x1010) not in downloaded
 
 
+def test_dicom_file_bytes_returns_readable_placeholders():
+    result = anonymize_dicom_file_bytes(build_dicom_bytes(), profile="strict")
 
+    assert result["anonymization_status"] == "completed"
+    assert result["metadata_summary"]["fields_scrubbed"] >= 6
+    assert result["metadata_summary"]["private_tags_removed"] == 2
 
+    import pydicom
+
+    downloaded = pydicom.dcmread(BytesIO(result["anonymized_dicom_bytes"]), force=False)
+    assert str(downloaded.PatientName) == "ANONYMIZED"
+    assert str(downloaded.PatientID) == "REDACTED"
+    assert str(downloaded.PatientBirthDate) == "19000101"
+    assert str(downloaded.ReferencedPatientSequence[0].PatientName) == "ANONYMIZED"
+    assert str(downloaded.ReferencedPatientSequence[0].PatientID) == "REDACTED"
+    assert str(downloaded.PatientIdentityRemoved) == "YES"
+    assert (0x0043, 0x1010) not in downloaded
+    assert bytes(downloaded.PixelData) == PIXEL_BYTES
+    assert TOP_LEVEL_NAME.encode("utf-8") not in result["anonymized_dicom_bytes"]
+    assert PATIENT_ID.encode("utf-8") not in result["anonymized_dicom_bytes"]

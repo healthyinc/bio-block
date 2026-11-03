@@ -1,27 +1,19 @@
 import re
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Pattern, Protocol, Sequence
+from typing import Iterable, List, Pattern, Sequence
+
+from services.privacy_contracts import PhiDetector as SharedPhiDetector
+from services.privacy_contracts import PhiEntity
 
 SOURCE_NER = "ner"
 SOURCE_STRUCTURED_PATTERN = "structured_pattern"
+SOURCE_AGE_RULE = "age_rule"
 SOURCE_CONTEXT_RULE = "context_rule"
+SOURCE_STRICT_PROPER_NOUN = "strict_proper_noun"
 
 
-@dataclass(frozen=True)
-class DetectedEntity:
-    """A PHI span whose offsets refer to the original full text."""
-
-    entity_type: str
-    start: int
-    end: int
-    source: str
-    score: Optional[float] = None
-    original_label: Optional[str] = None
-
-
-class PhiDetector(Protocol):
-    def detect(self, text: str) -> List[DetectedEntity]:
-        """Return detected PHI without retaining or returning matched values."""
+DetectedEntity = PhiEntity
+PhiDetector = SharedPhiDetector
 
 
 @dataclass(frozen=True)
@@ -29,6 +21,10 @@ class _PatternDefinition:
     name: str
     entity_type: str
     regex: Pattern[str]
+    #: When set, the detected span is this capture group rather than the whole
+    #: match, so surrounding clinical words are preserved. "94 years old"
+    #: yields a span over "94" alone, which redacts to "90+ years old".
+    group: int = 0
 
 
 def _compile(pattern: str) -> Pattern[str]:
@@ -90,8 +86,7 @@ STRUCTURED_PATTERNS: Sequence[_PatternDefinition] = (
         "phone_number",
         "PHONE_NUMBER",
         _compile(
-            r"(?<!\w)(?:\+?1[\s.-]?)?"
-            r"(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}(?!\w)"
+            r"(?<!\w)(?:\+?1[\s.-]?)?" r"(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}(?!\w)"
         ),
     ),
     _PatternDefinition(
@@ -109,9 +104,12 @@ STRUCTURED_PATTERNS: Sequence[_PatternDefinition] = (
     _PatternDefinition(
         "ip_address",
         "IP_ADDRESS",
+        # The boundaries reject a longer dotted number without rejecting a
+        # trailing sentence period: "accessed from 203.0.113.42." is the
+        # common phrasing, and a plain (?![\d.]) never matches it.
         _compile(
-            r"(?<![\d.])(?:25[0-5]|2[0-4]\d|1?\d?\d)"
-            r"(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}(?![\d.])"
+            r"(?<!\d)(?<!\d\.)(?:25[0-5]|2[0-4]\d|1?\d?\d)"
+            r"(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}(?!\d)(?!\.\d)"
         ),
     ),
     _PatternDefinition(
@@ -135,12 +133,78 @@ class StructuredPatternDetector:
                 entities.append(
                     DetectedEntity(
                         entity_type=definition.entity_type,
-                        start=match.start(),
-                        end=match.end(),
+                        start=match.start(definition.group),
+                        end=match.end(definition.group),
                         source=SOURCE_STRUCTURED_PATTERN,
                         original_label=definition.name,
                     )
                 )
+        return entities
+
+
+# Safe Harbor requires ages over 89 to be aggregated. An age at or below 89 is
+# not an identifier on its own and is ordinary clinical fact, so it is left
+# alone. A bare number is never treated as an age: an explicit age cue must be
+# present, or "the patient received 94 mg" would be destroyed.
+_AGE_WITH_CUE = _compile(r"(?:\bage[ds]?\b\s*[:\-]?\s*|\baged\s+)(\d{1,3})\b")
+_AGE_WITH_UNIT = _compile(r"\b(\d{1,3})\s*(?:-\s*)?(?:years?|yrs?)\s*(?:-\s*)?old\b")
+_AGE_YO = _compile(r"\b(\d{1,3})\s*(?:y/?o|yo)\b")
+
+_AGE_PATTERNS = (_AGE_WITH_CUE, _AGE_WITH_UNIT, _AGE_YO)
+
+#: Age references that cannot be resolved to a number. Safe Harbor turns on
+#: whether the age exceeds 89, so an unresolvable reference is escalated
+#: rather than guessed at in either direction.
+_UNCERTAIN_AGE = _compile(
+    r"\b(?:nonagenarian|centenarian|in\s+(?:his|her|their)\s+(?:nineties|90s|"
+    r"late\s+eighties)|over\s+(?:ninety|90)|aged\s+over\s+\d{1,3}|"
+    r"more\s+than\s+\d{1,3}\s+years\s+old)\b"
+)
+
+AGE_SAFE_HARBOR_THRESHOLD = 89
+
+
+class AgeOverThresholdDetector:
+    """Deterministic detector for ages that Safe Harbor requires aggregating.
+
+    Emits ``AGE_OVER_89`` for a resolvable age above 89, spanning the number
+    only so the surrounding clinical phrasing survives. Emits
+    ``AGE_UNCERTAIN`` for an age reference that cannot be resolved to a
+    number, which routes the document to review instead of guessing.
+    """
+
+    def detect(self, text: str) -> List[DetectedEntity]:
+        entities: List[DetectedEntity] = []
+        for pattern in _AGE_PATTERNS:
+            for match in pattern.finditer(text):
+                try:
+                    value = int(match.group(1))
+                except (TypeError, ValueError):
+                    continue
+                if value <= AGE_SAFE_HARBOR_THRESHOLD or value > 130:
+                    # At or below the threshold it is ordinary clinical fact;
+                    # above 130 it is not a human age and some other rule owns
+                    # the number.
+                    continue
+                entities.append(
+                    DetectedEntity(
+                        entity_type="AGE_OVER_89",
+                        start=match.start(1),
+                        end=match.end(1),
+                        source=SOURCE_AGE_RULE,
+                        original_label="age_over_threshold",
+                    )
+                )
+        for match in _UNCERTAIN_AGE.finditer(text):
+            entities.append(
+                DetectedEntity(
+                    entity_type="AGE_UNCERTAIN",
+                    start=match.start(),
+                    end=match.end(),
+                    source=SOURCE_AGE_RULE,
+                    original_label="uncertain_age_reference",
+                )
+            )
         return entities
 
 
@@ -163,6 +227,7 @@ _SOURCE_ORDER = {
     SOURCE_STRUCTURED_PATTERN: 0,
     SOURCE_CONTEXT_RULE: 1,
     SOURCE_NER: 2,
+    SOURCE_STRICT_PROPER_NOUN: 3,
 }
 
 
@@ -186,19 +251,23 @@ def resolve_overlaps(
     """Select valid, deterministic, non-overlapping spans."""
 
     valid = {
-        entity
-        for entity in entities
-        if 0 <= entity.start < entity.end <= text_length
+        entity for entity in entities if 0 <= entity.start < entity.end <= text_length
     }
+    # The key must totally order the candidates: set iteration order is not
+    # stable across runs, so any tie left here would make redaction
+    # non-deterministic. Rule-based findings carry no score and rank above
+    # model candidates.
     ordered = sorted(
         valid,
         key=lambda entity: (
             -_priority(entity),
             -(entity.end - entity.start),
+            -(1.0 if entity.score is None else entity.score),
             entity.start,
             _SOURCE_ORDER.get(entity.source, 99),
             entity.entity_type,
             entity.original_label or "",
+            entity.source,
         ),
     )
 

@@ -32,6 +32,20 @@ class FakeOCRBackend:
         return self.boxes
 
 
+class UnavailableOCRBackend:
+    ocr_engine_status = "unavailable"
+
+    def detect_text_boxes(self, image):
+        raise AssertionError("unavailable backend must not run")
+
+
+class FailingOCRBackend:
+    ocr_engine_status = "available"
+
+    def detect_text_boxes(self, image):
+        raise RuntimeError("synthetic OCR failure")
+
+
 def build_grayscale_dicom(pixel_array: np.ndarray) -> bytes:
     file_meta = FileMetaDataset()
     file_meta.TransferSyntaxUID = ExplicitVRLittleEndian
@@ -171,6 +185,38 @@ def test_dicom_safe_response_does_not_expose_ocr_text_or_bytes():
 
     assert "sanitized_dicom_bytes" not in safe
     assert RAW_OCR_TEXT not in json.dumps(safe)
+
+
+def test_unavailable_ocr_never_returns_original_dicom_bytes():
+    result = redact_dicom_pixels(
+        build_grayscale_dicom(np.full((4, 4), 100, dtype=np.uint8)),
+        ocr_backend=UnavailableOCRBackend(),
+    )
+
+    assert result["pixel_redaction_status"] == "skipped_ocr_unavailable"
+    assert "sanitized_dicom_bytes" not in result
+
+
+def test_ocr_failure_never_returns_original_dicom_bytes():
+    result = redact_dicom_pixels(
+        build_grayscale_dicom(np.full((4, 4), 100, dtype=np.uint8)),
+        ocr_backend=FailingOCRBackend(),
+    )
+
+    assert result["pixel_redaction_status"] == "ocr_failed"
+    assert "sanitized_dicom_bytes" not in result
+
+
+def test_image_ocr_failure_does_not_return_original_pixels():
+    image = Image.fromarray(np.full((4, 4), 77, dtype=np.uint8), mode="L")
+
+    unavailable = redact_image_with_backend(image, UnavailableOCRBackend())
+    failed = redact_image_with_backend(image, FailingOCRBackend())
+
+    assert unavailable.image is None
+    assert unavailable.redaction_status == "skipped_ocr_unavailable"
+    assert failed.image is None
+    assert failed.redaction_status == "ocr_failed"
 
 
 def test_dicom_pixel_redaction_uses_profile_confidence_thresholds():

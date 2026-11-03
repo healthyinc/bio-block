@@ -496,9 +496,16 @@ def test_api_does_not_leak_identifier_in_body_headers_filename_log_or_error():
         + json.dumps(dict(response.headers))
         + json.dumps(logged_details)
     )
-    assert response.status_code == 200
-    assert "anonymized_dataset.csv" in response.headers["content-disposition"]
-    assert response.headers["x-bioblock-safe-harbor-status"] == "passed_with_warnings"
+    # Phase 9: the route reports its analysis but never releases rows, and the
+    # filename in the request is itself an identifier, so it must not be
+    # echoed into the body, the headers, or the audit log.
+    assert response.status_code == 422
+    body = response.json()
+    assert body["release_decision"]["releasable"] is False
+    assert (
+        body["tabular_summary"]["safe_harbor_report"]["safe_harbor_validation_status"]
+        == "passed_with_warnings"
+    )
     for identifier in (
         "111-22-3333",
         "222-33-4444",
