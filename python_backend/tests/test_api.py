@@ -7,7 +7,7 @@ from io import BytesIO
 # Add parent directory to path to import main
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from main import app
+from main import app, metadata_collection
 
 client = TestClient(app)
 
@@ -69,6 +69,35 @@ class TestAPI(unittest.TestCase):
         resp = client.post("/store", json=data)
         self.assertIn(resp.status_code, [200, 201])
         self.assertIn("content_chunks", resp.json())
+
+    def test_store_with_complex_metadata(self):
+        """Test store with list and dict metadata"""
+        data = {
+            "summary": "Clinical trial notes for cardiovascular patients",
+            "dataset_title": "Cardio Study 2026",
+            "cid": "test-cid-complex-meta-456",
+            "metadata": {
+                "dataType": "Institution",
+                "disease_tags": ["Cardiology", "Hypertension", "Arrhythmia"],
+                "study_details": {"phase": 3, "blinded": True},
+                "is_active": True,
+                "notes": None
+            },
+            "extracted_content": "Patient vitals recorded regularly.",
+            "file_type": "spreadsheet"
+        }
+        resp = client.post("/store", json=data)
+        self.assertIn(resp.status_code, [200, 201])
+        doc_id = resp.json().get("doc_id")
+        self.assertIsNotNone(doc_id)
+
+        # Verify metadata values were properly flattened/sanitized in ChromaDB
+        stored = metadata_collection.get(ids=[doc_id])
+        stored_meta = stored["metadatas"][0]
+        self.assertEqual(stored_meta["disease_tags"], "Cardiology, Hypertension, Arrhythmia")
+        self.assertEqual(stored_meta["notes"], "")
+        self.assertTrue(stored_meta["is_active"])
+        self.assertEqual(stored_meta["dataType"], "Institution")
 
     def test_search_enhanced(self):
         """Test enhanced search combining content and metadata"""

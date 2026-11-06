@@ -278,6 +278,28 @@ def generate_id() -> str:
     random_suffix = hash(str(uuid.uuid4())) % 10000
     return f"{timestamp}{random_suffix}"
 
+
+def sanitize_chromadb_metadata(raw_metadata: Dict[str, Any]) -> Dict[str, Any]:
+    # chromadb only accepts primitive types (str, int, float, bool)
+    sanitized: Dict[str, Any] = {}
+    for key, value in raw_metadata.items():
+        if value is None:
+            sanitized[key] = ""
+        elif isinstance(value, bool):
+            sanitized[key] = value
+        elif isinstance(value, (str, int, float)):
+            sanitized[key] = value
+        elif isinstance(value, (list, tuple)):
+            if all(isinstance(x, (str, int, float, bool)) for x in value):
+                sanitized[key] = ", ".join(str(x) for x in value)
+            else:
+                sanitized[key] = json.dumps(value)
+        elif isinstance(value, dict):
+            sanitized[key] = json.dumps(value)
+        else:
+            sanitized[key] = str(value)
+    return sanitized
+
 # The former mask_phi_in_image_presidio / mask_phi_in_image_legacy helpers were
 # removed. The legacy one masked only OCR tokens whose exact text matched a
 # spaCy entity and returned the image unchanged otherwise, which is fail-open.
@@ -876,19 +898,19 @@ async def store_data(request: StoreWithContentRequest):
     try:
         doc_id = generate_id()
 
-        # Built from the redacted fields only.
-        combined_metadata = f"Dataset Title: {safe_title}\n{safe_summary}"
-        disease_tags = request.metadata.get("disease_tags", "")
-
-        if disease_tags:
-            combined_metadata += f"\nDisease Tags: {disease_tags}"
-
-        metadata = {
+        metadata = sanitize_chromadb_metadata({
             "cid": request.cid,
             "dataset_title": safe_title,
             "file_type": request.file_type,
             **request.metadata
-        }
+        })
+
+        # Built from the redacted fields only.
+        combined_metadata = f"Dataset Title: {safe_title}\n{safe_summary}"
+        disease_tags = metadata.get("disease_tags", "")
+        if disease_tags:
+            combined_metadata += f"\nDisease Tags: {disease_tags}"
+
         metadata_collection.add(
             ids=[doc_id],
             documents=[combined_metadata],
@@ -959,18 +981,18 @@ async def store_data_enhanced(request: StoreWithContentRequest):
     try:
         doc_id = generate_id()
 
-        # Built from the redacted fields only.
-        combined_metadata = f"Dataset Title: {safe_title}\n{safe_summary}"
-        disease_tags = request.metadata.get("disease_tags", "")
-        if disease_tags:
-            combined_metadata += f"\nDisease Tags: {disease_tags}"
-
-        metadata = {
+        metadata = sanitize_chromadb_metadata({
             "cid": request.cid,
             "dataset_title": safe_title,
             "file_type": request.file_type,
             **request.metadata
-        }
+        })
+
+        # Built from the redacted fields only.
+        combined_metadata = f"Dataset Title: {safe_title}\n{safe_summary}"
+        disease_tags = metadata.get("disease_tags", "")
+        if disease_tags:
+            combined_metadata += f"\nDisease Tags: {disease_tags}"
         
         # Store in metadata collection
         metadata_collection.add(
@@ -1298,9 +1320,9 @@ async def update_document(doc_id: str, request: UpdateRequest):
             updated_metadata.update(request.metadata)
         updated_metadata["dataset_title"] = new_dataset_title
         updated_metadata["owner_address"] = request.owner_address
+        updated_metadata = sanitize_chromadb_metadata(updated_metadata)
         
         combined_document = f"Dataset Title: {new_dataset_title}\n{new_summary}"
-        
         disease_tags = updated_metadata.get("disease_tags")
         if disease_tags:
             combined_document += f"\nDisease Tags: {disease_tags}"
@@ -1310,8 +1332,6 @@ async def update_document(doc_id: str, request: UpdateRequest):
             documents=[combined_document],
             metadatas=[updated_metadata]
         )
-        
-        print(f"Document updated in-place: {doc_id}")
 
         audit_logger.log_operation(
             operation="UPDATE",
