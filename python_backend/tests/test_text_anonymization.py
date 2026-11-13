@@ -7,13 +7,10 @@ import pytest
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Phase 10: identifiers are replaced with consistent study-local surrogates
-# (PATIENT_001, PROVIDER_001, RECORD_001) rather than a single fixed
+# (<PERSON_1>, PROVIDER_001, <RECORD_ID_1>) rather than a single fixed
 # placeholder, so coreference survives. The privacy assertions below are
 # unchanged: the original value must still be absent.
-SURROGATE_RE = re.compile(
-    r"\b(?:PATIENT|PROVIDER|FACILITY|ORG|PLACE|ADDRESS|RECORD|PATIENTID|"
-    r"PLAN|ACCESSION|DEVICE|IDENTIFIER|USER)_\d{3,}"
-)
+SURROGATE_RE = re.compile(r"<[A-Z][A-Z_]*_[1-9][0-9]*>")
 
 
 def surrogate_count(text):
@@ -107,7 +104,7 @@ def test_email_is_redacted():
     )
 
     assert "john.doe@example.com" not in result["anonymized_text"]
-    assert "<REDACTED_EMAIL>" in result["anonymized_text"]
+    assert "<EMAIL_1>" in result["anonymized_text"]
     assert result["detected_entities"]["EMAIL_ADDRESS"] == 1
 
 
@@ -118,7 +115,7 @@ def test_phone_is_redacted():
     )
 
     assert "555-123-4567" not in result["anonymized_text"]
-    assert "<REDACTED_PHONE>" in result["anonymized_text"]
+    assert "<PHONE_1>" in result["anonymized_text"]
     assert result["detected_entities"]["PHONE_NUMBER"] == 1
 
 
@@ -182,7 +179,7 @@ def test_overlapping_email_text_does_not_leave_email_exposed():
     )
 
     assert "john.doe@example.com" not in result["anonymized_text"]
-    assert "<REDACTED_EMAIL>" in result["anonymized_text"]
+    assert "<EMAIL_1>" in result["anonymized_text"]
 
 
 def test_research_profile_shifts_dates_and_removes_patient_context_name():
@@ -227,30 +224,50 @@ class _NoopNerDetector:
 @pytest.mark.parametrize(
     ("text", "raw_value", "entity_type", "replacement"),
     [
-        ("MRN-458921 was verified.", "458921", "MEDICAL_RECORD_NUMBER", "RECORD_001"),
-        ("Patient ID PT-1001 was verified.", "PT-1001", "PATIENT_ID", "PATIENTID_001"),
+        (
+            "MRN-458921 was verified.",
+            "458921",
+            "MEDICAL_RECORD_NUMBER",
+            "<RECORD_ID_1>",
+        ),
+        ("Patient ID PT-1001 was verified.", "PT-1001", "PATIENT_ID", "<RECORD_ID_1>"),
         (
             "Health Plan ID PLAN-998877 was verified.",
             "PLAN-998877",
             "HEALTH_PLAN_ID",
-            "PLAN_001",
+            "<HEALTH_PLAN_ID_1>",
         ),
         (
             "Accession Number ACC-445566 was verified.",
             "ACC-445566",
             "ACCESSION_NUMBER",
-            "ACCESSION_001",
+            "<ACCESSION_ID_1>",
         ),
-        ("Device ID DEV-998877 was verified.", "DEV-998877", "DEVICE_ID", "DEVICE_001"),
+        (
+            "Device ID DEV-998877 was verified.",
+            "DEV-998877",
+            "DEVICE_ID",
+            "<DEVICE_ID_1>",
+        ),
         (
             "Email synthetic.person@example.com was verified.",
             "synthetic.person@example.com",
             "EMAIL_ADDRESS",
-            "<REDACTED_EMAIL>",
+            "<EMAIL_1>",
         ),
-        ("Phone 555-321-7654 was verified.", "555-321-7654", "PHONE_NUMBER", "<REDACTED_PHONE>"),
-        ("SSN 123-45-6789 was verified.", "123-45-6789", "US_SSN", "<REDACTED_SSN>"),
-        ("Visit date 03/08/2026 was verified.", "03/08/2026", "DATE_TIME", "<REDACTED_DATE>"),
+        (
+            "Phone 555-321-7654 was verified.",
+            "555-321-7654",
+            "PHONE_NUMBER",
+            "<PHONE_1>",
+        ),
+        ("SSN 123-45-6789 was verified.", "123-45-6789", "US_SSN", "<SSN_1>"),
+        (
+            "Visit date 03/08/2026 was verified.",
+            "03/08/2026",
+            "DATE_TIME",
+            "<REDACTED_DATE>",
+        ),
     ],
 )
 def test_structured_identifier_redaction_does_not_depend_on_ner(
@@ -277,7 +294,6 @@ def test_structured_identifier_redaction_does_not_depend_on_ner(
     assert replacement in result["anonymized_text"]
     assert result["detected_entities"] == {entity_type: 1}
     assert result["detection_sources"] == {"structured_pattern": 1}
-
 
 
 # ---------------------------------------------------------------------------

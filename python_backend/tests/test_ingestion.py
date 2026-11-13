@@ -313,9 +313,7 @@ class TestIngestionRouting(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 422)
-        self.assertTrue(
-            response.headers["content-type"].startswith("application/json")
-        )
+        self.assertTrue(response.headers["content-type"].startswith("application/json"))
         body = response.json()
         self.assertEqual(body["anonymization_status"], "completed_with_warnings")
         self.assertFalse(body["release_decision"]["releasable"])
@@ -399,8 +397,8 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertNotIn("john.doe@example.com", body["anonymized_text"])
         self.assertEqual(body["date_strategy"], "redact")
         self.assertEqual(body["text_identifier_strategy"], "redact")
-        self.assertRegex(body["anonymized_text"], r"RECORD_\d{3,}")
-        self.assertIn("<REDACTED_EMAIL>", body["anonymized_text"])
+        self.assertRegex(body["anonymized_text"], r"<RECORD_ID_\d+>")
+        self.assertIn("<EMAIL_1>", body["anonymized_text"])
         self.assertIn("diabetes", body["anonymized_text"])
         self.assertEqual(body["detected_entities"]["MEDICAL_RECORD_NUMBER"], 1)
         self.assertEqual(body["detected_entities"]["EMAIL_ADDRESS"], 1)
@@ -425,10 +423,12 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(body["detected_modality"], "text")
         self.assertEqual(body["anonymization_status"], "completed")
         self.assertNotIn("PT-1001", body["anonymized_text"])
-        self.assertRegex(body["anonymized_text"], r"PATIENTID_\d{3,}")
+        self.assertRegex(body["anonymized_text"], r"<RECORD_ID_\d+>")
 
     def test_dicom_extension_routes_to_dicom_handler(self):
-        with patch("services.ingestion.redact_dicom_pixels", fake_dicom_pixel_redaction):
+        with patch(
+            "services.ingestion.redact_dicom_pixels", fake_dicom_pixel_redaction
+        ):
             response = upload_file("scan.dcm", build_dicom_bytes())
         self.assert_completed_metadata_route(response, "dicom", "anonymize_dicom")
         body = response.json()
@@ -437,7 +437,9 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertNotIn("sanitized_dicom_bytes", body)
 
     def test_dicom_octet_stream_routes_by_extension(self):
-        with patch("services.ingestion.redact_dicom_pixels", fake_dicom_pixel_redaction):
+        with patch(
+            "services.ingestion.redact_dicom_pixels", fake_dicom_pixel_redaction
+        ):
             response = upload_file(
                 "scan.dcm",
                 build_dicom_bytes(),
@@ -506,7 +508,9 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertIn("Text uploads must be", response.json()["detail"])
 
     def test_dicom_preamble_detection_routes_to_dicom_handler(self):
-        with patch("services.ingestion.redact_dicom_pixels", fake_dicom_pixel_redaction):
+        with patch(
+            "services.ingestion.redact_dicom_pixels", fake_dicom_pixel_redaction
+        ):
             response = upload_file(
                 "scan.bin",
                 build_dicom_bytes(),
@@ -554,8 +558,8 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertNotIn("Rahul Sharma", serialized)
         self.assertNotIn("Amit Verma", serialized)
         self.assertNotIn("458921", serialized)
-        self.assertRegex(body["anonymized_text"], r"(?:PATIENT|PROVIDER)_\d{3,}")
-        self.assertRegex(body["anonymized_text"], r"RECORD_\d{3,}")
+        self.assertRegex(body["anonymized_text"], r"<(?:PERSON|PROVIDER)_\d+>")
+        self.assertRegex(body["anonymized_text"], r"<RECORD_ID_\d+>")
         self.assertEqual(body["detected_entities"]["PERSON"], 2)
         self.assertEqual(body["detected_entities"]["MEDICAL_RECORD_NUMBER"], 1)
         for raw_span_key in (
@@ -598,7 +602,7 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertNotIn("Kartik", response.text)
-        self.assertRegex(body["anonymized_text"], r"(?:PATIENT|PROVIDER)_\d{3,}")
+        self.assertRegex(body["anonymized_text"], r"<(?:PERSON|PROVIDER)_\d+>")
         self.assertEqual(body["anonymization_status"], "completed")
         self.assertEqual(body["detected_entities"], {"PERSON": 1})
         self.assertEqual(body["detection_sources"], {"strict_proper_noun": 1})
@@ -621,7 +625,9 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertNotIn("anonymized_text", body)
         self.assertNotIn("Synthetic Person", response.text)
         self.assertNotIn("458921", response.text)
-        self.assertTrue(all(value == "blocked" for value in body["downstream"].values()))
+        self.assertTrue(
+            all(value == "blocked" for value in body["downstream"].values())
+        )
 
     def test_safe_harbor_v1_profile_is_accepted_as_canonical_policy(self):
         response = upload_file(
@@ -636,11 +642,11 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(body["privacy_profile"], "safe_harbor_v1")
         self.assertEqual(body["privacy_policy"], "safe_harbor_v1")
         self.assertFalse(body["release_decision"]["releasable"])
-        self.assertIn("non_production_detector_mode", body["release_decision"]["reason_codes"])
+        self.assertIn(
+            "non_production_detector_mode", body["release_decision"]["reason_codes"]
+        )
         self.assertNotIn("Synthetic Person", response.text)
 
 
 if __name__ == "__main__":
     unittest.main()
-
-
