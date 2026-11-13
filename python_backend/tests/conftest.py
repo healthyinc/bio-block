@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from services.local_model_detectors import (  # noqa: E402
     MODE_LEGACY_TEST,
     MODEL_MODE_ENV_VAR,
+    NON_PRODUCTION_ACK_ENV_VAR,
 )
 
 # Ordinary unit tests run against deterministic local doubles and the already
@@ -17,6 +18,7 @@ from services.local_model_detectors import (  # noqa: E402
 # never fetched or loaded here; real-model checks are a separate opt-in command
 # (see tests/test_real_model_evaluation.py and evaluations/real_model_smoke.py).
 os.environ[MODEL_MODE_ENV_VAR] = MODE_LEGACY_TEST
+os.environ[NON_PRODUCTION_ACK_ENV_VAR] = "1"
 
 # Ordinary tests must not acquire weights or use a developer's persistent
 # application index. Real-model checks remain explicitly opt-in below.
@@ -77,4 +79,22 @@ def pytest_configure(config):
         "markers",
         "real_models: opt-in checks that load locally provisioned pinned weights; "
         "skipped unless PHI_RUN_REAL_MODEL_EVAL=1.",
+    )
+
+
+@pytest.fixture
+def simulated_production_detectors(monkeypatch):
+    """Exercise release mechanics as if the pinned models had run.
+
+    Detection is still the lightweight test chain. A test using this shows what
+    the release path does with a verified artifact - storing it, serving it,
+    refusing tampered bytes - not that the models would have found everything.
+    It exists only in tests: nothing a deployment can configure has this effect.
+    """
+    from services import detector_capability
+
+    monkeypatch.setattr(
+        detector_capability,
+        "current_capability",
+        lambda: detector_capability.CAPABILITY_PRODUCTION,
     )

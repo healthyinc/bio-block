@@ -177,6 +177,12 @@ def sanitize_for_index(
             reason_codes=(STATUS_EXPERT_DETERMINATION,),
         )
 
+    from services.detector_capability import release_blocker
+
+    blocker = release_blocker()
+    if blocker is not None:
+        return IndexableText(status=STATUS_BLOCKED, reason_codes=(blocker,))
+
     detected: Dict[str, int] = {}
     residual: Dict[str, int] = {}
     redacted: Dict[str, str] = {}
@@ -279,6 +285,12 @@ def sanitized_preview(
 
     if not file_contents:
         raise ReleaseGateError("Uploaded file is empty", status_code=400)
+
+    from services.detector_capability import release_blocker
+
+    blocker = release_blocker()
+    if blocker is not None:
+        return _blocked_preview(STATUS_BLOCKED, blocker)
 
     extension = _extension(filename)
     mime = (content_type or "").strip().lower()

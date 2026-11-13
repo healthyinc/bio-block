@@ -156,7 +156,7 @@ def test_text_layer_is_scanned_and_redacted():
     page = result["pages"][0]
     assert SYNTHETIC_NAME not in page["anonymized_text"]
     assert SYNTHETIC_SSN not in page["anonymized_text"]
-    assert "<REDACTED_SSN>" in page["anonymized_text"]
+    assert "<SSN_1>" in page["anonymized_text"]
     assert result["detected_entities"].get("US_SSN") == 1
 
 
@@ -356,10 +356,10 @@ def test_release_placeholders_are_masked_without_shifting_offsets():
     assert "REDACTED" not in masked
 
 
-def test_clean_redacted_text_has_no_residual_findings():
+def test_unproven_placeholders_are_not_treated_as_clean_output():
     assert (
         residual_phi_categories("Patient <REDACTED_NAME> called <REDACTED_PHONE>.")
-        == {}
+        != {}
     )
 
 
@@ -401,7 +401,9 @@ def test_residual_phi_blocks_the_text_release(monkeypatch):
     assert "123-45-6789" not in repr(decision)
 
 
-def test_clean_text_still_releases_with_the_residual_validator():
+def test_clean_text_still_releases_with_the_residual_validator(
+    simulated_production_detectors,
+):
     response = route_for_ingestion(
         filename="note.txt",
         content_type="text/plain",

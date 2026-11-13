@@ -1,63 +1,113 @@
-"""Consistent, study-local surrogate identifiers.
+"""Neutral, deterministic, dataset-scoped pseudonyms.
 
-Replacing every name with the same ``<REDACTED_NAME>`` is safe but destroys
+Replacing every name with one fixed placeholder is safe but destroys
 coreference: a reader can no longer tell whether two mentions are the same
-person, and "the patient" versus "the referring physician" collapses into one
-token. Surrogates keep the sentence readable and the document internally
-consistent:
+person. A realistic fake name keeps coreference but can itself look like PHI,
+which confuses the residual scan and every human reviewer. Neutral numbered
+tokens do neither:
 
-    Patient PATIENT_001 was seen by PROVIDER_001 at FACILITY_001.
-    PATIENT_001 will follow up with PROVIDER_001 next week.
+    <PERSON_1> was seen at <FACILITY_1>; call <PHONE_1> if <PERSON_1> worsens.
 
-Three properties matter, and each is a deliberate constraint:
+Four properties are deliberate constraints:
 
-* **Study-local.** An allocator is created per authorized upload bundle and
-  dies with it. Two studies that contain the same person produce unrelated
-  surrogates, so no cross-study linkage is created.
-* **Not derived from the value.** The surrogate is assigned by order of first
-  appearance, never computed from the original text. A hash - salted or not -
-  is a function of the identifier, and an attacker with a candidate list can
-  confirm a guess by recomputing it. Order of appearance carries no such
-  information.
-* **Never persisted.** The mapping lives in memory for the duration of one
-  request. It is not written to logs, reports, manifests, blockchain metadata
-  or any public artifact. ``SurrogateAllocator`` deliberately exposes no
-  method that returns the original values.
+* **Consistent within one dataset.** One allocator belongs to one upload or
+  study - one text, one table, one workbook, one batch. The same value always
+  gets the same token in it; different values get different tokens. Values are
+  compared after normalisation - Unicode form, case, diacritics and titles for
+  names, digits for telephone numbers, letters and digits for identifiers - so
+  formatting does not split one value in two.
+* **Unrelated across datasets.** A new allocator starts again at 1. The same
+  person in two uploads gets tokens with no relationship, so no linkage is
+  created across users or datasets.
+* **Not derived from the value.** Numbers are assigned in order of first
+  appearance, never computed from the value. A hash - salted or not - is a
+  function of the identifier, and anyone with a candidate list could confirm a
+  guess by recomputing it.
+* **Never exposed.** The mapping lives in memory for one request. There is no
+  method that returns it or an original value; only counts leave.
+
+A token already present in the input is reserved before anything is
+allocated, so a genuine ``<PERSON_1>`` in the source is never given to a
+different person. Entity types without a family - dates, times, uncertain
+ages - keep their fixed redaction.
 """
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import re
+import secrets
 import threading
+import unicodedata
 from dataclasses import dataclass, field
-from typing import Dict, Mapping, Optional, Tuple
+from typing import Dict, Mapping, Optional, Set, Tuple
 
-#: Entity type -> surrogate prefix. A type absent from this map has no
-#: meaningful identity to preserve and is handled by fixed redaction instead.
-SURROGATE_PREFIXES: Mapping[str, str] = {
-    "PERSON": "PATIENT",
+#: Entity type -> token family. A type absent from this map has no identity
+#: worth preserving and is handled by fixed redaction instead.
+SURROGATE_FAMILIES: Mapping[str, str] = {
+    "PERSON": "PERSON",
     "PERSON_PROVIDER": "PROVIDER",
     "FACILITY": "FACILITY",
-    "ORGANIZATION": "ORG",
-    "LOCATION": "PLACE",
-    "ADDRESS": "ADDRESS",
-    "MEDICAL_RECORD_NUMBER": "RECORD",
-    "PATIENT_ID": "PATIENTID",
-    "HEALTH_PLAN_ID": "PLAN",
-    "INSURANCE_ID": "PLAN",
-    "ACCESSION_NUMBER": "ACCESSION",
-    "DEVICE_ID": "DEVICE",
-    "IDENTIFIER": "IDENTIFIER",
-    "USERNAME": "USER",
+    "ORGANIZATION": "ORGANIZATION",
+    "LOCATION": "LOCATION",
+    "ADDRESS": "LOCATION",
+    "MEDICAL_RECORD_NUMBER": "RECORD_ID",
+    "PATIENT_ID": "RECORD_ID",
+    "IDENTIFIER": "RECORD_ID",
+    "OTHER_UNIQUE_ID": "RECORD_ID",
+    "HEALTH_PLAN_ID": "HEALTH_PLAN_ID",
+    "INSURANCE_ID": "HEALTH_PLAN_ID",
+    "ACCOUNT_NUMBER": "ACCOUNT_ID",
+    "ACCESSION_NUMBER": "ACCESSION_ID",
+    "DEVICE_ID": "DEVICE_ID",
+    "VEHICLE_ID": "VEHICLE_ID",
+    "LICENSE_NUMBER": "LICENSE_ID",
+    "CERTIFICATE_NUMBER": "CERTIFICATE_ID",
+    "NATIONAL_ID": "NATIONAL_ID",
+    "BIOMETRIC_ID": "BIOMETRIC_ID",
+    "USERNAME": "USERNAME",
+    "PHONE_NUMBER": "PHONE",
+    "FAX_NUMBER": "PHONE",
+    "EMAIL_ADDRESS": "EMAIL",
+    "URL": "URL",
+    "IP_ADDRESS": "IP_ADDRESS",
+    "US_SSN": "SSN",
+    "SSN": "SSN",
+    "AMBIGUOUS_NUMBER": "NUMBER",
 }
 
-#: Matches any surrogate this module can emit, so the residual validator can
-#: mask them out rather than re-detecting our own output as PHI.
-#: No trailing word boundary: two adjacent names produce
-#: "PATIENT_001PATIENT_002", and a trailing boundary would leave both unmasked,
-#: so the residual scan would flag our own output as surviving PHI.
-SURROGATE_PATTERN = re.compile(
-    r"\b(?:" + "|".join(sorted(set(SURROGATE_PREFIXES.values()))) + r")_\d{3,}"
+_FAMILIES = tuple(sorted(set(SURROGATE_FAMILIES.values()), key=lambda f: (-len(f), f)))
+
+#: Every token this module can emit. Angle brackets delimit a token, so two
+#: adjacent tokens ("<PERSON_1><PERSON_2>") are still two matches.
+SURROGATE_PATTERN = re.compile(r"<(" + "|".join(_FAMILIES) + r")_([1-9][0-9]*)>")
+
+#: The study-local surrogates written before neutral tokens. Nothing emits
+#: them any more; they are recognised so text released earlier is still read
+#: as generated output rather than as surviving identifiers.
+LEGACY_SURROGATE_PATTERN = re.compile(
+    r"\b(?:PATIENT|PROVIDER|FACILITY|ORG|PLACE|ADDRESS|RECORD|PATIENTID|PLAN"
+    r"|ACCESSION|DEVICE|IDENTIFIER|USER)_\d{3,}"
+)
+
+_DIGITS_ONLY = frozenset({"PHONE"})
+_CASE_ONLY = frozenset({"EMAIL", "URL", "IP_ADDRESS"})
+_ALPHANUMERIC = frozenset(
+    {
+        "RECORD_ID",
+        "HEALTH_PLAN_ID",
+        "ACCOUNT_ID",
+        "ACCESSION_ID",
+        "DEVICE_ID",
+        "VEHICLE_ID",
+        "LICENSE_ID",
+        "CERTIFICATE_ID",
+        "NATIONAL_ID",
+        "BIOMETRIC_ID",
+        "SSN",
+        "USERNAME",
+    }
 )
 
 #: Titles that identify a person as a care provider rather than the patient.
@@ -95,9 +145,7 @@ def looks_like_provider(text: str, start: int) -> bool:
 
     Uses only evidence present in the text: an immediately preceding title, or
     an explicit "seen by"/"referred by" construction. Absent that evidence the
-    person is treated as the patient, which is the conservative default - a
-    patient surrogate is never mistaken for a provider surrogate in a way that
-    would imply the patient is staff.
+    person is treated as the patient.
     """
     prefix = text[max(0, start - 60) : start]
     if _PROVIDER_CONTEXT.search(prefix):
@@ -108,58 +156,107 @@ def looks_like_provider(text: str, start: int) -> bool:
     return tokens[-1].strip().casefold() in _PROVIDER_TITLES
 
 
-def _normalize(value: str) -> str:
-    """Fold a value so that "Dr. Jane Doe" and "Jane Doe" share a surrogate."""
-    cleaned = re.sub(r"[^\w\s]", " ", value or "").strip().casefold()
-    tokens = [t for t in cleaned.split() if t and t not in _PROVIDER_TITLES]
-    return " ".join(tokens)
+def _fold(value: str) -> str:
+    decomposed = unicodedata.normalize(
+        "NFKD", unicodedata.normalize("NFKC", value or "")
+    )
+    return "".join(ch for ch in decomposed if not unicodedata.combining(ch)).casefold()
+
+
+def normalize_value(entity_type: str, value: str) -> str:
+    """The form two values must share to receive one token. Never logged."""
+    family = SURROGATE_FAMILIES.get(entity_type, entity_type)
+    folded = _fold(value)
+    if family in _DIGITS_ONLY:
+        return "".join(ch for ch in folded if ch.isdigit())
+    if family in _CASE_ONLY:
+        return folded.strip()
+    if family in _ALPHANUMERIC:
+        return "".join(ch for ch in folded if ch.isalnum())
+    cleaned = re.sub(r"[^\w\s]", " ", folded)
+    return " ".join(token for token in cleaned.split() if token not in _PROVIDER_TITLES)
+
+
+def canonical_identity(
+    secret: bytes, family: str, normalized: str, scope: str = "document"
+) -> str:
+    """A typed identity for one semantically classified value: a keyed digest.
+
+    Created only after an occurrence has been classified, so the same digits
+    as a contact and as a laboratory result are different identities (only
+    the contact ever reaches here). The value itself is never a key.
+    """
+    message = "\0".join((family, scope, normalized)).encode("utf-8", "surrogatepass")
+    return hmac.new(secret, message, hashlib.sha256).hexdigest()
 
 
 @dataclass
 class SurrogateAllocator:
-    """Assigns stable surrogates within one study, and nothing beyond it.
+    """Assigns neutral tokens within one dataset, and nothing beyond it."""
 
-    Not thread-shared by design: one allocator belongs to one upload bundle.
-    A lock is held anyway so a single bundle processed concurrently still
-    yields consistent numbering.
-    """
-
-    #: (prefix, normalized value) -> surrogate. In memory only.
-    _assigned: Dict[Tuple[str, str], str] = field(default_factory=dict, repr=False)
-    _counters: Dict[str, int] = field(default_factory=dict, repr=False)
+    #: canonical identity (a job-secret keyed digest) -> token. In memory only;
+    #: no plaintext value is ever a key.
+    _assigned: Dict[str, str] = field(default_factory=dict, repr=False)
+    _families: Dict[str, str] = field(default_factory=dict, repr=False)
+    _secret: bytes = field(default_factory=lambda: secrets.token_bytes(32), repr=False)
+    _next: Dict[str, int] = field(default_factory=dict, repr=False)
+    _reserved: Dict[str, Set[int]] = field(default_factory=dict, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
-    def surrogate_for(self, entity_type: str, value: str) -> Optional[str]:
-        """Return the study-local surrogate for this value, allocating if new.
+    def reserve_existing(self, text: str) -> None:
+        """Keep the numbers of tokens already present in the input out of use."""
+        if not text or "<" not in text:
+            return
+        with self._lock:
+            for match in SURROGATE_PATTERN.finditer(text):
+                self._reserved.setdefault(match.group(1), set()).add(
+                    int(match.group(2))
+                )
 
-        Returns ``None`` when the type has no surrogate form, so the caller
-        falls back to fixed redaction.
+    def surrogate_for(self, entity_type: str, value: str) -> Optional[str]:
+        """The dataset-local token for this value, allocating one if it is new.
+
+        Returns ``None`` when the type has no family, or the value normalises
+        to nothing, so the caller falls back to fixed redaction.
         """
-        prefix = SURROGATE_PREFIXES.get(entity_type)
-        if prefix is None:
+        family = SURROGATE_FAMILIES.get(entity_type)
+        if family is None:
             return None
-        key = (prefix, _normalize(value))
-        if not key[1]:
+        normalized = normalize_value(entity_type, value)
+        if not normalized:
             return None
+        key = canonical_identity(self._secret, family, normalized)
         with self._lock:
             existing = self._assigned.get(key)
             if existing is not None:
                 return existing
-            nxt = self._counters.get(prefix, 0) + 1
-            self._counters[prefix] = nxt
-            surrogate = f"{prefix}_{nxt:03d}"
-            self._assigned[key] = surrogate
-            return surrogate
+            reserved = self._reserved.get(family, ())
+            number = self._next.get(family, 1)
+            while number in reserved:
+                number += 1
+            self._next[family] = number + 1
+            token = f"<{family}_{number}>"
+            self._assigned[key] = token
+            self._families[key] = family
+            return token
 
-    def counts(self) -> Dict[str, int]:
-        """How many distinct entities of each kind were replaced.
+    def emitted(self) -> frozenset:
+        """Every token this allocator actually produced.
 
-        Counts only. There is deliberately no accessor that returns the
-        original values or the mapping itself, so a manifest or log cannot
-        obtain them even by accident.
+        A residual scan that discounts anything token-shaped skips the span
+        an attacker picked when the upload arrives already carrying one.
+        Callers check against this instead.
         """
         with self._lock:
-            return dict(sorted(self._counters.items()))
+            return frozenset(self._assigned.values())
+
+    def counts(self) -> Dict[str, int]:
+        """How many distinct values of each family were replaced. Counts only."""
+        with self._lock:
+            totals: Dict[str, int] = {}
+            for family in self._families.values():
+                totals[family] = totals.get(family, 0) + 1
+            return dict(sorted(totals.items()))
 
     def distinct_entities(self) -> int:
         with self._lock:
@@ -167,3 +264,8 @@ class SurrogateAllocator:
 
     def __repr__(self) -> str:  # pragma: no cover - defensive
         return f"SurrogateAllocator(distinct={self.distinct_entities()})"
+
+
+HASH_SURROGATE_PATTERN = re.compile(
+    r"\b(?:PERSON|MRN|PATIENT_ID|HEALTH_PLAN|ACCESSION|DEVICE)_[0-9A-F]{8}\b"
+)

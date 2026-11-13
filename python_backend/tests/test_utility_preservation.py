@@ -35,10 +35,7 @@ from services.utility_contract import (  # noqa: E402
     contract_for,
 )
 
-SURROGATE_RE = re.compile(
-    r"\b(?:PATIENT|PROVIDER|FACILITY|ORG|PLACE|ADDRESS|RECORD|PATIENTID|PLAN|"
-    r"ACCESSION|DEVICE|IDENTIFIER|USER)_\d{3,}"
-)
+SURROGATE_RE = re.compile(r"<[A-Z][A-Z_]*_[1-9][0-9]*>")
 
 CLINICAL_NOTE = (
     "Patient Rukmini Balasubramanian (MRN: SYN-6610284) was seen by "
@@ -164,8 +161,8 @@ def test_clinician_and_patient_receive_different_surrogate_kinds():
     note = "Patient Cornelius Ashdown was reviewed by Dr. Nandini Sundaresan."
     anonymized = _anonymize(note)["anonymized_text"]
 
-    assert re.search(r"PATIENT_\d{3,}", anonymized), anonymized
-    assert re.search(r"PROVIDER_\d{3,}", anonymized), anonymized
+    assert re.search(r"<PERSON_\d+>", anonymized), anonymized
+    assert re.search(r"<PROVIDER_\d+>", anonymized), anonymized
 
 
 def test_surrogates_are_study_local_and_not_derived_from_the_value():
@@ -179,7 +176,7 @@ def test_surrogates_are_study_local_and_not_derived_from_the_value():
     # Numbering is by first appearance, so the same slot in two studies gives
     # the same token for different people. That is the point: the surrogate
     # carries no information about the value, unlike a hash.
-    assert a == b == "PATIENT_001"
+    assert a == b == "<PERSON_1>"
 
 
 def test_allocator_exposes_counts_but_never_the_mapping():
@@ -187,7 +184,7 @@ def test_allocator_exposes_counts_but_never_the_mapping():
     allocator.surrogate_for("PERSON", "Meenakshi Raghunathan")
     allocator.surrogate_for("PERSON", "Lakshmi Raghunathan")
 
-    assert allocator.counts() == {"PATIENT": 2}
+    assert allocator.counts() == {"PERSON": 2}
     assert allocator.distinct_entities() == 2
     # No accessor returns originals, and repr must not leak them either.
     assert "Meenakshi" not in repr(allocator)
@@ -312,7 +309,7 @@ def test_utility_failure_does_not_claim_successful_completion():
             "routing_status": "handler_selected",
             "anonymization_status": "completed",
             "message": "ok",
-            "anonymized_text": "PATIENT_001 PATIENT_002.",
+            "anonymized_text": "<PERSON_1> <PERSON_2>.",
             "residual_phi_categories": {},
             "review_required_reasons": [],
             "utility_verdict": {
@@ -383,7 +380,7 @@ def test_an_unmeasured_utility_metric_is_a_failure_not_a_pass():
     assert "content_token_preservation" in verdict.missing_metrics
 
 
-def test_clean_note_passes_both_gates_and_releases():
+def test_clean_note_passes_both_gates_and_releases(simulated_production_detectors):
     from services.ingestion import anonymize_text, release_decision_for
 
     result = anonymize_text(CLINICAL_NOTE.encode("utf-8"), "strict", "study-a")
@@ -400,7 +397,7 @@ def test_clean_note_passes_both_gates_and_releases():
 
 def test_utility_measure_ignores_deliberately_removed_phi():
     original = "Patient Jane Doe has diabetes."
-    anonymized = "Patient PATIENT_001 has diabetes."
+    anonymized = "Patient <PERSON_1> has diabetes."
 
     metrics = measure_text_utility(original, anonymized, redacted_values=["Jane Doe"])
 

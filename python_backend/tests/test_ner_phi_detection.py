@@ -7,13 +7,10 @@ import pytest
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Phase 10: identifiers are replaced with consistent study-local surrogates
-# (PATIENT_001, PROVIDER_001, RECORD_001) rather than a single fixed
+# (<PERSON_1>, PROVIDER_001, <RECORD_ID_1>) rather than a single fixed
 # placeholder, so coreference survives. The privacy assertions below are
 # unchanged: the original value must still be absent.
-SURROGATE_RE = re.compile(
-    r"\b(?:PATIENT|PROVIDER|FACILITY|ORG|PLACE|ADDRESS|RECORD|PATIENTID|"
-    r"PLAN|ACCESSION|DEVICE|IDENTIFIER|USER)_\d{3,}"
-)
+SURROGATE_RE = re.compile(r"<[A-Z][A-Z_]*_[1-9][0-9]*>")
 
 
 def surrogate_count(text):
@@ -71,7 +68,7 @@ def test_arbitrary_name_failure_case_is_now_safe():
     )
 
     assert result["anonymized_text"] == (
-        "Patient PATIENT_001 was admitted for treatment."
+        "Patient <PERSON_1> was admitted for treatment."
     )
     assert result["trained_ner_active"] is True
     assert result["ner_model"] == DEFAULT_NER_MODEL
@@ -418,7 +415,7 @@ def _anonymize_with_fake(monkeypatch, text, entities):
     monkeypatch.setattr(
         text_service,
         "_detectors",
-        lambda model_name, profile: (
+        lambda model_name, profile, *_context: (
             StructuredPatternDetector(),
             _FakeNerDetector(entities),
         ),
@@ -482,7 +479,7 @@ def test_adjacent_entities_do_not_corrupt_offsets(monkeypatch):
 
     # Two adjacent names with no separator: each must get its own surrogate,
     # they must differ, and nothing of the originals may remain.
-    assert anonymized == "PATIENT_001PATIENT_002"
+    assert anonymized == "<PERSON_1><PERSON_2>"
     assert "John" not in anonymized and "Sarah" not in anonymized
     assert result["entity_count"] == 2
 

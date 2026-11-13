@@ -36,7 +36,7 @@ def test_research_policy_requires_expert_determination():
     assert decision.artifact_sha256 is None
 
 
-def test_only_safe_harbor_policy_can_issue_release():
+def test_only_safe_harbor_policy_can_issue_release(simulated_production_detectors):
     artifact = SanitizedArtifact(
         content=b"sanitized",
         media_type="text/plain",

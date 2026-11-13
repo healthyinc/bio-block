@@ -36,7 +36,12 @@ DEFAULT_REDACTION_THRESHOLD = 0.0
 DEFAULT_CHUNK_SIZE = 2000
 DEFAULT_CHUNK_OVERLAP = 200
 DEFAULT_BATCH_SIZE = 8
-DEFAULT_INFERENCE_BUDGET_SECONDS = 120.0
+# The whole request remains bounded by ``PHI_REQUEST_DEADLINE_SECONDS``.  This
+# stage limit used to be 120 seconds, which was shorter than the measured
+# 300-second request budget and killed valid, progressing table batches first.
+# Keep a finite per-model limit, but let it use the same measured default as
+# the request unless an operator configures a stricter value.
+DEFAULT_INFERENCE_BUDGET_SECONDS = 300.0
 
 # Weights are hundreds of megabytes; digest them incrementally.
 _CHECKSUM_READ_SIZE = 1024 * 1024
@@ -217,11 +222,24 @@ def calibrated_config_for(detector_name: str) -> DetectorConfig:
         raise LocalModelError("invalid_model_configuration", 500) from exc
 
 
+#: The lightweight test detectors are for tests and evaluations. Selecting them
+#: also requires this acknowledgement; without it the mode is refused like any
+#: invalid configuration, so a stray setting cannot swap the pinned models out
+#: of a deployment. Even acknowledged, they can never authorise a release
+#: (see ``services.detector_capability``).
+NON_PRODUCTION_ACK_ENV_VAR = "PHI_ALLOW_NON_PRODUCTION_DETECTORS"
+
+
 def resolve_model_mode() -> str:
-    """Return the validated model mode; unknown values fail closed."""
+    """Return the validated model mode; unknown or unacknowledged values fail closed."""
     mode = os.getenv(MODEL_MODE_ENV_VAR, DEFAULT_MODEL_MODE).strip()
     if mode not in SUPPORTED_MODEL_MODES:
         raise LocalModelError("invalid_model_configuration", 500)
+    if (
+        mode == MODE_LEGACY_TEST
+        and os.getenv(NON_PRODUCTION_ACK_ENV_VAR, "").strip() != "1"
+    ):
+        raise LocalModelError("non_production_detector_mode_not_permitted", 503)
     return mode
 
 
@@ -381,9 +399,45 @@ def _offline_snapshot(spec: ModelSpec) -> str:
     return snapshot
 
 
+#: Where the worker placed the neural models; set once, before loading, by the
+#: worker's device selection (services.model_device). CPU unless told otherwise.
+_MODEL_DEVICE = "cpu"
+
+
+def set_model_device(device: str) -> None:
+    """Choose the device for the next load. Only the worker calls this."""
+    global _MODEL_DEVICE
+    if device not in ("cpu", "cuda"):
+        raise LocalModelError("invalid_model_device", 500)
+    if device != _MODEL_DEVICE:
+        load_stanford_pipeline.cache_clear()
+        load_gliner_model.cache_clear()
+    _MODEL_DEVICE = device
+
+
+def model_device() -> str:
+    return _MODEL_DEVICE
+
+
+def _inference_context():
+    """``torch.inference_mode`` when torch is here; nothing to do otherwise."""
+    try:
+        import torch
+
+        return torch.inference_mode()
+    except ImportError:
+        from contextlib import nullcontext
+
+        return nullcontext()
+
+
 @lru_cache(maxsize=1)
 def load_stanford_pipeline() -> Any:
-    """Load the clinical de-identifier once per worker, offline only."""
+    """Load the clinical de-identifier once per worker, offline only.
+
+    Weights load on the CPU exactly as before; the pipeline then places the
+    whole model on the selected device, in FP32.
+    """
     spec = load_model_manifest()["stanford_deidentifier"]
     snapshot = _offline_snapshot(spec)
     try:
@@ -403,7 +457,7 @@ def load_stanford_pipeline() -> Any:
             model=model,
             tokenizer=tokenizer,
             aggregation_strategy="simple",
-            device=-1,
+            device=-1 if _MODEL_DEVICE == "cpu" else "cuda:0",
         )
     except Exception as exc:
         raise LocalModelError("stanford_model_unavailable") from exc
@@ -426,7 +480,12 @@ def load_gliner_model() -> Any:
     try:
         from gliner import GLiNER
 
-        return GLiNER.from_pretrained(snapshot, local_files_only=True)
+        model = GLiNER.from_pretrained(snapshot, local_files_only=True)
+        if _MODEL_DEVICE != "cpu":
+            # The pinned GLiNER moves every batch to its parameters' device.
+            model.to(_MODEL_DEVICE)
+        model.eval()
+        return model
     except Exception as exc:
         raise LocalModelError("gliner_model_unavailable") from exc
 
@@ -475,30 +534,109 @@ def _batches(items: Sequence[Any], batch_size: int) -> List[Sequence[Any]]:
     ]
 
 
+class _OomBackoff:
+    """Bounded retries of one batch at half the size after a CUDA out-of-memory.
+
+    A batch is split in two and each half run on its own, down to the
+    configured minimum and within a retry budget shared by the whole call.
+    Nothing is committed until every text of the call has an answer, so a
+    retry can never duplicate or reorder output; running out of retries is
+    an error the caller cannot release through.
+    """
+
+    def __init__(self) -> None:
+        from services import model_device
+
+        self.retries = 0
+        self.max_retries = model_device.max_oom_retries()
+        self.minimum = model_device.min_batch_size()
+
+    def run(self, runner, texts: List[str], failure_code: str):
+        from services import model_device
+
+        try:
+            return runner(texts)
+        except LocalModelError:
+            raise
+        except Exception as exc:
+            if not model_device.is_out_of_memory(exc):
+                raise LocalModelError(failure_code, 500) from exc
+            # Frees this attempt's activations before the smaller retry.
+            del exc
+            model_device.release_cuda_cache()
+            _record_oom(len(texts))
+            half = len(texts) // 2
+            if half < self.minimum or self.retries >= self.max_retries:
+                raise LocalModelError(model_device.ERROR_CUDA_OOM, 503) from None
+            self.retries += 1
+            return [
+                *self.run(runner, texts[:half], failure_code),
+                *self.run(runner, texts[half:], failure_code),
+            ]
+
+
+#: Out-of-memory events seen by this process, for the worker's diagnostics.
+OOM_EVENTS: List[Dict[str, int]] = []
+
+
+def _record_oom(batch_texts: int) -> None:
+    """Sizes only: how many texts the failed batch held, and the memory state."""
+    entry = {"batch_texts": int(batch_texts)}
+    try:
+        import torch
+
+        entry["allocated"] = int(torch.cuda.memory_allocated())
+        entry["reserved"] = int(torch.cuda.memory_reserved())
+    except Exception:
+        pass
+    OOM_EVENTS.append(entry)
+    del OOM_EVENTS[:-32]
+
+
 def _run_batched(
     chunks: Sequence[Tuple[int, str]],
     config: DetectorConfig,
     runner: Callable[[List[str]], Sequence[Sequence[Mapping[str, Any]]]],
     failure_code: str,
 ) -> List[Sequence[Mapping[str, Any]]]:
-    """Run inference batch by batch under a wall-clock budget, failing closed."""
-    deadline = time.monotonic() + config.inference_budget_seconds
-    predictions: List[Sequence[Mapping[str, Any]]] = []
-    for batch in _batches(list(chunks), config.batch_size):
+    """Run inference batch by batch under a wall-clock budget, failing closed.
+
+    The per-call budget is now a *sub-limit*: whichever of it and the time
+    left in the whole request expires first wins. It used to start fresh on
+    every call, which let four detector calls in one request each spend the
+    full budget.
+    """
+    from services.request_deadline import budget_for
+
+    budget = budget_for("model_inference", config.inference_budget_seconds)
+    deadline = time.monotonic() + (
+        config.inference_budget_seconds if budget is None else budget
+    )
+    # Identical windows are inferred once. A document that repeats a header,
+    # a footer or a boilerplate paragraph produces windows that are the same
+    # string, and a model asked the same question twice returns the same
+    # answer: the predictions are offsets *within* the window, so a window's
+    # result is valid wherever that window sits in the document. This changes
+    # what is asked, never what comes back.
+    distinct: Dict[str, int] = {}
+    order: List[str] = []
+    for _offset, chunk in chunks:
+        if chunk not in distinct:
+            distinct[chunk] = len(order)
+            order.append(chunk)
+
+    answers: List[Sequence[Mapping[str, Any]]] = []
+    backoff = _OomBackoff()
+    for batch in _batches(order, config.batch_size):
         if time.monotonic() > deadline:
             raise LocalModelError("model_inference_timeout")
-        try:
-            batch_predictions = runner([chunk for _, chunk in batch])
-        except LocalModelError:
-            raise
-        except Exception as exc:
-            raise LocalModelError(failure_code, 500) from exc
+        batch_predictions = backoff.run(runner, list(batch), failure_code)
         if len(batch_predictions) != len(batch):
             raise LocalModelError("model_output_malformed", 500)
-        predictions.extend(batch_predictions)
+        answers.extend(batch_predictions)
         if time.monotonic() > deadline:
             raise LocalModelError("model_inference_timeout")
-    return predictions
+    return [answers[distinct[chunk]] for _offset, chunk in chunks]
 
 
 class _ChunkedModelDetector:
@@ -544,7 +682,8 @@ class StanfordClinicalDetector(_ChunkedModelDetector):
 
     def _infer(self, texts: List[str]) -> Sequence[Sequence[Mapping[str, Any]]]:
         pipeline = load_stanford_pipeline()
-        results = pipeline(texts, batch_size=self.config.batch_size)
+        with _inference_context():
+            results = pipeline(texts, batch_size=self.config.batch_size)
         if results and isinstance(results[0], Mapping):
             # A single-input call can return one flat list of predictions.
             return [results]
@@ -559,12 +698,13 @@ class GlinerPiiDetector(_ChunkedModelDetector):
     def _infer(self, texts: List[str]) -> Sequence[Sequence[Mapping[str, Any]]]:
         model = load_gliner_model()
         if hasattr(model, "batch_predict_entities"):
-            return model.batch_predict_entities(
-                texts,
-                list(GLINER_REQUESTED_LABELS),
-                threshold=self.config.candidate_threshold,
-                batch_size=self.config.batch_size,
-            )
+            with _inference_context():
+                return model.batch_predict_entities(
+                    texts,
+                    list(GLINER_REQUESTED_LABELS),
+                    threshold=self.config.candidate_threshold,
+                    batch_size=self.config.batch_size,
+                )
         return [
             model.predict_entities(
                 chunk,
