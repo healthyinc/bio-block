@@ -11,6 +11,7 @@ from services.text_anonymization import (
     detect_clinical_phi,
 )
 
+
 UNKNOWN_VALUE = "UNKNOWN"
 
 CATEGORY_LABELS = {
@@ -36,57 +37,20 @@ CATEGORY_LABELS = {
 
 CATEGORY_ALIASES = {
     1: {
-        "name",
-        "full_name",
-        "patient_name",
-        "first",
-        "first_name",
-        "last",
-        "last_name",
-        "maiden",
-        "maiden_name",
-        "prefix",
-        "suffix",
-        "relative_name",
-        "employer_name",
-        "provider_name",
-        "physician_name",
-        "household_member_name",
-        "guardian_name",
+        "name", "full_name", "patient_name", "first", "first_name",
+        "last", "last_name", "maiden", "maiden_name", "prefix", "suffix",
+        "relative_name", "employer_name", "provider_name", "physician_name",
+        "household_member_name", "guardian_name",
     },
     2: {
-        "address",
-        "street",
-        "street_address",
-        "city",
-        "county",
-        "precinct",
-        "zip",
-        "zip_code",
-        "postal_code",
-        "lat",
-        "latitude",
-        "lon",
-        "longitude",
-        "geocode",
-        "geo_code",
-        "birthplace",
-        "birth_place",
+        "address", "street", "street_address", "city", "county", "precinct",
+        "zip", "zip_code", "postal_code", "lat", "latitude", "lon",
+        "longitude", "geocode", "geo_code", "birthplace", "birth_place",
     },
     3: {
-        "date",
-        "birthdate",
-        "birth_date",
-        "dob",
-        "admission_date",
-        "admit_date",
-        "discharge_date",
-        "service_date",
-        "procedure_date",
-        "diagnosis_date",
-        "deathdate",
-        "death_date",
-        "dod",
+        "date", "birthdate", "birth_date", "dob", "admission_date",
+        "admit_date", "discharge_date", "service_date", "procedure_date",
+        "diagnosis_date", "deathdate", "death_date", "dod",
     },
     4: {"age", "patient_age", "age_years"},
     5: {"phone", "phone_number", "telephone", "telephone_number", "mobile"},
@@ -95,107 +59,48 @@ CATEGORY_ALIASES = {
     8: {"ssn", "social_security_number"},
     9: {"mrn", "medical_record_number", "chart_number", "hospital_number"},
     10: {
-        "health_plan_id",
-        "health_plan_number",
-        "beneficiary_number",
-        "beneficiary_id",
-        "insurance_id",
-        "member_id",
-        "subscriber_id",
+        "health_plan_id", "health_plan_number", "beneficiary_number",
+        "beneficiary_id", "insurance_id", "member_id", "subscriber_id",
         "policy_number",
     },
     11: {"account", "account_number", "billing_account", "claim_account"},
     12: {
-        "certificate_number",
-        "licence_number",
-        "license_number",
-        "drivers",
-        "driver_license",
-        "drivers_license",
-        "professional_license",
+        "certificate_number", "licence_number", "license_number", "drivers",
+        "driver_license", "drivers_license", "professional_license",
     },
     13: {
-        "vehicle_id",
-        "vehicle_identifier",
-        "vin",
-        "vehicle_serial_number",
-        "license_plate",
-        "licence_plate",
-        "plate_number",
+        "vehicle_id", "vehicle_identifier", "vin", "vehicle_serial_number",
+        "license_plate", "licence_plate", "plate_number",
     },
     14: {
-        "device_id",
-        "device_identifier",
-        "device_serial_number",
-        "serial_number",
-        "implant_id",
-        "udi",
+        "device_id", "device_identifier", "device_serial_number",
+        "serial_number", "implant_id", "udi",
     },
     15: {"url", "website", "web_address"},
     16: {"ip", "ip_address", "ipv4", "ipv6"},
     17: {
-        "biometric",
-        "biometric_id",
-        "fingerprint",
-        "fingerprint_id",
-        "voiceprint",
-        "voiceprint_id",
-        "retina_scan",
-        "iris_scan",
+        "biometric", "biometric_id", "fingerprint", "fingerprint_id",
+        "voiceprint", "voiceprint_id", "retina_scan", "iris_scan",
     },
     18: {
-        "id",
-        "patient_id",
-        "unique_id",
-        "uuid",
-        "hash",
-        "patient_hash",
-        "source_system_id",
-        "encounter_id",
-        "claim_id",
-        "accession_id",
-        "token",
-        "photo",
-        "photograph",
-        "face_photo",
-        "full_face_photo",
-        "image",
-        "image_reference",
-        "binary",
-        "blob",
+        "id", "patient_id", "unique_id", "uuid", "hash", "patient_hash",
+        "source_system_id", "encounter_id", "claim_id", "accession_id",
+        "token", "photo", "photograph", "face_photo", "full_face_photo",
+        "image", "image_reference", "binary", "blob",
     },
 }
 
 FREE_TEXT_COLUMN_NAMES = {
-    "note",
-    "notes",
-    "comment",
-    "comments",
-    "description",
-    "narrative",
-    "text",
-    "free_text",
-    "reason",
-    "summary",
+    "note", "notes", "comment", "comments", "description", "narrative",
+    "text", "free_text", "reason", "summary",
 }
 
 BIRTH_DATE_COLUMN_NAMES = {"birthdate", "birth_date", "dob"}
 
 KNOWN_ANALYTICAL_COLUMNS = {
-    "gender",
-    "sex",
-    "race",
-    "ethnicity",
-    "marital",
-    "marital_status",
-    "state",
-    "diagnosis",
-    "disease",
-    "condition",
-    "outcome",
-    "lab_result",
-    "healthcare_expenses",
-    "healthcare_coverage",
+    "gender", "sex", "race", "ethnicity", "marital", "marital_status",
+    "state", "diagnosis", "disease", "condition", "outcome", "lab_result",
+    "healthcare_expenses", "healthcare_coverage",
 }
 
 TEXT_ENTITY_CATEGORIES = {
@@ -239,90 +144,29 @@ class SafeHarborPreparation:
 
 
 DATE_FORMATS = (
-    "%Y-%m-%d",
-    "%Y/%m/%d",
-    "%m/%d/%Y",
-    "%m/%d/%y",
-    "%d-%m-%Y",
-    "%Y%m%d",
-    "%Y-%m",
-    "%Y",
+    "%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%m/%d/%y", "%d-%m-%Y",
+    "%Y%m%d", "%Y-%m", "%Y",
 )
 
 PATTERN_CATEGORY_RULES = (
-    (
-        6,
-        re.compile(
-            r"\bfax\s*[:#-]?\s*(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}\b",
-            re.I,
-        ),
-    ),
+    (6, re.compile(r"\bfax\s*[:#-]?\s*(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}\b", re.I)),
     (7, re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.I)),
     (8, re.compile(r"\b\d{3}-\d{2}-\d{4}\b")),
     (15, re.compile(r"\b(?:https?://|www\.)\S+", re.I)),
-    (
-        16,
-        re.compile(
-            r"\b(?:\d{1,3}\.){3}\d{1,3}\b|\b[0-9A-F]{1,4}(?::[0-9A-F]{0,4}){2,7}\b",
-            re.I,
-        ),
-    ),
-    (
-        5,
-        re.compile(
-            r"(?<!\w)(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}(?!\w)"
-        ),
-    ),
+    (16, re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b|\b[0-9A-F]{1,4}(?::[0-9A-F]{0,4}){2,7}\b", re.I)),
+    (5, re.compile(r"(?<!\w)(?:\+?1[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}(?!\w)")),
     (9, re.compile(r"\b(?:MRN|chart|hospital)\s*[:#-]?\s*[A-Z0-9-]{4,}\b", re.I)),
-    (
-        10,
-        re.compile(
-            r"\b(?:member|beneficiary|subscriber|policy|insurance)\s*(?:id|number)?\s*[:#-]?\s*[A-Z0-9-]{5,}\b",
-            re.I,
-        ),
-    ),
+    (10, re.compile(r"\b(?:member|beneficiary|subscriber|policy|insurance)\s*(?:id|number)?\s*[:#-]?\s*[A-Z0-9-]{5,}\b", re.I)),
     (11, re.compile(r"\baccount\s*(?:id|number)?\s*[:#-]?\s*[A-Z0-9-]{4,}\b", re.I)),
-    (
-        12,
-        re.compile(
-            r"\b(?:licen[cs]e|certificate)\s*(?:id|number)?\s*[:#-]?\s*[A-Z0-9-]{4,}\b",
-            re.I,
-        ),
-    ),
-    (
-        13,
-        re.compile(
-            r"\b(?:VIN|vehicle|plate)\s*[:#-]?\s*[A-HJ-NPR-Z0-9-]{5,17}\b", re.I
-        ),
-    ),
-    (
-        14,
-        re.compile(r"\b(?:device|implant|serial|UDI)\s*[:#-]?\s*[A-Z0-9-]{5,}\b", re.I),
-    ),
-    (
-        17,
-        re.compile(
-            r"\b(?:fingerprint|voiceprint|retina|iris|biometric)\s*[:#-]?\s*[A-Z0-9+/=-]{4,}\b",
-            re.I,
-        ),
-    ),
-    (
-        18,
-        re.compile(
-            r"\b[0-9A-F]{8}-[0-9A-F]{4}-[1-5][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}\b",
-            re.I,
-        ),
-    ),
+    (12, re.compile(r"\b(?:licen[cs]e|certificate)\s*(?:id|number)?\s*[:#-]?\s*[A-Z0-9-]{4,}\b", re.I)),
+    (13, re.compile(r"\b(?:VIN|vehicle|plate)\s*[:#-]?\s*[A-HJ-NPR-Z0-9-]{5,17}\b", re.I)),
+    (14, re.compile(r"\b(?:device|implant|serial|UDI)\s*[:#-]?\s*[A-Z0-9-]{5,}\b", re.I)),
+    (17, re.compile(r"\b(?:fingerprint|voiceprint|retina|iris|biometric)\s*[:#-]?\s*[A-Z0-9+/=-]{4,}\b", re.I)),
+    (18, re.compile(r"\b[0-9A-F]{8}-[0-9A-F]{4}-[1-5][0-9A-F]{3}-[89AB][0-9A-F]{3}-[0-9A-F]{12}\b", re.I)),
     (18, re.compile(r"\b[0-9A-F]{16,128}\b", re.I)),
     (18, re.compile(r"(?:data:image/|\.(?:jpe?g|png|gif|bmp|tiff?)\b)", re.I)),
     (3, re.compile(r"\b(?:\d{4}-\d{2}-\d{2}|\d{1,2}/\d{1,2}/\d{2,4})\b")),
-    (
-        2,
-        re.compile(
-            r"\b\d{1,6}\s+[A-Z0-9.' -]+\s(?:street|st|avenue|ave|road|rd|lane|ln|drive|dr|boulevard|blvd)\b",
-            re.I,
-        ),
-    ),
+    (2, re.compile(r"\b\d{1,6}\s+[A-Z0-9.' -]+\s(?:street|st|avenue|ave|road|rd|lane|ln|drive|dr|boulevard|blvd)\b", re.I)),
     (2, re.compile(r"\b\d{5}(?:-\d{4})?\b")),
 )
 
@@ -388,15 +232,14 @@ def _looks_like_unknown_unique_code(column: str, values: Sequence[str]) -> bool:
     known = [value for value in values if value != UNKNOWN_VALUE]
     if len(known) < 3:
         return False
-    if re.search(
-        r"(?:^|_)(?:id|identifier|code|hash|uuid|token|key|number)$", normalized
-    ):
+    if re.search(r"(?:^|_)(?:id|identifier|code|hash|uuid|token|key|number)$", normalized):
         return True
     unique_ratio = len(set(known)) / len(known)
     if all(_parse_number(value) is not None for value in known):
         return unique_ratio >= 0.9
     code_like = all(
-        len(value) <= 128 and not re.search(r"\s", value) for value in known
+        len(value) <= 128 and not re.search(r"\s", value)
+        for value in known
     )
     return unique_ratio >= 0.9 and code_like
 
@@ -405,9 +248,12 @@ def _looks_like_person_name_values(values: Sequence[str]) -> bool:
     known = [value for value in values if value != UNKNOWN_VALUE]
     if len(known) < 2:
         return False
-    name_pattern = re.compile(r"^[A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+){1,3}$")
-    return len(set(known)) / len(known) >= 0.8 and all(
-        name_pattern.fullmatch(value) for value in known
+    name_pattern = re.compile(
+        r"^[A-Z][A-Za-z'-]+(?:\s+[A-Z][A-Za-z'-]+){1,3}$"
+    )
+    return (
+        len(set(known)) / len(known) >= 0.8
+        and all(name_pattern.fullmatch(value) for value in known)
     )
 
 
@@ -419,8 +265,14 @@ def prepare_safe_harbor_rows(
     reviewed_columns: Optional[Sequence[str]] = None,
 ) -> SafeHarborPreparation:
     rows = [dict(record) for record in records]
-    normalized_columns = {normalize_column_name(column): column for column in header}
-    column_categories: Dict[str, Set[int]] = {column: set() for column in header}
+    normalized_columns = {
+        normalize_column_name(column): column
+        for column in header
+    }
+    column_categories: Dict[str, Set[int]] = {
+        column: set()
+        for column in header
+    }
 
     for column in header:
         normalized = normalize_column_name(column)
@@ -451,12 +303,14 @@ def prepare_safe_harbor_rows(
             column_categories[actual].add(18)
 
     values_by_column = {
-        column: [row.get(column, UNKNOWN_VALUE) for row in rows] for column in header
+        column: [row.get(column, UNKNOWN_VALUE) for row in rows]
+        for column in header
     }
     reviewed_column_set = {
         actual
         for column in reviewed_columns or []
-        if (actual := normalized_columns.get(normalize_column_name(column))) is not None
+        if (actual := normalized_columns.get(normalize_column_name(column)))
+        is not None
     }
     for column, values in values_by_column.items():
         for value in values:
@@ -465,7 +319,9 @@ def prepare_safe_harbor_rows(
         if not column_categories[column] and _looks_like_person_name_values(values):
             column_categories[column].add(1)
 
-    date_columns = [column for column in header if 3 in column_categories[column]]
+    date_columns = [
+        column for column in header if 3 in column_categories[column]
+    ]
     current_year = datetime.utcnow().year
     related_birth_date_columns = [
         column
@@ -484,7 +340,10 @@ def prepare_safe_harbor_rows(
         column
         for column in header
         if normalize_column_name(column) in CATEGORY_ALIASES[4]
-        or (4 in column_categories[column] and 3 not in column_categories[column])
+        or (
+            4 in column_categories[column]
+            and 3 not in column_categories[column]
+        )
     ]
     for column in age_columns:
         has_age_over_89 = any(
@@ -495,7 +354,9 @@ def prepare_safe_harbor_rows(
         if not has_age_over_89:
             column_categories[column].discard(4)
     columns_to_remove: Set[str] = {
-        column for column in header if column_categories[column].difference({3, 4})
+        column
+        for column in header
+        if column_categories[column].difference({3, 4})
     }
 
     free_text_status = "passed"
@@ -592,7 +453,9 @@ def prepare_safe_harbor_rows(
         column for column in header if column in columns_to_remove
     ]
     detected_categories = {
-        category for categories in column_categories.values() for category in categories
+        category
+        for categories in column_categories.values()
+        for category in categories
     }
     removed_categories = {
         category
@@ -617,7 +480,9 @@ def prepare_safe_harbor_rows(
             f"{unknown_unique_columns} unknown high-cardinality code column(s) were removed."
         )
 
-    unique_code_status = "passed_with_removals" if unknown_unique_columns else "passed"
+    unique_code_status = (
+        "passed_with_removals" if unknown_unique_columns else "passed"
+    )
     return SafeHarborPreparation(
         rows=rows,
         columns_to_remove=ordered_columns_to_remove,
@@ -686,7 +551,9 @@ def build_safe_harbor_report(
 
     warnings = list(preparation.warnings)
     validation_status = (
-        "failed" if unresolved else "passed_with_warnings" if warnings else "passed"
+        "failed"
+        if unresolved
+        else "passed_with_warnings" if warnings else "passed"
     )
 
     return {
@@ -699,7 +566,9 @@ def build_safe_harbor_report(
         ),
         "unresolved_identifier_categories": _category_labels(unresolved),
         "date_compliance_status": "failed" if exact_date_found else "passed",
-        "age_over_89_status": ("failed" if exact_age_over_89_found else "passed"),
+        "age_over_89_status": (
+            "failed" if exact_age_over_89_found else "passed"
+        ),
         "geographic_compliance_status": (
             "failed" if prohibited_geography_remains else "passed"
         ),
@@ -711,4 +580,7 @@ def build_safe_harbor_report(
 
 
 def _category_labels(categories: Set[int]) -> List[str]:
-    return [CATEGORY_LABELS[category] for category in sorted(categories)]
+    return [
+        CATEGORY_LABELS[category]
+        for category in sorted(categories)
+    ]
