@@ -485,6 +485,68 @@ def test_store_blocks_on_metadata_phi(api_client):
     assert SYNTHETIC_EMAIL not in response.text
 
 
+@pytest.mark.parametrize(
+    "route, value",
+    [
+        ("/store", ["Cardiology", f"contact {SYNTHETIC_EMAIL}"]),
+        ("/store", {"lead": f"reach {SYNTHETIC_EMAIL}"}),
+        ("/store_enhanced", ["Cardiology", f"contact {SYNTHETIC_EMAIL}"]),
+        ("/store_enhanced", {"lead": f"reach {SYNTHETIC_EMAIL}"}),
+    ],
+)
+def test_store_blocks_on_phi_nested_in_list_or_dict_metadata(api_client, route, value):
+    response = api_client.post(
+        route,
+        json={
+            "summary": "Aggregate outcomes.",
+            "dataset_title": "Cohort N",
+            "cid": f"test-cid-gate-nested-{route.strip('/')}",
+            "metadata": {"disease_tags": value},
+            "extracted_content": "Counts only.",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "metadata.disease_tags" in response.json()["detail"]["blocked_fields"]
+    assert SYNTHETIC_EMAIL not in response.text
+
+
+def test_update_blocks_on_phi_nested_in_list_metadata(api_client):
+    from eth_account import Account
+    from eth_account.messages import encode_defunct
+
+    owner = Account.create()
+    stored = api_client.post(
+        "/store",
+        json={
+            "summary": "Aggregate outcomes.",
+            "dataset_title": "Cohort U",
+            "cid": "test-cid-gate-update",
+            "metadata": {"owner_address": owner.address},
+            "extracted_content": "Counts only.",
+        },
+    )
+    assert stored.status_code == 200
+    doc_id = stored.json()["doc_id"]
+
+    message = f"update {doc_id}"
+    signature = owner.sign_message(encode_defunct(text=message)).signature
+    response = api_client.put(
+        f"/documents/{doc_id}",
+        json={
+            "metadata": {"disease_tags": ["cardiology", f"contact {SYNTHETIC_EMAIL}"]},
+            "owner_address": owner.address,
+            "signature": "0x" + bytes(signature).hex(),
+            "message": message,
+        },
+    )
+
+    assert response.status_code == 422
+    after = api_client.get(f"/documents/{doc_id}")
+    assert after.status_code == 200
+    assert SYNTHETIC_EMAIL not in after.text
+
+
 def test_store_enhanced_is_gated_the_same_way(api_client):
     response = api_client.post(
         "/store_enhanced",

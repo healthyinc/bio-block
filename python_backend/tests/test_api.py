@@ -78,7 +78,8 @@ class TestAPI(unittest.TestCase):
             "cid": "test-cid-complex-meta-456",
             "metadata": {
                 "dataType": "Institution",
-                "disease_tags": ["Cardiology", "Hypertension", "Arrhythmia"],
+                # lowercase, the test spacy model tags "Hypertension" as a person
+                "disease_tags": ["cardiology", "hypertension", "arrhythmia"],
                 "study_details": {"phase": 3, "blinded": True},
                 "is_active": True,
                 "notes": None
@@ -94,7 +95,8 @@ class TestAPI(unittest.TestCase):
         # Verify metadata values were properly flattened/sanitized in ChromaDB
         stored = metadata_collection.get(ids=[doc_id])
         stored_meta = stored["metadatas"][0]
-        self.assertEqual(stored_meta["disease_tags"], "Cardiology, Hypertension, Arrhythmia")
+        self.assertEqual(stored_meta["disease_tags"], "cardiology, hypertension, arrhythmia")
+        self.assertEqual(stored_meta["study_details"], '{"phase": 3, "blinded": true}')
         self.assertEqual(stored_meta["notes"], "")
         self.assertTrue(stored_meta["is_active"])
         self.assertEqual(stored_meta["dataType"], "Institution")

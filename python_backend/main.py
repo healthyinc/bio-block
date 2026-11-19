@@ -861,6 +861,8 @@ def _gate_store_request(request: StoreWithContentRequest):
     Client-supplied content used to be indexed verbatim, so an upload the
     ingest route blocked could be posted here and become searchable.
     """
+    # gate only scans strings, so flatten first or lists/dicts skip the phi check
+    flat_metadata = sanitize_chromadb_metadata(request.metadata or {})
     try:
         gate = sanitize_for_index(
             {
@@ -868,7 +870,7 @@ def _gate_store_request(request: StoreWithContentRequest):
                 "summary": request.summary,
                 "extracted_content": request.extracted_content or "",
             },
-            metadata=request.metadata or {},
+            metadata=flat_metadata,
         )
     except ReleaseGateError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
@@ -882,7 +884,7 @@ def _gate_store_request(request: StoreWithContentRequest):
             ),
         )
         raise HTTPException(status_code=422, detail=gate.safe_summary())
-    return gate
+    return gate, flat_metadata
 
 
 @app.post("/store")
@@ -890,7 +892,7 @@ async def store_data(request: StoreWithContentRequest):
     """
     Store document data with metadata and content vectors
     """
-    gate = _gate_store_request(request)
+    gate, flat_metadata = _gate_store_request(request)
     safe_title = gate.fields["dataset_title"]
     safe_summary = gate.fields["summary"]
     safe_content = gate.fields["extracted_content"]
@@ -898,12 +900,12 @@ async def store_data(request: StoreWithContentRequest):
     try:
         doc_id = generate_id()
 
-        metadata = sanitize_chromadb_metadata({
+        metadata = {
             "cid": request.cid,
             "dataset_title": safe_title,
             "file_type": request.file_type,
-            **request.metadata
-        })
+            **flat_metadata,
+        }
 
         # Built from the redacted fields only.
         combined_metadata = f"Dataset Title: {safe_title}\n{safe_summary}"
@@ -973,7 +975,7 @@ async def store_data_enhanced(request: StoreWithContentRequest):
     """
     Enhanced storage with both metadata and content vectors
     """
-    gate = _gate_store_request(request)
+    gate, flat_metadata = _gate_store_request(request)
     safe_title = gate.fields["dataset_title"]
     safe_summary = gate.fields["summary"]
     safe_content = gate.fields["extracted_content"]
@@ -981,12 +983,12 @@ async def store_data_enhanced(request: StoreWithContentRequest):
     try:
         doc_id = generate_id()
 
-        metadata = sanitize_chromadb_metadata({
+        metadata = {
             "cid": request.cid,
             "dataset_title": safe_title,
             "file_type": request.file_type,
-            **request.metadata
-        })
+            **flat_metadata,
+        }
 
         # Built from the redacted fields only.
         combined_metadata = f"Dataset Title: {safe_title}\n{safe_summary}"
@@ -1289,6 +1291,8 @@ async def update_document(doc_id: str, request: UpdateRequest):
         # An update writes into the same searchable index a store does, so it
         # goes through the same gate. Only the caller-supplied fields are
         # re-sanitized; already-stored text was gated when it was written.
+        # same as store: flatten before the gate so lists/dicts get scanned
+        flat_metadata = sanitize_chromadb_metadata(request.metadata or {})
         if request.dataset_title or request.summary or request.metadata:
             try:
                 gate = sanitize_for_index(
@@ -1296,7 +1300,7 @@ async def update_document(doc_id: str, request: UpdateRequest):
                         "dataset_title": request.dataset_title or "",
                         "summary": request.summary or "",
                     },
-                    metadata=request.metadata or {},
+                    metadata=flat_metadata,
                 )
             except ReleaseGateError as exc:
                 raise HTTPException(
@@ -1317,7 +1321,7 @@ async def update_document(doc_id: str, request: UpdateRequest):
 
         updated_metadata = {**old_metadata}
         if request.metadata:
-            updated_metadata.update(request.metadata)
+            updated_metadata.update(flat_metadata)
         updated_metadata["dataset_title"] = new_dataset_title
         updated_metadata["owner_address"] = request.owner_address
         updated_metadata = sanitize_chromadb_metadata(updated_metadata)
