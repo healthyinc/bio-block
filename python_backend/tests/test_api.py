@@ -1,4 +1,5 @@
 import unittest
+import pytest
 from fastapi.testclient import TestClient
 import sys
 import os
@@ -16,6 +17,7 @@ class TestAPI(unittest.TestCase):
         resp = client.get("/")
         self.assertEqual(resp.status_code, 200)
 
+    @pytest.mark.usefixtures("simulated_production_detectors")
     def test_store(self):
         data = {
             "summary": "test", 
@@ -56,6 +58,7 @@ class TestAPI(unittest.TestCase):
             # Let's check the response code.
             print(f"Response status: {resp.status_code}") 
 
+    @pytest.mark.usefixtures("simulated_production_detectors")
     def test_store_with_content(self):
         """Test enhanced store with extracted content"""
         data = {
@@ -83,6 +86,7 @@ class TestAPI(unittest.TestCase):
         self.assertIn("results", resp.json())
         self.assertIn("search_config", resp.json())
 
+    @pytest.mark.usefixtures("simulated_production_detectors")
     def test_store_backward_compatibility(self):
         """Test that old store format still works"""
         data = {

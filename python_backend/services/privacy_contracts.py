@@ -89,6 +89,13 @@ def issue_release(
     artifact: SanitizedArtifact,
     reason_code: str = "safe_harbor_validation_passed",
 ) -> ReleaseDecision:
+    # A verified artifact cannot release when its detector runtime is unavailable
+    # or explicitly configured with non-production test detectors.
+    from services.detector_capability import release_blocker
+
+    blocker = release_blocker()
+    if blocker is not None:
+        return manual_review_decision(blocker)
     return ReleaseDecision(
         policy=PrivacyPolicy.SAFE_HARBOR_V1,
         disposition=ReleaseDisposition.RELEASABLE,

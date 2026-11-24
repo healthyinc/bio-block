@@ -192,8 +192,8 @@ def test_api_route_uses_consistent_surrogates(offline_worker_api):
     body = _ingest(offline_worker_api, repeated).json()
     anonymized = body["anonymized_text"]
 
-    patients = set(re.findall(r"PATIENT_\d{3,}", anonymized))
-    providers = set(re.findall(r"PROVIDER_\d{3,}", anonymized))
+    patients = set(re.findall(r"<PERSON_\d+>", anonymized))
+    providers = set(re.findall(r"<PROVIDER_\d+>", anonymized))
 
     # One patient mentioned twice keeps one surrogate; the clinician is a
     # different person and gets a different one.

@@ -408,10 +408,10 @@ class TestIngestionRouting(unittest.TestCase):
         self.assertEqual(body["detection_sources"], {"structured_pattern": 2})
         self.assertEqual(body["ner_model"], "en_core_web_sm")
         self.assertTrue(body["trained_ner_active"])
-        self.assertEqual(body["downstream"]["ipfs_chunking"], "pending")
-        self.assertEqual(body["downstream"]["cid_encryption"], "pending")
-        self.assertEqual(body["downstream"]["metadata_indexing"], "pending")
-        self.assertEqual(body["downstream"]["blockchain_transaction"], "pending")
+        self.assertEqual(body["downstream"]["ipfs_chunking"], "blocked")
+        self.assertEqual(body["downstream"]["cid_encryption"], "blocked")
+        self.assertEqual(body["downstream"]["metadata_indexing"], "blocked")
+        self.assertEqual(body["downstream"]["blockchain_transaction"], "blocked")
 
     def test_text_routes_by_extension_despite_mime_mismatch(self):
         response = upload_file(
@@ -635,7 +635,8 @@ class TestIngestionRouting(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["privacy_profile"], "safe_harbor_v1")
         self.assertEqual(body["privacy_policy"], "safe_harbor_v1")
-        self.assertTrue(body["release_decision"]["releasable"])
+        self.assertFalse(body["release_decision"]["releasable"])
+        self.assertIn("non_production_detector_mode", body["release_decision"]["reason_codes"])
         self.assertNotIn("Synthetic Person", response.text)
 
 

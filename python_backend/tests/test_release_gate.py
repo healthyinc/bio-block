@@ -13,6 +13,11 @@ from io import BytesIO
 
 import numpy as np
 import pytest
+
+# These tests isolate sanitizer mechanics; real capability holds are exercised
+# separately in test_worker_release_capability.py.
+pytestmark = pytest.mark.usefixtures("simulated_production_detectors")
+
 from PIL import Image
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

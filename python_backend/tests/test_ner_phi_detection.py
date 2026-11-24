@@ -418,7 +418,7 @@ def _anonymize_with_fake(monkeypatch, text, entities):
     monkeypatch.setattr(
         text_service,
         "_detectors",
-        lambda model_name, profile: (
+        lambda model_name, profile, *_context: (
             StructuredPatternDetector(),
             _FakeNerDetector(entities),
         ),

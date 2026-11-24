@@ -30,21 +30,25 @@ from services.model_client import ModelWorkerClient  # noqa: E402
 
 #: A stand-in worker. `behaviour` decides how it misbehaves after the banner.
 FAKE_WORKER = textwrap.dedent("""
-    import json, sys, time
+    import json, os, sys, time
 
     behaviour = sys.argv[1]
+    GEN = int(os.environ.get("BIOBLOCK_WORKER_GENERATION", "0"))
+
+    def say(message):
+        sys.stdout.write(json.dumps({"v": 2, "gen": GEN, **message}) + "\\n")
+        sys.stdout.flush()
 
     if behaviour == "no_banner":
         time.sleep(30)
         sys.exit(0)
     if behaviour == "banner_error":
-        sys.stdout.write(json.dumps({"ready": False, "error_code": "model_checksum_mismatch"}) + "\\n")
-        sys.stdout.flush()
+        say({"id": 0, "ready": False, "error_code": "model_checksum_mismatch"})
         time.sleep(30)
         sys.exit(0)
 
-    sys.stdout.write(json.dumps({"ready": True, "models": ["fake"]}) + "\\n")
-    sys.stdout.flush()
+    say({"id": 0, "ready": True, "models": ["fake"], "pid": os.getpid(), "load_count": 1})
+    served = 0
 
     for line in sys.stdin:
         try:
@@ -54,8 +58,26 @@ FAKE_WORKER = textwrap.dedent("""
         op = request.get("op")
         if op == "shutdown":
             sys.exit(0)
+        served += 1
+        if behaviour == "stderr_trace":
+            # A traceback quoting the note: only its class may ever be counted.
+            sys.stderr.write("Traceback (most recent call last):\\n")
+            sys.stderr.write('  File "worker.py", line 9, in detect\\n')
+            sys.stderr.write("ValueError: note mentions Oswin Treadgold 0161 555 0144\\n")
+            sys.stderr.flush()
         if behaviour == "hang":
             time.sleep(30)
+            continue
+        if behaviour == "slow_first" and served == 1:
+            # Answers the first request late, after its caller gave up.
+            time.sleep(3)
+        if behaviour == "wrong_id":
+            say({"id": "someone-else", "ok": True, "entities": []})
+            continue
+        if behaviour == "wrong_gen":
+            sys.stdout.write(json.dumps({"v": 2, "gen": GEN + 7, "id": request.get("id"),
+                                         "ok": True, "entities": []}) + "\\n")
+            sys.stdout.flush()
             continue
         if behaviour == "crash":
             sys.exit(9)
@@ -64,20 +86,34 @@ FAKE_WORKER = textwrap.dedent("""
             sys.stdout.flush()
             continue
         if behaviour == "error":
-            sys.stdout.write(json.dumps({"id": request.get("id"), "ok": False, "error_code": "inference_failed"}) + "\\n")
-            sys.stdout.flush()
+            say({"id": request.get("id"), "ok": False, "error_code": "inference_failed"})
+            continue
+        if behaviour == "raw_error":
+            say({"id": request.get("id"), "ok": False, "error_code": "Patient Private MRN 123"})
+            continue
+        if behaviour == "missing_entities":
+            say({"id": request.get("id"), "ok": True})
+            continue
+        if behaviour == "bad_entities":
+            say({"id": request.get("id"), "ok": True, "entities": {}})
+            continue
+        if behaviour == "invalid_id":
+            say({"id": {}, "ok": True, "entities": []})
             continue
         if behaviour == "slow_once":
             time.sleep(2)
-        sys.stdout.write(json.dumps({
+        if request.get("op") == "ping":
+            say({"id": request.get("id"), "ok": True, "ready": True, "pid": os.getpid(),
+                 "load_count": 1})
+            continue
+        say({
             "id": request.get("id"),
             "ok": True,
             "entities": [{
-                "entity_type": "PERSON", "start": 0, "end": 4,
-                "source": "fake_detector", "score": 0.9,
+                "entity_type": "PERSON", "start": len(request.get("text", "")) % 3,
+                "end": min(4, len(request.get("text", ""))), "source": "fake_detector", "score": 0.9,
             }],
-        }) + "\\n")
-        sys.stdout.flush()
+        })
     """).strip()
 
 
@@ -180,18 +216,44 @@ def test_timeout_blocks_and_does_not_return_an_empty_finding_list(
         client.stop()
 
 
-def test_a_wedged_worker_is_killed_rather_than_left_desynchronised(
-    fake_worker, monkeypatch
-):
-    """Half a response left in the pipe would corrupt every later request."""
+def test_worker_timeout_uses_the_bounded_configured_model_budget(monkeypatch):
     from services import model_client as module
 
-    monkeypatch.setattr(module, "REQUEST_TIMEOUT_SECONDS", 2.0)
+    monkeypatch.setenv("PHI_MODEL_TIMEOUT_SECONDS", "420")
+    assert module.request_timeout_seconds() == 420.0
+
+    for invalid in ("0", "1801", "not-a-number"):
+        monkeypatch.setenv("PHI_MODEL_TIMEOUT_SECONDS", invalid)
+        with pytest.raises(LocalModelError) as caught:
+            module.request_timeout_seconds()
+        assert caught.value.error_code == "invalid_model_configuration"
+
+
+def test_a_wedged_worker_is_replaced_once_after_its_grace_period(
+    fake_worker, monkeypatch
+):
+    """Unanswered past its limit and the grace: one controlled replacement."""
+    import time
+
+    from services import model_client as module
+
+    monkeypatch.setattr(module, "REQUEST_TIMEOUT_SECONDS", 1.0)
+    monkeypatch.setenv(module.GRACE_ENV_VAR, "0.5")
     client = fake_worker("hang")
     try:
-        with pytest.raises(LocalModelError):
+        client.start()
+        first = client.status()["generation"]
+        with pytest.raises(LocalModelError) as caught:
             client.detect("fake", "Synthetic note text.")
-        assert client.is_ready() is False
+        assert caught.value.error_code == "model_worker_timeout"
+        waited = time.monotonic()
+        while client.status()["restarts"] == 0 and time.monotonic() - waited < 20:
+            time.sleep(0.1)
+        time.sleep(1.0)
+        status = client.status()
+        assert status["restarts"] == 1
+        assert status["generation"] > first
+        assert client.is_ready() is True  # the successor started and is ready
     finally:
         client.stop()
 
@@ -301,7 +363,16 @@ def test_worker_responses_carry_codes_not_text():
     worker._load_error = "model_files_unavailable"
 
     note = "Patient Rukmini Balasubramanian has MRN SYN-6610284."
-    response = worker.handle({"id": 1, "op": "detect", "detector": "x", "text": note})
+    response = worker.handle(
+        {
+            "v": 2,
+            "gen": worker.generation,
+            "id": 1,
+            "op": "detect",
+            "detector": "x",
+            "text": note,
+        }
+    )
 
     serialized = json.dumps(response)
     assert response["ok"] is False
@@ -310,12 +381,249 @@ def test_worker_responses_carry_codes_not_text():
     assert response["error_code"] == "model_files_unavailable"
 
 
-def test_client_never_inherits_the_worker_stderr_stream():
-    """stderr is discarded, so a traceback quoting the note cannot surface."""
-    from services import model_client
+def test_worker_stderr_reaches_the_client_only_as_error_class_counts(fake_worker):
+    """A traceback quoting the note is drained and reduced to class names:
+    no message, path or value is kept, and the stream never blocks the worker."""
+    import time as _time
 
-    source = model_client.__file__
-    with open(source, encoding="utf-8") as handle:
-        text = handle.read()
+    client = fake_worker("stderr_trace")
+    try:
+        client.start()
+        client.detect("fake", "abc")
+        deadline = _time.monotonic() + 5
+        while (
+            not client.status().get("worker_diagnostics")
+            and _time.monotonic() < deadline
+        ):
+            _time.sleep(0.05)
+        diagnostics = client.status().get("worker_diagnostics")
+        assert diagnostics == {"ValueError": 1}
+        assert "Treadgold" not in repr(client.status())
+    finally:
+        client.stop()
 
-    assert "stderr=subprocess.DEVNULL" in text
+
+def test_a_nearly_spent_deadline_is_a_deadline_error_and_sends_nothing(fake_worker):
+    from services import request_deadline
+
+    client = fake_worker("ok")
+    try:
+        client.start()
+        before = client.status()["detect_requests"]
+        request_deadline.start(1.0)
+        try:
+            with pytest.raises(LocalModelError) as caught:
+                client.detect("fake", "abc")
+        finally:
+            request_deadline.clear()
+        assert caught.value.error_code == "request_deadline_exceeded"
+        status = client.status()
+        assert status["restarts"] == 0 and status.get("deadline_refusals") == 1
+        assert status["detect_requests"] == before + 1 and client.is_ready()
+    finally:
+        client.stop()
+
+
+def test_a_caller_deadline_never_gets_a_healthy_worker_replaced(
+    fake_worker, monkeypatch
+):
+    """The caller's deadline runs out while the worker is merely busy: the
+    caller gets a deadline error, and the watchdog - judging the worker by
+    the model budget, not the caller's clock - leaves the process alone."""
+    import time as _time
+
+    from services import model_client as module
+    from services import request_deadline
+
+    monkeypatch.setattr(module, "REQUEST_TIMEOUT_SECONDS", 20.0)
+    monkeypatch.setattr(module, "WATCHDOG_INTERVAL_SECONDS", 0.2)
+    monkeypatch.setenv(module.GRACE_ENV_VAR, "1")
+    client = fake_worker("slow_first")
+    try:
+        client.start()
+        pid = client.runtime["pid"]
+        request_deadline.start(2.5)
+        try:
+            with pytest.raises(LocalModelError) as caught:
+                client.detect("fake", "abc")
+        finally:
+            request_deadline.clear()
+        assert caught.value.error_code == "request_deadline_exceeded"
+        _time.sleep(2.0)
+        assert client.status()["restarts"] == 0 and client.ping()["pid"] == pid
+    finally:
+        client.stop()
+
+
+# ---------------------------------------------------------------------------
+# Protocol v2: correlation by id, abandonment, generations
+# ---------------------------------------------------------------------------
+
+
+def test_an_abandoned_request_does_not_kill_a_healthy_worker_or_answer_the_next(
+    fake_worker, monkeypatch
+):
+    """The caller gives up; the worker was only busy. Its late answer is
+    dropped by id, and the next request gets its own answer from the same
+    process."""
+    from services import model_client as module
+
+    monkeypatch.setattr(module, "REQUEST_TIMEOUT_SECONDS", 1.0)
+    client = fake_worker("slow_first")
+    try:
+        client.start()
+        pid = client.runtime["pid"]
+        with pytest.raises(LocalModelError) as caught:
+            client.detect("fake", "abc")
+        assert caught.value.error_code == "model_worker_timeout"
+        assert client.is_ready() is True
+
+        monkeypatch.setattr(module, "REQUEST_TIMEOUT_SECONDS", 10.0)
+        entities = client.detect("fake", "abcd")  # len % 3 == 1: its own answer
+
+        assert entities[0].start == 1
+        status = client.status()
+        assert status["late_discarded"] == 1 and status["abandoned"] == 1
+        assert status["restarts"] == 0 and client.ping()["pid"] == pid
+    finally:
+        client.stop()
+
+
+def test_an_answer_for_another_request_fails_closed_and_replaces_the_worker(
+    fake_worker,
+):
+    client = fake_worker("wrong_id")
+    try:
+        with pytest.raises(LocalModelError) as caught:
+            client.detect("fake", "Synthetic note text.")
+        assert caught.value.error_code == "model_response_id_mismatch"
+    finally:
+        client.stop()
+
+
+def test_an_answer_from_another_generation_fails_closed(fake_worker):
+    client = fake_worker("wrong_gen")
+    try:
+        with pytest.raises(LocalModelError) as caught:
+            client.detect("fake", "Synthetic note text.")
+        assert caught.value.error_code == "model_worker_generation_mismatch"
+    finally:
+        client.stop()
+
+
+def test_concurrent_restart_requests_start_one_worker(fake_worker):
+    client = fake_worker("ok")
+    try:
+        threads = [threading.Thread(target=client.start) for _ in range(5)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=60)
+        assert client.status()["starts"] == 1
+
+        generation = client.status()["generation"]
+        replacers = [
+            threading.Thread(
+                target=client._replace, args=(generation, "model_worker_unresponsive")
+            )
+            for _ in range(5)
+        ]
+        for thread in replacers:
+            thread.start()
+        for thread in replacers:
+            thread.join(timeout=60)
+        status = client.status()
+        assert status["restarts"] == 1 and status["starts"] == 2
+        assert client.is_ready()
+    finally:
+        client.stop()
+
+
+def test_waiting_callers_are_bounded(fake_worker, monkeypatch):
+    from services import model_client as module
+
+    monkeypatch.setattr(module, "MAX_PENDING_REQUESTS", 1)
+    monkeypatch.setattr(module, "REQUEST_TIMEOUT_SECONDS", 5.0)
+    client = fake_worker("slow_once")
+    errors = []
+
+    def run():
+        try:
+            client.detect("fake", "Synthetic note text.")
+        except LocalModelError as exc:
+            errors.append(exc.error_code)
+
+    try:
+        client.start()
+        threads = [threading.Thread(target=run) for _ in range(3)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=60)
+        assert module.ERROR_WORKER_BUSY in errors
+    finally:
+        client.stop()
+
+
+def test_a_crash_fails_the_request_in_flight_with_its_own_code(fake_worker):
+    client = fake_worker("crash")
+    try:
+        with pytest.raises(LocalModelError) as caught:
+            client.detect("fake", "Synthetic note text.")
+        assert caught.value.error_code == "model_worker_crashed"
+    finally:
+        client.stop()
+
+
+def test_the_worker_refuses_another_generation_or_protocol():
+    from services import model_worker
+
+    worker = model_worker._Worker()
+    wrong_gen = worker.handle(
+        {"v": 2, "gen": worker.generation + 1, "id": 5, "op": "ping"}
+    )
+    old_protocol = worker.handle({"id": 6, "op": "ping"})
+
+    assert wrong_gen == {
+        "id": 5,
+        "ok": False,
+        "error_code": "worker_generation_mismatch",
+    }
+    assert old_protocol["error_code"] == "protocol_version_mismatch"
+
+
+@pytest.mark.parametrize(
+    "behaviour,code",
+    [
+        ("missing_entities", "model_output_malformed"),
+        ("bad_entities", "model_output_malformed"),
+        ("invalid_id", "model_response_invalid_id"),
+        ("raw_error", "model_worker_error"),
+    ],
+)
+def test_invalid_success_or_error_payloads_fail_closed(fake_worker, behaviour, code):
+    client = fake_worker(behaviour)
+    try:
+        client.start()
+        with pytest.raises(LocalModelError) as raised:
+            client.detect("fake", "Patient Private MRN 123")
+        assert raised.value.error_code == code
+        assert "Private" not in str(raised.value)
+    finally:
+        client.stop()
+
+
+def test_protocol_failure_revokes_readiness_before_supervisor_runs(monkeypatch):
+    from types import SimpleNamespace
+
+    client = ModelWorkerClient()
+    client._generation = 7
+    client._ready = True
+    client._process = SimpleNamespace(poll=lambda: None)
+    # Deliberately leave replacement unscheduled: readiness cannot depend on
+    # how quickly a background thread gets CPU time.
+    monkeypatch.setattr(client, "_replace", lambda *args: None)
+    assert client.is_ready()
+    assert client._protocol_failure(7, "model_response_malformed") is False
+    assert not client.is_ready()
+    client._process = None

@@ -401,7 +401,7 @@ def test_residual_phi_blocks_the_text_release(monkeypatch):
     assert "123-45-6789" not in repr(decision)
 
 
-def test_clean_text_still_releases_with_the_residual_validator():
+def test_clean_text_still_releases_with_the_residual_validator(simulated_production_detectors):
     response = route_for_ingestion(
         filename="note.txt",
         content_type="text/plain",

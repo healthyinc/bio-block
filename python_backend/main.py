@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, Dict, Any, List
 import chromadb
 import logging
+from contextlib import asynccontextmanager
 import time
 import uuid
 import os
@@ -29,6 +30,23 @@ from eth_account import Account
 # endpoint: they return raw or raw-rendered pixels. Previews go through
 # services/release_gate.sanitized_preview instead.
 from services.audit_logger import AuditLogger
+from services.model_lifecycle import (
+    prewarm as _prewarm_models,
+    shutdown as _shutdown_models,
+    state as _model_state,
+)
+from services.request_deadline import (
+    DeadlineConfigurationError,
+    RequestDeadlineExceeded,
+    clear as _deadline_clear,
+    start as _deadline_start,
+)
+from services.latency_metrics import (
+    finish_request as _timed_finish,
+    size_bucket as _timed_size_bucket,
+    stage as _timed_stage,
+    start_request as _timed_start,
+)
 from services.ingestion import (
     HEADER_READ_LIMIT,
     TABULAR_SUMMARY_KEYS,
@@ -112,7 +130,22 @@ except ImportError:
     print("Warning: Presidio libraries not found. Advanced image anonymization will not work.")
     print("Install with: pip install presidio_analyzer presidio_anonymizer presidio_image_redactor")
 
-app = FastAPI()
+@asynccontextmanager
+async def _model_lifespan(_app: FastAPI):
+    """Load and warm the models before the service reports itself ready.
+
+    Cost is moved, not removed: startup now pays what the first upload used
+    to. Requests continue to fail closed while readiness is false, and the
+    worker is stopped on the way out so no subprocess outlives the app.
+    """
+    _prewarm_models()
+    try:
+        yield
+    finally:
+        _shutdown_models()
+
+
+app = FastAPI(lifespan=_model_lifespan)
 logger = logging.getLogger(__name__)
 
 app.add_middleware(
@@ -122,6 +155,62 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class RequestDeadlineMiddleware:
+    """Start the one request deadline, and clear it when the request ends.
+
+    Pure ASGI rather than ``BaseHTTPMiddleware`` on purpose: the deadline
+    lives in a ContextVar, and this form runs in the same context as the
+    endpoint, including the threadpool a sync endpoint is dispatched to.
+
+    The value comes from server configuration only. Nothing in the request -
+    header, form field, query parameter - can set, extend or disable it.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        try:
+            _deadline_start()
+        except DeadlineConfigurationError:
+            # Misconfiguration is a server fault, and running without a
+            # deadline is exactly the state this phase exists to remove.
+            response = JSONResponse(
+                status_code=503,
+                content={"error_code": "invalid_request_deadline"},
+            )
+            await response(scope, receive, send)
+            return
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _deadline_clear()
+
+
+@app.exception_handler(RequestDeadlineExceeded)
+async def _handle_request_deadline(_request, exc: RequestDeadlineExceeded):
+    """A request that ran out of time returns a status, never a partial result.
+
+    Nothing here is derived from the document: no text, no entity values, no
+    filename. ``stage`` is a fixed pipeline label, safe to return because it
+    names code rather than content.
+    """
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error_code": exc.error_code,
+            "stage": exc.stage,
+            "anonymization_status": "privacy_requirements_not_met",
+        },
+    )
+
+
+app.add_middleware(RequestDeadlineMiddleware)
 
 chroma_client = chromadb.PersistentClient(path="./chroma_db")
 collection = chroma_client.get_or_create_collection(name="new_user_data")
@@ -311,6 +400,37 @@ async def root():
         }
     }
 
+from time import perf_counter_ns as _perf_counter_ns
+
+#: Recent request timings, kept in memory for the benchmark hook only. Never
+#: served to a normal client and never written to the response body.
+_LAST_REQUEST_TIMINGS = []
+_MAX_RETAINED_TIMINGS = 200
+
+
+def latest_request_timings():
+    """Timing records for recent requests. Benchmark hook, not an endpoint."""
+    return list(_LAST_REQUEST_TIMINGS)
+
+
+@app.get("/api/v1/health/live")
+def liveness_probe():
+    """Liveness: the process is up. Says nothing about the models."""
+    return {"status": "alive"}
+
+
+@app.get("/api/v1/health/ready")
+def readiness_probe():
+    """Readiness: the models are verified, loaded and warmed.
+
+    Reports a state and an error *code* only - never a path, a hash or raw
+    exception text.
+    """
+    state = _model_state()
+    payload = state.to_public_dict()
+    return JSONResponse(status_code=200 if state.is_ready() else 503, content=payload)
+
+
 @app.post("/api/v1/ingest")
 async def ingest_file(
     file: UploadFile = File(...),
@@ -322,10 +442,15 @@ async def ingest_file(
     Applies the selected privacy profile across supported production handlers.
     Supported profiles are strict and research.
     """
+    _timings = _timed_start()
+    _started_ns = _perf_counter_ns()
     try:
-        header = await file.read(HEADER_READ_LIMIT)
-        if not header:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+        with _timed_stage("api.receive_validate"):
+            header = await file.read(HEADER_READ_LIMIT)
+            if not header:
+                raise HTTPException(
+                    status_code=400, detail="Uploaded file is empty"
+                )
 
         text_content = None
         try:
@@ -347,10 +472,15 @@ async def ingest_file(
 
         file_content = None
         if modality in {"csv", "pdf", "dicom", "nifti", "wsi"}:
-            await file.seek(0)
-            file_content = await file.read()
+            with _timed_stage("api.read_body"):
+                await file.seek(0)
+                file_content = await file.read()
 
         await file.seek(0)
+        if _timings is not None:
+            _timings.size_bucket = _timed_size_bucket(
+                len(text_content or file_content or header or b"")
+            )
 
         return route_for_ingestion(
             filename=file.filename,
@@ -364,8 +494,19 @@ async def ingest_file(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
     except HTTPException:
         raise
+    except RequestDeadlineExceeded:
+        # Re-raised so the deadline handler answers, rather than the generic
+        # 500 below flattening it. Either way no artifact is produced; this
+        # keeps the reason accurate.
+        raise
     except Exception:
         raise HTTPException(status_code=500, detail="Failed to route uploaded file")
+    finally:
+        if _timings is not None:
+            _timings.record("api.total", 0, _perf_counter_ns() - _started_ns)
+            _LAST_REQUEST_TIMINGS.append(_timings)
+            del _LAST_REQUEST_TIMINGS[:-_MAX_RETAINED_TIMINGS]
+            _timed_finish()
 
 SUPPORTED_IMAGE_MEDIA_TYPES = {"image/jpeg", "image/jpg", "image/png"}
 
@@ -382,6 +523,15 @@ def _validate_image_upload(file: UploadFile) -> None:
 
 def _raster_redaction_response(outcome, filename: str, prefix: str):
     """Stream bytes only for a verified redaction; otherwise report a block."""
+    from services.detector_capability import release_blocker
+
+    blocker = release_blocker()
+    if blocker is not None:
+        return JSONResponse(
+            status_code=422,
+            content={"anonymization_status": "manual_review_required",
+                     "reason_codes": [blocker]},
+        )
     if not outcome.released:
         audit_logger.log_operation(
             operation="ANONYMIZE",
@@ -513,6 +663,8 @@ async def anonymize_text(request: AnonymizeTextRequest):
         return result
 
     except HTTPException:
+        raise
+    except RequestDeadlineExceeded:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to anonymize text: {str(e)}")
