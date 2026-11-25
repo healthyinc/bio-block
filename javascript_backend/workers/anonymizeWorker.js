@@ -29,6 +29,13 @@ const phiKeywords = [
   "name",
 ];
 
+// HIPAA Safe Harbor identifiers matched as whole words,
+// so "city" never matches "ethnicity" and "age" never matches "percentage"
+const safeHarborMaskWords = /\b(zip|zipcode|postal|city|county|fax)\b/;
+const dateWord = /\bdate\b/;
+const ageWord = /\bage\b/;
+const toWords = (lower) => lower.replace(/[_-]+/g, " ");
+
 // Regex patterns to detect PHI in cell content (not just headers)
 const PHI_CONTENT_PATTERNS = {
   SSN: /\b\d{3}-\d{2}-\d{4}\b/,
@@ -143,6 +150,8 @@ parentPort.on("message", (workerData) => {
       if (sheetColumnRefs[name]) {
         const { pidCol, useUUID } = sheetColumnRefs[name];
         const maskCols = [];
+        const dateCols = [];
+        const ageCols = [];
 
         headers.forEach((h, i) => {
           if (typeof h !== "string") return;
@@ -151,7 +160,10 @@ parentPort.on("message", (workerData) => {
           const isPhi = phiKeywords.some(
             (k) => lower.includes(k) || lower.replace(/\s+/g, "").includes(k.replace(/\s+/g, ""))
           );
-          if (isPid || isPhi) maskCols.push(i);
+          const words = toWords(lower);
+          if (isPid || isPhi || safeHarborMaskWords.test(words)) maskCols.push(i);
+          else if (dateWord.test(words)) dateCols.push(i);
+          else if (ageWord.test(words)) ageCols.push(i);
         });
 
         if (useUUID) {
@@ -187,6 +199,22 @@ parentPort.on("message", (workerData) => {
           }
         }
 
+        // Safe Harbor: dates keep only the year, ages over 89 become "90+"
+        for (let i = 1; i < cleanData.length; i++) {
+          const row = cleanData[i];
+          if (!row) continue;
+          dateCols.forEach((c) => {
+            if (row[c] instanceof Date) {
+              // Round to the minute: in some time zones SheetJS returns 23:59:59 on the previous day
+              const rounded = new Date(Math.round(row[c].getTime() / 60000) * 60000);
+              row[c] = String(rounded.getFullYear());
+            }
+          });
+          ageCols.forEach((c) => {
+            const age = typeof row[c] === "number" ? row[c] : Number(String(row[c] ?? "").trim());
+            if (Number.isFinite(age) && age > 89) row[c] = "90+";
+          });
+        }
         // Cell-level content scanning: detect PHI patterns in non-header cells
         // that were NOT already caught by header-based detection
         const maskColSet = new Set(maskCols);
