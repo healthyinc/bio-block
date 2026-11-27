@@ -182,7 +182,71 @@ describe("PHI Detection in Anonymization", function () {
       });
     });
   });
+  // ------------------------------------------------------------------
+  // Safe Harbor identifiers that the keyword list misses
+  // ------------------------------------------------------------------
+  describe("Safe Harbor location and contact columns", function () {
+    const locationHeaders = ["ZIP Code", "Zip", "Postal Code", "City", "County", "Fax"];
 
+    locationHeaders.forEach((header) => {
+      it(`should anonymize column "${header}"`, async function () {
+        const data = [[header], ["value_one"], ["value_two"]];
+        const output = await anonymizeAndParse(createXlsxBuffer(data));
+
+        for (let i = 1; i < output.length; i++) {
+          expect(String(output[i][0])).to.match(WID_PATTERN, `"${header}" should be masked`);
+        }
+      });
+    });
+  });
+
+  describe("Safe Harbor dates", function () {
+    const dateHeaders = ["Admission Date", "Discharge Date", "Date of Death"];
+
+    dateHeaders.forEach((header) => {
+      it(`should keep only the year in "${header}"`, async function () {
+        const data = [[header], [new Date(Date.UTC(2026, 2, 4))]];
+        const output = await anonymizeAndParse(createXlsxBuffer(data));
+
+        expect(String(output[1][0])).to.equal("2026");
+      });
+    });
+
+    it("should keep the right year for a date on 1 January", async function () {
+      const data = [["Admission Date"], [new Date(2026, 0, 1)]];
+      const output = await anonymizeAndParse(createXlsxBuffer(data));
+
+      expect(String(output[1][0])).to.equal("2026");
+    });
+  });
+
+  describe("Safe Harbor ages", function () {
+    it('should turn ages over 89 into "90+" and leave other ages unchanged', async function () {
+      const data = [["Age"], [93], [47]];
+      const output = await anonymizeAndParse(createXlsxBuffer(data));
+
+      expect(String(output[1][0])).to.equal("90+");
+      expect(output[2][0]).to.equal(47);
+    });
+
+    it("should also handle ages stored as text", async function () {
+      const data = [["Age"], ["95"]];
+      const output = await anonymizeAndParse(createXlsxBuffer(data));
+
+      expect(String(output[1][0])).to.equal("90+");
+    });
+  });
+
+  describe("Safe Harbor whole-word matching", function () {
+    ["Ethnicity", "Percentage", "Stage"].forEach((header) => {
+      it(`should NOT anonymize column "${header}"`, async function () {
+        const data = [[header], ["value_one"]];
+        const output = await anonymizeAndParse(createXlsxBuffer(data));
+
+        expect(String(output[1][0])).to.equal("value_one");
+      });
+    });
+  });
   // ------------------------------------------------------------------
   // 5. Patient ID column detection & consistent hashing
   // ------------------------------------------------------------------
