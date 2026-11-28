@@ -71,8 +71,12 @@ const sanitizeSheetData = (data) => {
   return data.map((row) => row.map((cell) => sanitizeCellValue(cell)));
 };
 
-const generateAnonymizedId = (input, index) => {
-  const hash = crypto.createHash("sha256").update(input).digest("hex");
+const STUDY_SALT_ENV_VAR = "BIOBLOCK_STUDY_SALT";
+
+// Salted the same way as stable_hash in python_backend/services/text_anonymization.py,
+// so a WID can't be reversed by hashing guessed Patient IDs
+const generateAnonymizedId = (input, salt) => {
+  const hash = crypto.createHash("sha256").update(`${salt}:PATIENT_ID:${input}`).digest("hex");
   return `WID_${hash.substring(0, 8)}`;
 };
 
@@ -80,6 +84,11 @@ parentPort.on("message", (workerData) => {
   try {
     const { fileBuffer, walletAddress, generatePreview, originalFileName } = workerData;
     const isPersonalData = !!walletAddress;
+
+    const salt = (process.env[STUDY_SALT_ENV_VAR] || "").trim();
+    if (!salt) {
+      throw new Error(`Anonymization salt is not configured. Set ${STUDY_SALT_ENV_VAR}.`);
+    }
 
     const workbook = XLSX.read(fileBuffer, {
       type: "buffer",
@@ -130,7 +139,7 @@ parentPort.on("message", (workerData) => {
 
     const sortedIds = Array.from(allIdentifiers).sort();
     const idMap = {};
-    sortedIds.forEach((id, i) => (idMap[id] = generateAnonymizedId(id, i + 1)));
+    sortedIds.forEach((id) => (idMap[id] = generateAnonymizedId(id, salt)));
 
     const outWb = XLSX.utils.book_new();
 
@@ -172,8 +181,8 @@ parentPort.on("message", (workerData) => {
             if (row && row.some((c) => c !== undefined && c !== null && c !== "")) {
               const id =
                 isPersonalData && walletAddress
-                  ? generateAnonymizedId(walletAddress, 1)
-                  : generateAnonymizedId(uuidv4(), i);
+                  ? generateAnonymizedId(walletAddress, salt)
+                  : generateAnonymizedId(uuidv4(), salt);
 
               maskCols.forEach((c) => {
                 if (row[c] !== undefined) row[c] = id;
@@ -189,7 +198,7 @@ parentPort.on("message", (workerData) => {
             }
             // Rows with no Patient ID still need masking, so give them their own WID
             if (!id && row && row.some((c) => c !== undefined && c !== null && c !== "")) {
-              id = generateAnonymizedId(uuidv4(), i);
+              id = generateAnonymizedId(uuidv4(), salt);
             }
             if (id) {
               maskCols.forEach((c) => {
