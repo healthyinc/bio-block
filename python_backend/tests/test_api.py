@@ -73,6 +73,7 @@ class TestAPI(unittest.TestCase):
         self.assertIn(resp.status_code, [200, 201])
         self.assertIn("content_chunks", resp.json())
 
+    @pytest.mark.usefixtures("simulated_production_detectors")
     def test_store_with_complex_metadata(self):
         """Test store with list and dict metadata"""
         data = {
