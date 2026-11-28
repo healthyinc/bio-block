@@ -21,8 +21,9 @@ overlap is never a reason to ignore a finding.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import AbstractSet, List, Optional, Tuple
 
 #: What the sanitizer wrote at a given range of the output.
 KIND_SURROGATE = "surrogate"
@@ -55,9 +56,24 @@ class ReplacementRegion:
 
 @dataclass(frozen=True)
 class TransformationProvenance:
-    """Every generated region in one anonymized document."""
+    """Every generated region in one anonymized document.
+
+    ``emitted`` is the exact set of replacement tokens this document's
+    transformation wrote. Offsets do not survive a file being written and read
+    back, so a reopened document recovers its regions by matching token
+    shapes - and a shape is not evidence. A document that arrives already
+    containing ``PERSON_DEADBEEF`` would be handed a region saying the
+    sanitizer wrote it, and the residual scan would skip exactly the span an
+    attacker chose. Matching against what was actually emitted is what turns
+    a shape back into evidence.
+
+    The tokens are the sanitizer's own output and hold no original value, so
+    keeping them costs nothing. They never leave the process: no public
+    response carries this.
+    """
 
     regions: Tuple[ReplacementRegion, ...] = ()
+    emitted: frozenset = frozenset()
 
     def covering(self, start: int, end: int) -> Optional[ReplacementRegion]:
         """The region wholly containing this span, if any."""
@@ -129,8 +145,22 @@ class ProvenanceBuilder:
 
     def __init__(self) -> None:
         self._regions: List[ReplacementRegion] = []
+        self._emitted: set = set()
 
-    def record(self, start: int, length: int, kind: str, entity_type: str) -> None:
+    def record(
+        self,
+        start: int,
+        length: int,
+        kind: str,
+        entity_type: str,
+        token: Optional[str] = None,
+    ) -> None:
+        """Record one written span, and the token written there.
+
+        ``token`` is what the sanitizer put in the output. It is kept so that
+        a later pass over a reopened file can tell our own writing from text
+        that merely looks like it.
+        """
         if length <= 0:
             return
         self._regions.append(
@@ -138,10 +168,13 @@ class ProvenanceBuilder:
                 start=start, end=start + length, kind=kind, entity_type=entity_type
             )
         )
+        if token:
+            self._emitted.add(token)
 
     def build(self) -> TransformationProvenance:
         return TransformationProvenance(
-            regions=tuple(sorted(self._regions, key=lambda r: (r.start, r.end)))
+            regions=tuple(sorted(self._regions, key=lambda r: (r.start, r.end))),
+            emitted=frozenset(self._emitted),
         )
 
 
@@ -154,3 +187,64 @@ def kind_for_replacement(entity_type: str, replacement: str) -> str:
     if entity_type in {"DATE", "DATE_TIME"} and not replacement.startswith("<"):
         return KIND_SHIFTED_DATE
     return KIND_SURROGATE
+
+
+# Written-text provenance is shared policy; it does not depend on a format handler.
+from services.surrogates import HASH_SURROGATE_PATTERN as _HASH_SURROGATE
+from services.surrogates import LEGACY_SURROGATE_PATTERN, SURROGATE_PATTERN
+
+_PLACEHOLDER = re.compile(r"<REDACTED_[A-Z0-9_]+>")
+
+_AGE_AGGREGATE = re.compile(r"(?<!\d)90\+")
+
+
+def generated_token_provenance(text: str, emitted: AbstractSet[str]):
+    """Where the anonymizer's own tokens sit in text re-extracted from a file.
+
+    The offsets recorded during the transformation do not survive a file being
+    written and read back, so the spans are found again by matching the token
+    shapes the sanitizer emits.
+
+    A shape on its own is not evidence, and trusting one was a real hole. A
+    document that arrives already containing ``PERSON_DEADBEEF`` or
+    ``<REDACTED_PERSON>`` was handed a region saying the sanitizer wrote it,
+    and the residual pass then skipped precisely the span whoever wrote the
+    document had chosen. Passing ``emitted`` - the tokens this transformation
+    actually wrote - closes that: a shape is discounted only when it is one of
+    them, and anything else is inspected like any other text.
+
+    The ledger is mandatory. Passing an empty set fails closed: no token shape
+    is trusted merely because it resembles sanitizer output.
+    """
+    builder = ProvenanceBuilder()
+    taken: List[Tuple[int, int]] = []
+    for pattern, kind, category in (
+        (_PLACEHOLDER, KIND_PLACEHOLDER, "PLACEHOLDER"),
+        (SURROGATE_PATTERN, KIND_SURROGATE, "SURROGATE"),
+        (LEGACY_SURROGATE_PATTERN, KIND_SURROGATE, "SURROGATE"),
+        (_HASH_SURROGATE, KIND_SURROGATE, "SURROGATE"),
+        (_AGE_AGGREGATE, KIND_GENERALIZED, "AGE_OVER_89"),
+    ):
+        for match in pattern.finditer(text):
+            if match.group(0) not in emitted:
+                # Shaped like our writing, but we did not write it.
+                continue
+            # A current token altered by prefix/suffix text or nested inside
+            # another token is no longer the occurrence we emitted.
+            before = text[match.start() - 1 : match.start()]
+            after = text[match.end() : match.end() + 1]
+            if before and (before.isalnum() or before in "_<"):
+                continue
+            if after and (after.isalnum() or after in "_>"):
+                continue
+            if any(match.start() < end and start < match.end() for start, end in taken):
+                continue
+            taken.append((match.start(), match.end()))
+            builder.record(
+                match.start(),
+                match.end() - match.start(),
+                kind,
+                category,
+                token=match.group(0),
+            )
+    return builder.build()

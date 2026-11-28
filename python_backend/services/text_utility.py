@@ -19,6 +19,15 @@ Measured against the original, not against an abstract ideal:
   measurements the research depends on.
 
 Nothing here returns a matched value. Counts and ratios only.
+
+Version history. v1 stripped replacement markup from the output only, so an
+input that already contained some - a note de-identified earlier, or a
+template that mentions a placeholder - kept those tokens on the input side,
+lost them on the output side, and was scored as having destroyed them. On the
+locked acceptance corpus an unchanged document scored as low as 0.8276
+content and 0.0 numeric. v2 applies the same normalisation to the input, the
+output and the removed values, so a document nobody changed scores 1.0 on
+every measure, as it must.
 """
 
 from __future__ import annotations
@@ -43,17 +52,31 @@ CLINICAL_UTILITY_TERMS: frozenset[str] = frozenset(
     | CLINICAL_EPONYMS
 )
 
+#: Bumped whenever a change could move a reported number. Figures computed
+#: under different versions are not comparable and must not be merged.
+UTILITY_EVALUATOR_VERSION = "text-utility-v3"
+
 _WORD = re.compile(r"[A-Za-z][A-Za-z0-9'\-]*")
 _NUMBER = re.compile(r"\d+(?:\.\d+)?")
 
 #: Our own replacement tokens. Present in the output but not in the input, so
 #: they must not be counted as either preserved or lost content.
 _OUTPUT_TOKENS = re.compile(
+    r"<[A-Z][A-Z_]*_[1-9][0-9]*>|"
     r"<REDACTED_[A-Z0-9_]+>|"
     r"\b(?:PATIENT|PROVIDER|FACILITY|ORG|PLACE|ADDRESS|RECORD|PATIENTID|PLAN|"
     r"ACCESSION|DEVICE|IDENTIFIER|USER)_\d{3,}|"
     r"90\+"
 )
+
+
+def _normalise(text: str) -> str:
+    """Remove replacement markup so it counts as neither kept nor lost.
+
+    Markup is not clinical content wherever it appears. Removing it from only
+    one side is what made its mere presence in an input look like a loss.
+    """
+    return _OUTPUT_TOKENS.sub(" ", text or "")
 
 
 def _terms(text: str) -> List[str]:
@@ -72,30 +95,44 @@ def measure_text_utility(
     original: str,
     anonymized: str,
     redacted_values: Sequence[str] = (),
+    redacted_spans: Sequence[Sequence[int]] | None = None,
 ) -> Dict[str, float]:
     """Compare an anonymized document against its input.
 
-    ``redacted_values`` are the original spans that were deliberately removed.
-    Their tokens are excluded from the content measure, because removing PHI
-    is the goal rather than a utility loss.
+    ``redacted_spans`` are the (start, end) offsets in ``original`` of what was
+    deliberately removed. They are blanked in the input before anything is
+    counted, so a removed occurrence is not a utility loss and a *kept*
+    occurrence of the same word still is: a patient surnamed "Parkinson" does
+    not hide, or charge, the disease. ``redacted_values`` is the older,
+    value-keyed form for callers with no offsets; it excludes every occurrence
+    of a removed token, so it is used only when no spans are given.
     """
     removed_tokens: Set[str] = set()
     removed_numbers: Set[str] = set()
-    for value in redacted_values:
-        removed_tokens.update(_terms(value))
-        removed_numbers.update(_numbers(value))
+    if redacted_spans is not None:
+        chars = list(original or "")
+        for start, end in redacted_spans:
+            for index in range(max(0, start), min(len(chars), end)):
+                chars[index] = " "
+        original = "".join(chars)
+    else:
+        for value in redacted_values:
+            cleaned_value = _normalise(value)
+            removed_tokens.update(_terms(cleaned_value))
+            removed_numbers.update(_numbers(cleaned_value))
 
-    cleaned_output = _OUTPUT_TOKENS.sub(" ", anonymized or "")
+    cleaned_input = _normalise(original)
+    cleaned_output = _normalise(anonymized)
 
-    original_clinical = _clinical_terms(original)
+    original_clinical = _clinical_terms(cleaned_input)
     output_clinical = _clinical_terms(cleaned_output)
     clinical_preserved = _multiset_overlap(original_clinical, output_clinical)
 
-    original_content = [t for t in _terms(original) if t not in removed_tokens]
+    original_content = [t for t in _terms(cleaned_input) if t not in removed_tokens]
     output_content = _terms(cleaned_output)
     content_preserved = _multiset_overlap(original_content, output_content)
 
-    original_numbers = [n for n in _numbers(original) if n not in removed_numbers]
+    original_numbers = [n for n in _numbers(cleaned_input) if n not in removed_numbers]
     output_numbers = _numbers(cleaned_output)
     numbers_preserved = _multiset_overlap(original_numbers, output_numbers)
 

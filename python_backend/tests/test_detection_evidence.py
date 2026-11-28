@@ -360,8 +360,8 @@ def test_a_span_with_no_proper_noun_is_not_replaced_with_a_surrogate():
     assert assessment.rationale == "no_proper_noun_token_in_span"
 
 
-def test_two_agreeing_detectors_outrank_the_absence_of_a_proper_noun():
-    """Corroboration exists for the name the tagger got wrong."""
+def test_agreeing_models_cannot_erase_a_confirmed_clinical_role():
+    """Independent clinical structure outweighs repeated model misclassification."""
     text = "No adverse reaction was recorded by nursing staff."
     start = text.index("nursing staff")
     assessment = assess_finding(
@@ -374,7 +374,8 @@ def test_two_agreeing_detectors_outrank_the_absence_of_a_proper_noun():
         contains_proper_noun=False,
     )
 
-    assert assessment.action == "redact"
+    assert assessment.action == "preserve"
+    assert assessment.rationale == "field_label_or_role_noun"
 
 
 def test_a_failed_parse_exempts_nothing():
