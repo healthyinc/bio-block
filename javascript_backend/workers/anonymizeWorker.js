@@ -76,7 +76,7 @@ const generateAnonymizedId = (input, index) => {
   return `WID_${hash.substring(0, 8)}`;
 };
 
-parentPort.on("message", (workerData) => {
+parentPort.once("message", (workerData) => {
   try {
     const { fileBuffer, walletAddress, generatePreview, originalFileName } = workerData;
     const isPersonalData = !!walletAddress;
